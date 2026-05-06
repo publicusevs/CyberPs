@@ -30,7 +30,7 @@ const REASON_LABELS = {
     RAPID_MULTILAYER_MOVEMENT: { label: 'Rapid Multi-layer Movement', color: '#7c3aed' },
 };
 
-const NodeDetailPanel = ({ node, allEdges = [], onClose, allNodes = [] }) => {
+const NodeDetailPanel = ({ node, allEdges = [], onClose, onFocusNode, allNodes = [] }) => {
     if (!node) return null;
 
     const incomingEdges = allEdges.filter(e => e.to === node.id);
@@ -115,6 +115,32 @@ const NodeDetailPanel = ({ node, allEdges = [], onClose, allNodes = [] }) => {
                     <MetaRow label="Is Root Node" value={node.isRoot ? 'Yes' : 'No'} />
                     <MetaRow label="Circular Involvement" value={node.isCircular ? '⚠ Yes' : 'No'} highlight={node.isCircular} />
                 </div>
+
+                {/* Focus Button */}
+                <button
+                    onClick={() => onFocusNode && onFocusNode(node.id)}
+                    style={{
+                        width: '100%',
+                        padding: '12px',
+                        background: '#eef2ff',
+                        border: '1px solid #c7d2fe',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: '#4f46e5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 4px rgba(79, 70, 229, 0.05)'
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; e.currentTarget.style.borderColor = '#a5b4fc'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+                >
+                    <Hash size={14} /> Focus Trail From Here
+                </button>
 
                 {/* Incoming connections */}
                 {incomingEdges.length > 0 && (
