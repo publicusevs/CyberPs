@@ -110,7 +110,8 @@ exports.analyzeTrailFromExcel = async (req, res) => {
             source: 'excel',
             rawRows: rawData.length,
             parsedTransactions: transactions.length,
-            detectedColumns
+            detectedColumns,
+            transactions
         });
 
     } catch (err) {

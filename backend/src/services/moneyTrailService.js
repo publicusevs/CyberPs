@@ -127,6 +127,12 @@ function buildGraph(transactions, options = {}) {
         const dst = (t.receiver_acc || 'UNKNOWN').toString().trim();
         if (src === dst) return;
         const amt = parseFloat(t.amount) || 0;
+        const srcLayer = nodeLayer[src] || 99;
+        const dstLayer = nodeLayer[dst] || 99;
+        
+        // Skip edges where either source or destination is beyond maxDepth (layer 99)
+        if (srcLayer === 99 || dstLayer === 99) return;
+
         const edgeKey = `${src}-->${dst}::${t.utr_no}`;
         if (!edgeSet.has(edgeKey)) {
             edgeSet.add(edgeKey);
@@ -185,7 +191,9 @@ function buildGraph(transactions, options = {}) {
     });
 
     // ── 7. Assemble output ────────────────────────────────────────────────────
-    const nodes = Object.keys(nodeMap).map(acc => ({
+    const visibleAccs = Object.keys(nodeMap).filter(acc => (nodeLayer[acc] || 99) !== 99);
+
+    const nodes = visibleAccs.map(acc => ({
         id: acc,
         label: acc,
         layer: nodeLayer[acc] || 99,
@@ -204,6 +212,8 @@ function buildGraph(transactions, options = {}) {
     });
 
     const suspiciousNodesList = nodes.filter(n => n.suspicionLevel !== 'normal').map(n => n.id);
+    
+    const visibleTotalFlow = visibleAccs.reduce((s, acc) => s + nodeMap[acc].total_in, 0);
 
     const stats = {
         totalNodes: nodes.length,
@@ -211,7 +221,7 @@ function buildGraph(transactions, options = {}) {
         totalLayers: Object.keys(layersFormatted).length,
         circularTransactions: circularEdges.length,
         suspiciousNodes: suspiciousNodesList.length,
-        totalFlow: Math.round(totalFlow * 100) / 100,
+        totalFlow: Math.round(visibleTotalFlow * 100) / 100,
         rootAccounts: roots,
     };
 

@@ -66,11 +66,11 @@ exports.importExcel = async (req, res) => {
         for (const row of rawData) {
             try {
                 const receiver_acc = row['Account No'] || row['Account No.'] || row['Account Number'] || row['Account No./ (Wallet/PG/PA) Id'] || row['Wallet ID'] || row['Target Account'] || row['Beneficiary Account'] || row['Dest Account'] || row['ACCOUNT NO'];
-                const utr_no = row['Transaction Id / UTR Number'] || row['Transaction Id / UTR Number2'] || row['UTR'] || row['Transaction Id'] || row['Ref No'] || row['Reference No'] || row['UTR No'] || row['TRANSACTION ID'] || row['UTR NUMBER'];
+                const utr_no = row['Transaction ID (UTR Number)'] || row['Transaction Id / UTR Number'] || row['Transaction Id / UTR Number2'] || row['UTR'] || row['Transaction Id'] || row['Ref No'] || row['Reference No'] || row['UTR No'] || row['TRANSACTION ID'] || row['UTR NUMBER'];
 
                 if (!receiver_acc || !utr_no) continue;
 
-                let rawAmount = row['Transaction Amount'] || row['Amount Rs.'] || row['Amount'] || row['TRANSACTION AMOUNT'] || 0;
+                let rawAmount = row['Disputed Amount'] || row['Transaction Amount'] || row['Amount Rs.'] || row['Amount'] || row['TRANSACTION AMOUNT'] || 0;
                 const amount = typeof rawAmount === 'string' ? parseFloat(rawAmount.replace(/,/g, '').trim()) : parseFloat(rawAmount);
 
                 let rawDate = row['Transaction Date'] || row['Date'] || row['TRANSACTION DATE'] || new Date();
@@ -95,6 +95,7 @@ exports.importExcel = async (req, res) => {
                 // Advanced Sender Inference based on LEA layer groupings
                 let sender_acc = 'Case Root'; // Default
                 let actualSender =
+                    row['Account No / Wallet (FICN/FICW)'] ||
                     row['Sender Account'] || row['Source Account'] || row['From Account'] ||
                     row['Sender Acc'] || row['From Acc'] || row['Debit Account'] ||
                     row['Sender Account No'] || row['sender_account'] || row['SENDER ACCOUNT'] ||

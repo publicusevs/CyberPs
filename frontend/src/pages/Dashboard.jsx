@@ -136,8 +136,8 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card className="p-8">
                     <CardHeader title="Incident Statistics" subtitle="Case registration velocity" icon={Activity} color="blue" />
-                    <div className="h-64 w-full mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-64 w-full mt-4" style={{ minHeight: '250px' }}>
+                        <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                             <AreaChart data={chartData}>
                                 <defs>
                                     <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
@@ -159,8 +159,8 @@ const Dashboard = () => {
 
                 <Card className="p-8">
                     <CardHeader title="Unit Activity" subtitle="Registration by unit" icon={Users} color="green" />
-                    <div className="h-64 w-full mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-64 w-full mt-4" style={{ minHeight: '250px' }}>
+                        <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                             <BarChart data={[{name: 'RS', val: 8}, {name: 'PS', val: 12}, {name: 'AV', val: 5}, {name: 'NK', val: 9}]}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -11,6 +11,8 @@ import TrailViewer from '../components/trail/TrailViewer';
 import TrailTable from '../components/trail/TrailTable';
 import TrailFilters from '../components/trail/TrailFilters';
 import NodeDetailPanel from '../components/trail/NodeDetailPanel';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const DEFAULT_FILTERS = {
     maxDepth: 5,
@@ -33,6 +35,9 @@ const MoneyTrailStandalone = () => {
     const [filters, setFilters] = useState(DEFAULT_FILTERS);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [error, setError] = useState(null);
+    const [rawTransactions, setRawTransactions] = useState(null);
+    const [isReanalyzing, setIsReanalyzing] = useState(false);
+    const debounceTimer = useRef(null);
     const fileInputRef = useRef(null);
 
     const selectedNode = graphData?.nodes?.find(n => n.id === selectedNodeId) || null;
@@ -55,6 +60,7 @@ const MoneyTrailStandalone = () => {
             if (res.data.success) {
                 setGraphData(res.data.data);
                 setRawMeta({ rawRows: res.data.rawRows, parsedTransactions: res.data.parsedTransactions, detectedColumns: res.data.detectedColumns });
+                setRawTransactions(res.data.transactions);
                 setSelectedNodeId(null);
             } else {
                 setError(res.data.message || 'Analysis failed');
@@ -66,26 +72,100 @@ const MoneyTrailStandalone = () => {
         }
     }, [excelFile, filters]);
 
-    /* ── Export graph as PNG (screenshot via browser) ─────────── */
-    const handleExportPng = () => {
+    /* ── Export graph as PDF ──────────────────────────────────── */
+    const handleExportPdf = async () => {
         const el = document.querySelector('.react-flow__renderer');
         if (!el) return alert('Graph not rendered yet.');
-        // Use browser print as fallback
-        window.print();
+        
+        try {
+            // Add a temporary background to ensure it's not transparent
+            const originalBg = el.style.background;
+            el.style.background = '#ffffff';
+            
+            const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false });
+            el.style.background = originalBg;
+            
+            const imgData = canvas.toDataURL('image/png');
+            
+            // Calculate PDF dimensions (A4 landscape)
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const imgProps = pdf.getImageProperties(imgData);
+            const margin = 10;
+            const contentWidth = pdfWidth - (margin * 2);
+            const contentHeight = pdfHeight - (margin * 2) - 20; // 20mm for header
+            
+            // Calculate scale to fit within page
+            const scaleX = contentWidth / imgProps.width;
+            const scaleY = contentHeight / imgProps.height;
+            const scale = Math.min(scaleX, scaleY);
+            
+            const finalWidth = imgProps.width * scale;
+            const finalHeight = imgProps.height * scale;
+            
+            // Add Header
+            pdf.setFontSize(16);
+            pdf.setTextColor(15, 23, 42); // slate-900
+            pdf.text('Money Trail Analysis Report', margin, margin + 8);
+            
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 116, 139); // slate-500
+            pdf.text(`Generated on: ${new Date().toLocaleString()}`, margin, margin + 14);
+            
+            if (graphData?.stats) {
+                pdf.text(`Total Nodes: ${graphData.stats.totalNodes} | Total Flow: ₹${(graphData.stats.totalFlow || 0).toLocaleString('en-IN')}`, margin, margin + 19);
+            }
+            
+            // Add Image centered
+            const x = margin + (contentWidth - finalWidth) / 2;
+            const y = margin + 25 + (contentHeight - finalHeight) / 2;
+            
+            pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+            pdf.save(`money_trail_${Date.now()}.pdf`);
+            
+        } catch (err) {
+            console.error('PDF export failed', err);
+            alert('Failed to export PDF');
+        }
     };
 
-    /* ── Filter change → re-fetch from same file isn't possible  */
-    /* ── Instead just rebuild the graph client-side              */
-    const handleFilterChange = (newFilters) => {
+    /* ── Filter change → re-fetch without re-uploading file  */
+    const handleFilterChange = useCallback((newFilters) => {
         setFilters(newFilters);
-        // If we already have data and only visibility changed, no re-fetch needed
-        // If depth/amount changed significantly, prompt re-analyze
-    };
+        
+        if (rawTransactions && rawTransactions.length > 0) {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+            setIsReanalyzing(true);
+            
+            debounceTimer.current = setTimeout(async () => {
+                try {
+                    const res = await api.post('/trail/reanalyze', {
+                        transactions: rawTransactions,
+                        depth: newFilters.maxDepth,
+                        startAcc: newFilters.startAcc,
+                        minAmount: newFilters.minAmount,
+                        maxAmount: newFilters.maxAmount
+                    });
+                    if (res.data.success) {
+                        setGraphData(res.data.data);
+                        setSelectedNodeId(null);
+                    }
+                } catch (err) {
+                    console.error('Reanalyze failed', err);
+                } finally {
+                    setIsReanalyzing(false);
+                }
+            }, 500); // 500ms debounce
+        }
+    }, [rawTransactions]);
 
     const resetAll = () => {
         setExcelFile(null);
         setGraphData(null);
         setRawMeta(null);
+        setRawTransactions(null);
         setError(null);
         setFilters(DEFAULT_FILTERS);
         setSelectedNodeId(null);
@@ -128,11 +208,22 @@ const MoneyTrailStandalone = () => {
                         {hasGraph && (
                             <>
                                 <button
-                                    onClick={resetAll}
+                                    onClick={handleExportPdf}
                                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#64748b' }}
                                 >
-                                    <RefreshCw size={13} /> New Analysis
+                                    <Download size={13} /> Export PDF
                                 </button>
+                                <button
+                                    onClick={resetAll}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#dc2626' }}
+                                >
+                                    <X size={13} /> Clear
+                                </button>
+                                {isReanalyzing && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#e0e7ff', borderRadius: 8, color: '#4338ca', fontSize: 11, fontWeight: 700 }}>
+                                        <Loader2 size={13} className="animate-spin" /> Updating...
+                                    </div>
+                                )}
                                 {/* View mode toggle */}
                                 <div style={{ display: 'flex', background: '#f1f5f9', padding: 3, borderRadius: 10, border: '1px solid #e2e8f0' }}>
                                     <ViewBtn active={viewMode === 'graph'} onClick={() => setViewMode('graph')} icon={<Network size={13} />} label="Graph" />
@@ -301,7 +392,7 @@ const MoneyTrailStandalone = () => {
                             {/* Left: Filters */}
                             <TrailFilters
                                 options={filters}
-                                onChange={(newF) => setFilters(newF)}
+                                onChange={handleFilterChange}
                                 nodes={graphData.nodes}
                                 stats={graphData.stats}
                                 onReset={() => setFilters(DEFAULT_FILTERS)}
@@ -341,6 +432,10 @@ const MoneyTrailStandalone = () => {
                                             allEdges={graphData.edges}
                                             allNodes={graphData.nodes}
                                             onClose={() => setSelectedNodeId(null)}
+                                            onFocusNode={(nodeId) => {
+                                                const newF = { ...filters, startAcc: nodeId };
+                                                handleFilterChange(newF);
+                                            }}
                                         />
                                     </motion.div>
                                 )}
