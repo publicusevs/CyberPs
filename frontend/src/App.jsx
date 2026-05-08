@@ -17,6 +17,7 @@ import NoticeEditor from './pages/NoticeEditor';
 import TemplatesConfig from './pages/TemplatesConfig';
 import GenerateLetter from './pages/GenerateLetter';
 import MoneyTrailStandalone, { CaseMoneyTrail } from './pages/MoneyTrailAnalyzer';
+import EmailTest from './pages/EmailTest';
 import {
     LayoutDashboard,
     Briefcase,
@@ -245,6 +246,7 @@ function App() {
                             <Route path="/admin/police-stations" element={<PoliceStationRegistration />} />
                             <Route path="/cases/:id/trail" element={<CaseMoneyTrail />} />
                             <Route path="/trail" element={<MoneyTrailStandalone />} />
+                            <Route path="/email-test" element={<EmailTest />} />
                         </Route>
                     </Routes>
                 </Layout>
