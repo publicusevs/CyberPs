@@ -1,4 +1,4 @@
--- Cyber Crime Case Management System - Database Schema (MSSQL)
+-- Investigation Hunter - Database Schema (MSSQL)
 
 -- 1. Users Table
 CREATE TABLE users (
@@ -148,4 +148,134 @@ CREATE TABLE case_evidence (
 -- bcrypt hash for 'admin123' is $2b$10$EpjXJmH.r1z3gB.3E5O5Oe8vU.P8L.x5F1Rj8uE5O5Oe8vU.P8L.x5F
 -- (Note: In production, never hardcode hashes, but for local setup we need one)
 INSERT INTO users (name, username, email, mobile, password_hash, role, is_active)
-VALUES ('System Admin', 'admin', 'admin@cybercrime.gov', '9999999999', '$2b$10$Ao8BcLS6xnW12BE0hqaQ0OwMeAZVprvSTBXSHz/qL3FpDoivHD/9i', 'Admin', 1);
+VALUES ('System Admin', 'admin', 'admin@investigationhunter.com', '9999999999', '$2b$10$Ao8BcLS6xnW12BE0hqaQ0OwMeAZVprvSTBXSHz/qL3FpDoivHD/9i', 'Admin', 1);
+USE db_ab6f95_cyberweb;
+
+-- =========================
+-- 1. CREATE TABLES (FIRST TIME ONLY)
+-- =========================
+
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='police_stations' AND xtype='U')
+BEGIN
+    CREATE TABLE police_stations (
+        police_station_id INT PRIMARY KEY IDENTITY(1,1),
+        station_name NVARCHAR(150),
+        station_code NVARCHAR(50) UNIQUE,
+        state NVARCHAR(100),
+        district NVARCHAR(100),
+        city NVARCHAR(100),
+        address NVARCHAR(MAX),
+        created_at DATETIME DEFAULT GETDATE()
+    );
+END;
+
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_station_mapping' AND xtype='U')
+BEGIN
+    CREATE TABLE user_station_mapping (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        user_id INT,
+        police_station_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(user_id),
+        FOREIGN KEY (police_station_id) REFERENCES police_stations(police_station_id)
+    );
+END;
+
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='case_station_mapping' AND xtype='U')
+BEGIN
+    CREATE TABLE case_station_mapping (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        case_id INT,
+        police_station_id INT,
+        FOREIGN KEY (case_id) REFERENCES cases(case_id),
+        FOREIGN KEY (police_station_id) REFERENCES police_stations(police_station_id)
+    );
+END;
+
+-- =========================
+-- 2. INSERT POLICE STATION
+-- =========================
+IF NOT EXISTS (
+    SELECT 1 FROM police_stations WHERE station_code = 'CYB-JPR-COM-01'
+)
+BEGIN
+    INSERT INTO police_stations 
+    (station_name, station_code, state, district, city, address)
+    VALUES
+    (
+        'Investigation Hunter PS Commissionerate Jaipur',
+        'CYB-JPR-COM-01',
+        'Rajasthan',
+        'Jaipur',
+        'Jaipur',
+        'Cyber Crime Police Station Jaipur'
+    );
+END;
+
+-- =========================
+-- 3. INSERT USER
+-- =========================
+IF NOT EXISTS (
+    SELECT 1 FROM users WHERE username = 'ccpsjaipurcomminsrate'
+)
+BEGIN
+    INSERT INTO users 
+    (name, username, email, mobile, password_hash, role, is_active)
+    VALUES
+    (
+        'Investigation Hunter PS Jaipur Commissionerate',
+        'ccpsjaipurcomminsrate',
+        'admin@investigationhunter.in',
+        '9000000000',
+        '$2b$10$Ao8BcLS6xnW12BE0hqaQ0OwMeAZVprvSTBXSHz/qL3FpDoivHD/9i',
+        'Admin',
+        1
+    );
+END;
+
+-- =========================
+-- 4. DECLARE VARIABLES
+-- =========================
+DECLARE @ps_id INT;
+DECLARE @user_id INT;
+
+SELECT @ps_id = police_station_id 
+FROM police_stations 
+WHERE station_code = 'CYB-JPR-COM-01';
+
+SELECT @user_id = user_id 
+FROM users 
+WHERE username = 'ccpsjaipurcomminsrate';
+
+-- =========================
+-- 5. USER → STATION MAP
+-- =========================
+IF NOT EXISTS (
+    SELECT 1 FROM user_station_mapping WHERE user_id = @user_id
+)
+BEGIN
+    INSERT INTO user_station_mapping (user_id, police_station_id)
+    VALUES (@user_id, @ps_id);
+END;
+
+-- =========================
+-- 6. CASE → STATION MAP
+-- =========================
+INSERT INTO case_station_mapping (case_id, police_station_id)
+SELECT case_id, @ps_id
+FROM cases
+WHERE case_id NOT IN (
+    SELECT case_id FROM case_station_mapping
+);
+
+-- =========================
+-- 7. VERIFY
+-- =========================
+SELECT * FROM police_stations;
+
+SELECT 
+    u.username,
+    ps.station_name
+FROM users u
+JOIN user_station_mapping usm ON u.user_id = usm.user_id
+JOIN police_stations ps ON ps.police_station_id = usm.police_station_id
+WHERE u.username = 'ccpsjaipurcomminsrate';

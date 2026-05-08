@@ -9,6 +9,9 @@ const caseRoutes = require('./src/routes/caseRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
 const transactionRoutes = require('./src/routes/transactionRoutes');
+const policeStationRoutes = require('./src/routes/policeStationRoutes');
+const noticeRoutes = require('./src/routes/noticeRoutes');
+const templateRoutes = require('./src/routes/templateRoutes');
 const trailRoutes = require('./src/routes/trailRoutes');
 
 const app = express();
@@ -26,6 +29,9 @@ app.use('/api/cases', caseRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/police-stations', policeStationRoutes);
+app.use('/api/notices', noticeRoutes);
+app.use('/api/templates', templateRoutes);
 app.use('/api/trail', trailRoutes);
 
 // Error Handling

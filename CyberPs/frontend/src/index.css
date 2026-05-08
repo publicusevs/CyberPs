@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-hunter-dark text-hunter-text;
+    font-family: 'Inter', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-hunter-primary hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .card {
+    @apply bg-hunter-card border border-hunter-border rounded-xl p-6 shadow-xl;
+  }
+  .input-field {
+    @apply bg-hunter-dark border border-hunter-border rounded-lg p-2.5 outline-none focus:border-hunter-primary transition-all text-sm;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-hunter-dark;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-hunter-border rounded-full hover:bg-hunter-muted;
+}

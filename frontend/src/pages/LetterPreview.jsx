@@ -79,14 +79,7 @@ const LetterPreview = () => {
     ];
 
     const addFilter = () => {
-        setFilters([...filters, {
-            id: Date.now(),
-            column: 'bank',
-            operator: 'contains',
-            value: '',
-            joiner: 'AND',
-            isNot: false
-        }]);
+        setFilters([...filters, { id: Date.now(), column: 'bank', operator: 'contains', value: '', joiner: 'AND', isNot: false }]);
     };
 
     const removeFilter = (id) => {
@@ -113,7 +106,6 @@ const LetterPreview = () => {
     const evaluateClause = (rec, f) => {
         const targetVal = rec[f.column];
         const queryVal = f.value;
-
         let result = true;
 
         if (f.operator === 'null') {
@@ -141,7 +133,6 @@ const LetterPreview = () => {
                 default: result = true;
             }
         }
-
         return f.isNot ? !result : result;
     };
 
@@ -181,12 +172,11 @@ const LetterPreview = () => {
             if (res.data.success) {
                 setCaseData(res.data);
                 const transactions = res.data.transactions;
-
                 const groups = {};
                 const allUtrs = new Set();
+
                 transactions.forEach(t => {
                     const bank = (t.platform || 'Unknown Bank').trim();
-
                     if (!groups[bank]) groups[bank] = { name: bank, records: [] };
                     const record = {
                         account: t.receiver_acc,
@@ -205,12 +195,7 @@ const LetterPreview = () => {
                 setBankGroups(groupArray);
                 setSelectedBankIds(new Set(groupArray.map(g => g.name)));
                 setSelectedRecordUtrs(allUtrs);
-
-                setStats({
-                    totalBanks: groupArray.length,
-                    totalRecords: allUtrs.size,
-                    status: 'CLEAN'
-                });
+                setStats({ totalBanks: groupArray.length, totalRecords: allUtrs.size, status: 'CLEAN' });
 
                 if (groupArray.length > 0) {
                     prepareSelectedBank(groupArray[0], allUtrs);
@@ -226,7 +211,6 @@ const LetterPreview = () => {
     const prepareSelectedBank = (group, activeUtrs = null) => {
         if (!group) return;
         const currentUtrs = activeUtrs || selectedRecordUtrs;
-
         const filteredRecords = group.records.filter(r => {
             return currentUtrs.has(r.utr) && passesAllFilters(r);
         });
@@ -309,12 +293,10 @@ const LetterPreview = () => {
         let isFirst = true;
 
         const selectedGroups = bankGroups.filter(g => selectedBankIds.has(g.name));
-
         for (const group of selectedGroups) {
             const filteredRecords = group.records.filter(r => {
                 return selectedRecordUtrs.has(r.utr) && passesAllFilters(r);
             });
-
             if (filteredRecords.length === 0) continue;
 
             const letterData = {
@@ -335,7 +317,6 @@ const LetterPreview = () => {
             generateBulkPdf(pdf, letterData, isFirst);
             isFirst = false;
         }
-
         pdf.save(`BULK_NOTICES_CASE_${id}.pdf`);
     };
 
@@ -355,7 +336,6 @@ const LetterPreview = () => {
     const handleSaveToDossier = async () => {
         if (!selectedBank) return;
         setGenerating(true);
-
         try {
             const { default: jsPDF } = await import('jspdf');
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -365,12 +345,7 @@ const LetterPreview = () => {
             generateBulkPdf(pdf, selectedBank, true);
             const pdfBase64 = pdf.output('datauristring');
 
-            const res = await api.post('/cases/save-notice', {
-                case_id: id,
-                bank_name: selectedBank.bankName,
-                pdf_base64: pdfBase64
-            });
-
+            const res = await api.post('/cases/save-notice', { case_id: id, bank_name: selectedBank.bankName, pdf_base64: pdfBase64 });
             if (res.data.success) {
                 alert('Success: Notice saved to Secure Evidence Repository');
                 setProcessStep(4);
@@ -416,16 +391,10 @@ const LetterPreview = () => {
             const detailedRemark = `[FORENSIC PROCESS FINALIZED]\nTarget Banks Analyzed: ${selectedBanksCount}\nVerified Transactions Sealed: ${targetRecordsCount}\nOrigin Log Remarks: ${remark || 'System notices generated and deposited to secure dossier.'}`;
 
             // 1. Update status hierarchy
-            await api.post(`/cases/${id}/status`, {
-                status: 'Closed',
-                remarks: detailedRemark
-            });
+            await api.post(`/cases/${id}/status`, { status: 'Closed', remarks: detailedRemark });
 
             // 2. Auto-Broadcast as Internal Memo for Timeline sync
-            await api.post('/cases/notes', {
-                case_id: id,
-                note_text: detailedRemark
-            });
+            await api.post('/cases/notes', { case_id: id, note_text: detailedRemark });
 
             navigate(`/cases/${id}`);
         } catch (err) {
@@ -439,10 +408,8 @@ const LetterPreview = () => {
     if (loading) return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-[0.5em] text-xs">Initializing Forensic Engine...</div>;
 
     const rawActiveRecords = bankGroups.filter(g => selectedBankIds.has(g.name)).flatMap(g => g.records);
-
     // Apply Multi-Filters with Logic (AND, OR, NOT)
     const activeRecords = rawActiveRecords.filter(rec => passesAllFilters(rec));
-
     const areAllRecordsSelected = activeRecords.length > 0 && activeRecords.every(r => selectedRecordUtrs.has(r.utr));
 
     return (
@@ -532,23 +499,11 @@ const LetterPreview = () => {
                                         )}
 
                                         <div className="flex gap-4">
-                                            <Button
-                                                variant="primary"
-                                                className="flex-1 py-5 text-xs tracking-widest"
-                                                disabled={!excelFile || importing}
-                                                loading={importing}
-                                                onClick={handleExcelUpload}
-                                                icon={FileSearch}
-                                            >
+                                            <Button variant="primary" className="flex-1 py-5 text-xs tracking-widest" disabled={!excelFile || importing} loading={importing} onClick={handleExcelUpload} icon={FileSearch} >
                                                 {importing ? 'Processing...' : 'Process & Continue to Review'}
                                             </Button>
                                             {bankGroups.length > 0 && (
-                                                <Button
-                                                    variant="outline"
-                                                    className="px-8 py-5 text-xs tracking-widest"
-                                                    onClick={() => handleStepChange(2)}
-                                                    icon={ExternalLink}
-                                                >
+                                                <Button variant="outline" className="px-8 py-5 text-xs tracking-widest" onClick={() => handleStepChange(2)} icon={ExternalLink} >
                                                     Skip to Review
                                                 </Button>
                                             )}
@@ -592,72 +547,37 @@ const LetterPreview = () => {
                                                             <div key={f.id} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm animate-in zoom-in duration-300">
                                                                 {idx > 0 && (
                                                                     <>
-                                                                        <select
-                                                                            value={f.joiner}
-                                                                            onChange={(e) => updateFilter(f.id, 'joiner', e.target.value)}
-                                                                            className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-tighter px-2 py-2 rounded-lg border-none focus:ring-0 cursor-pointer"
-                                                                        >
+                                                                        <select value={f.joiner} onChange={(e) => updateFilter(f.id, 'joiner', e.target.value)} className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-tighter px-2 py-2 rounded-lg border-none focus:ring-0 cursor-pointer" >
                                                                             <option value="AND">AND</option>
                                                                             <option value="OR">OR</option>
                                                                         </select>
-
-                                                                        <button
-                                                                            onClick={() => updateFilter(f.id, 'isNot', !f.isNot)}
-                                                                            className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${f.isNot ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 text-slate-400'}`}
-                                                                        >
-                                                                            NOT
-                                                                        </button>
+                                                                        <button onClick={() => updateFilter(f.id, 'isNot', !f.isNot)} className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${f.isNot ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 text-slate-400'}`} > NOT </button>
                                                                     </>
                                                                 )}
-
-                                                                <select
-                                                                    value={f.column}
-                                                                    onChange={(e) => updateFilter(f.id, 'column', e.target.value)}
-                                                                    className="bg-slate-50 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500"
-                                                                >
+                                                                <select value={f.column} onChange={(e) => updateFilter(f.id, 'column', e.target.value)} className="bg-slate-50 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500" >
                                                                     {filterColumns.map(col => (
                                                                         <option key={col.id} value={col.id}>{col.label}</option>
                                                                     ))}
                                                                 </select>
-
-                                                                <select
-                                                                    value={f.operator}
-                                                                    onChange={(e) => updateFilter(f.id, 'operator', e.target.value)}
-                                                                    className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500"
-                                                                >
+                                                                <select value={f.operator} onChange={(e) => updateFilter(f.id, 'operator', e.target.value)} className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500" >
                                                                     {validOperators.map(op => (
                                                                         <option key={op.id} value={op.id}>{op.label}</option>
                                                                     ))}
                                                                 </select>
-
                                                                 <div className="h-4 w-[1px] bg-slate-200"></div>
-
                                                                 {f.operator !== 'null' && f.operator !== 'not_null' && (
                                                                     <div className="relative">
                                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-                                                                        <input
-                                                                            type="text"
-                                                                            placeholder={col?.type === 'number' ? 'Value...' : 'Contains...'}
-                                                                            value={f.value}
-                                                                            onChange={(e) => updateFilter(f.id, 'value', e.target.value)}
-                                                                            className="pl-9 pr-4 py-2 bg-slate-50 text-[10px] font-bold text-slate-700 placeholder:text-slate-300 rounded-lg border-none focus:ring-2 focus:ring-blue-500 w-48"
-                                                                        />
+                                                                        <input type="text" placeholder={col?.type === 'number' ? 'Value...' : 'Contains...'} value={f.value} onChange={(e) => updateFilter(f.id, 'value', e.target.value)} className="pl-9 pr-4 py-2 bg-slate-50 text-[10px] font-bold text-slate-700 placeholder:text-slate-300 rounded-lg border-none focus:ring-2 focus:ring-blue-500 w-48" />
                                                                     </div>
                                                                 )}
-
-                                                                <button
-                                                                    onClick={() => removeFilter(f.id)}
-                                                                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                                                >
+                                                                <button onClick={() => removeFilter(f.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" >
                                                                     <X size={14} />
                                                                 </button>
                                                             </div>
                                                         );
                                                     })}
-                                                    <button
-                                                        onClick={addFilter}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl border border-dashed border-blue-200 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
-                                                    >
+                                                    <button onClick={addFilter} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl border border-dashed border-blue-200 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest" >
                                                         <Plus size={14} /> Add Clause
                                                     </button>
                                                 </div>
@@ -670,10 +590,7 @@ const LetterPreview = () => {
                                             <thead className="sticky top-0 bg-white shadow-sm z-10">
                                                 <tr className="border-b border-slate-100">
                                                     <th className="px-6 py-5 w-16 text-center">
-                                                        <button
-                                                            onClick={toggleSelectAllRecords}
-                                                            className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}
-                                                        >
+                                                        <button onClick={toggleSelectAllRecords} className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
                                                             {areAllRecordsSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                                                         </button>
                                                     </th>
@@ -688,10 +605,7 @@ const LetterPreview = () => {
                                                 {activeRecords.map((rec, i) => (
                                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                                                         <td className="px-6 py-5 text-center">
-                                                            <button
-                                                                onClick={() => toggleRecordSelection(rec.utr)}
-                                                                className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}
-                                                            >
+                                                            <button onClick={() => toggleRecordSelection(rec.utr)} className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
                                                                 {selectedRecordUtrs.has(rec.utr) ? <CheckSquare size={16} /> : <Square size={16} />}
                                                             </button>
                                                         </td>
@@ -700,21 +614,13 @@ const LetterPreview = () => {
                                                             <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">AUTH_PASS: {rec.ifsc}</p>
                                                         </td>
                                                         <td className="px-6 py-5 text-center">
-                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100">
-                                                                {rec.bank}
-                                                            </span>
+                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100"> {rec.bank} </span>
                                                         </td>
-                                                        <td className="px-6 py-5 font-mono text-xs text-slate-500 font-bold tracking-tight">
-                                                            {rec.utr}
-                                                        </td>
+                                                        <td className="px-6 py-5 font-mono text-xs text-slate-500 font-bold tracking-tight"> {rec.utr} </td>
                                                         <td className="px-6 py-5 text-center">
-                                                            <span className="px-4 py-1 bg-slate-100 rounded-full text-[9px] font-black text-slate-600 uppercase border border-slate-200">
-                                                                {rec.layer}
-                                                            </span>
+                                                            <span className="px-4 py-1 bg-slate-100 rounded-full text-[9px] font-black text-slate-600 uppercase border border-slate-200"> {rec.layer} </span>
                                                         </td>
-                                                        <td className="px-6 py-5 text-right font-black text-sm text-slate-900 italic">
-                                                            ₹{parseFloat(rec.amount).toLocaleString()}
-                                                        </td>
+                                                        <td className="px-6 py-5 text-right font-black text-sm text-slate-900 italic"> ₹{parseFloat(rec.amount).toLocaleString()} </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -785,26 +691,13 @@ const LetterPreview = () => {
                                             ) : allLetters.length > 0 ? (
                                                 <div className="flex flex-col items-center gap-10">
                                                     {allLetters.map((letter, idx) => (
-                                                        <motion.div
-                                                            key={letter.bankName}
-                                                            initial={{ y: 30, opacity: 0 }}
-                                                            animate={{ y: 0, opacity: 1 }}
-                                                            transition={{ delay: idx * 0.1 }}
-                                                            className="relative w-full flex flex-col items-center"
-                                                        >
+                                                        <motion.div key={letter.bankName} initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: idx * 0.1 }} className="relative w-full flex flex-col items-center" >
                                                             {/* Page Label */}
                                                             <div className="mb-3 flex items-center gap-3">
-                                                                <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]">
-                                                                    Notice {idx + 1} of {allLetters.length} — {letter.bankName}
-                                                                </span>
+                                                                <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]"> Notice {idx + 1} of {allLetters.length} — {letter.bankName} </span>
                                                             </div>
                                                             {/* Letter Paper */}
-                                                            <div
-                                                                id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`}
-                                                                className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out"
-                                                                style={{ transform: `scale(${zoom})`, width: '210mm', transformOrigin: 'top center' }}
-                                                                dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter) }}
-                                                            />
+                                                            <div id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`} className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out" style={{ transform: `scale(${zoom})`, width: '210mm', transformOrigin: 'top center' }} dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter) }} />
                                                         </motion.div>
                                                     ))}
                                                 </div>
@@ -830,28 +723,15 @@ const LetterPreview = () => {
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-4xl font-black text-slate-900 tracking-tighter italic uppercase">Operation <span className="text-emerald-600">Finalized</span></h3>
-                                        <p className="text-slate-500 text-sm leading-relaxed font-semibold italic">
-                                            All forensic warrants have been verified and sealed in the evidence repository. The dossier is ready for digital dispatch or physical printing.
-                                        </p>
+                                        <p className="text-slate-500 text-sm leading-relaxed font-semibold italic"> All forensic warrants have been verified and sealed in the evidence repository. The dossier is ready for digital dispatch or physical printing. </p>
                                     </div>
                                     <div className="text-left">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Completion Remarks / Origin Log</label>
-                                        <textarea
-                                            value={remark}
-                                            onChange={(e) => setRemark(e.target.value)}
-                                            placeholder="Enter operational log remarks here..."
-                                            className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none"
-                                        />
+                                        <textarea value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Enter operational log remarks here..." className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none" />
                                     </div>
                                     <div className="pt-8 grid grid-cols-2 gap-4">
                                         <Button variant="outline" className="py-5" icon={Mail}>Nodal Email Blast</Button>
-                                        <Button
-                                            variant="primary"
-                                            className="bg-blue-600 py-5 shadow-2xl shadow-blue-200"
-                                            icon={CheckCircle2}
-                                            onClick={handleCompleteMission}
-                                            disabled={isCompleting}
-                                        >
+                                        <Button variant="primary" className="bg-blue-600 py-5 shadow-2xl shadow-blue-200" icon={CheckCircle2} onClick={handleCompleteMission} disabled={isCompleting} >
                                             {isCompleting ? 'Finalizing...' : 'Complete Mission'}
                                         </Button>
                                     </div>

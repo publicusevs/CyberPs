@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:1433/api',
+    baseURL: 'http://localhost:5000/api',
 });
 
 // Add a request interceptor to include the JWT token
@@ -21,11 +21,11 @@ api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response.status === 403 && !originalRequest._retry) {
+        if (error.response && error.response.status === 403 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
                 const refreshToken = localStorage.getItem('refreshToken');
-                const res = await axios.post('http://localhost:1433/api/auth/refresh-token', { refreshToken });
+                const res = await axios.post('http://localhost:5000/api/auth/refresh-token', { refreshToken });
                 if (res.data.success) {
                     localStorage.setItem('token', res.data.token);
                     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
