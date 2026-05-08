@@ -32,6 +32,10 @@ echo [2/3] Executing Commit...
 git commit -m "%msg%"
 
 echo.
+echo [Step 2.5] Updating from main branch to sync code...
+git pull origin main
+
+echo.
 echo [3/3] Pushing Current Code to Origin/%branch%...
 git push origin HEAD:%branch%
 
