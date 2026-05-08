@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Plus, Search, Edit3, Trash2, Eye, Copy, 
-    ChevronLeft, Save, Shield, Type, Hash, 
+    ChevronLeft, Save, Shield, Type, Hash, Database,
     Table, Layout, CheckCircle2, AlertCircle,
     Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight,
     Image as ImageIcon, X
@@ -14,6 +14,7 @@ import { Button } from '../components/ui/Button';
 const TemplatesConfig = () => {
     const [view, setView] = useState('list'); // 'list' | 'editor'
     const [templates, setTemplates] = useState([]);
+    const [globalVars, setGlobalVars] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTemplate, setActiveTemplate] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -21,15 +22,28 @@ const TemplatesConfig = () => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [printMode, setPrintMode] = useState(false);
     
-    // Modal states
+    // Modal and Calibration states
     const [modalConfig, setModalConfig] = useState({ show: false, type: 'field', name: '', defaultValue: '' });
+    const [margins, setMargins] = useState({ top: 50, left: 50, right: 50 }); // in px
     const lastSelectionRef = useRef(null);
 
     const editorRef = useRef(null);
 
     useEffect(() => {
         fetchTemplates();
+        fetchGlobalVars();
     }, []);
+
+    const fetchGlobalVars = async () => {
+        try {
+            const res = await api.get('/variables');
+            if (res.data.success) {
+                setGlobalVars(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch global variables');
+        }
+    };
 
     const fetchTemplates = async () => {
         setLoading(true);
@@ -55,7 +69,8 @@ const TemplatesConfig = () => {
             json_data: {
                 fields: [],
                 table_columns: [],
-                mapping: {}
+                mapping: {},
+                margins: { top: 50, left: 50, right: 50 }
             }
         });
         setPrintMode(false);
@@ -69,10 +84,23 @@ const TemplatesConfig = () => {
             try {
                 jsonData = JSON.parse(jsonData);
             } catch (e) {
-                jsonData = { fields: [], table_columns: [], mapping: {} };
+                jsonData = null;
             }
         }
+        
+        // Ensure standard structure
+        if (!jsonData || typeof jsonData !== 'object') {
+            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50 } };
+        } else {
+            jsonData = {
+                fields: jsonData.fields || [],
+                table_columns: jsonData.table_columns || [],
+                mapping: jsonData.mapping || {},
+                margins: jsonData.margins || { top: 50, left: 50, right: 50 }
+            };
+        }
         setActiveTemplate({ ...tpl, json_data: jsonData });
+        setMargins(jsonData.margins);
         setPrintMode(false); // Ensure we start in editor mode
         setView('editor');
     };
@@ -114,7 +142,11 @@ const TemplatesConfig = () => {
         try {
             const payload = {
                 ...activeTemplate,
-                body_text: editorRef.current.innerHTML
+                body_text: editorRef.current.innerHTML,
+                json_data: {
+                    ...activeTemplate.json_data,
+                    margins: margins
+                }
             };
 
             if (activeTemplate.template_id) {
@@ -295,12 +327,24 @@ const TemplatesConfig = () => {
     const getProcessedHTML = (html) => {
         if (!html) return '';
         let processed = html;
+        
+        // 1. Replace Global Protocol Variables
+        if (globalVars && globalVars.length > 0) {
+            globalVars.forEach(v => {
+                const regex = new RegExp(`\\{${v.variable_name}\\}`, 'g');
+                processed = processed.replace(regex, `<span class="bg-emerald-50 text-emerald-700 px-1 rounded border border-emerald-200 print:bg-transparent print:border-none print:p-0">${v.variable_value || `[${v.variable_name}]`}</span>`);
+            });
+        }
+
+        // 2. Replace Local Template Fields
         if (activeTemplate?.json_data?.fields) {
             activeTemplate.json_data.fields.forEach(field => {
                 const regex = new RegExp(`\\{${field.name}\\}`, 'g');
                 processed = processed.replace(regex, `<span class="bg-blue-50 text-blue-700 px-1 rounded border border-blue-200 print:bg-transparent print:border-none print:p-0">${field.defaultValue || `[${field.name}]`}</span>`);
             });
         }
+
+        // 3. Replace Table Columns
         if (activeTemplate?.json_data?.table_columns) {
             activeTemplate.json_data.table_columns.forEach(col => {
                 const regex = new RegExp(`\\{${col}\\}`, 'g');
@@ -446,7 +490,7 @@ const TemplatesConfig = () => {
                             onClick={handleEnterPrintMode}
                             className="flex items-center gap-3 px-8 py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95"
                         >
-                            <Eye size={18} /> Final Preview
+                            <Eye size={18} /> Print Preview
                         </button>
                     )}
                     {printMode && (
@@ -478,68 +522,136 @@ const TemplatesConfig = () => {
             <div className={`grid grid-cols-1 ${printMode ? 'lg:grid-cols-1' : 'lg:grid-cols-12'} gap-10`}>
                 {/* Left Side: Editor Core */}
                 <div className={`${printMode ? 'lg:col-span-1 max-w-4xl mx-auto w-full' : 'lg:col-span-8'} space-y-8 no-print`}>
-                    <Card className={`p-8 border-slate-200 shadow-xl space-y-6 ${printMode ? 'bg-slate-50 border-none shadow-none' : ''}`}>
+                    <Card className={`overflow-hidden border-slate-200 shadow-2xl transition-all duration-500 ${printMode ? 'bg-slate-50 border-none shadow-none p-0' : 'bg-white p-0'}`}>
+                        {/* Integrated Tactical Toolbar */}
                         {!printMode && (
-                            <div className="space-y-4">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Template Identity</label>
-                                <input 
-                                    type="text"
-                                    placeholder="ENTER_TEMPLATE_NAME (e.g. Cyber Bank Notice)"
-                                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black italic focus:ring-4 focus:ring-blue-500/5 outline-none transition-all"
-                                    value={activeTemplate?.template_name}
-                                    onChange={(e) => setActiveTemplate(p => ({ ...p, template_name: e.target.value }))}
-                                />
+                            <div className="bg-slate-900 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-6 sticky top-0 z-[100] shadow-xl no-print">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                        <button onClick={() => formatText('bold')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Bold"><Bold size={16} /></button>
+                                        <button onClick={() => formatText('italic')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Italic"><Italic size={16} /></button>
+                                        <button onClick={() => formatText('underline')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Underline"><Underline size={16} /></button>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                        <button onClick={() => formatText('justifyLeft')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Left"><AlignLeft size={16} /></button>
+                                        <button onClick={() => formatText('justifyCenter')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Center"><AlignCenter size={16} /></button>
+                                        <button onClick={() => formatText('justifyRight')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Right"><AlignRight size={16} /></button>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                        <button onClick={() => formatText('insertUnorderedList')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="List"><List size={16} /></button>
+                                        <label className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer" title="Insert Image">
+                                            <ImageIcon size={16} />
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Font Size</span>
+                                        <select 
+                                            onChange={(e) => applyFontSize(e.target.value)}
+                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
+                                            defaultValue="16"
+                                        >
+                                            {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
+                                                <option key={size} value={size}>{size}px</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block"></div>
+                                    <div className="hidden sm:flex flex-col items-end">
+                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Editor Status</p>
+                                        <p className="text-[10px] font-black text-emerald-500 uppercase italic">Active_Encryption_Link</p>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between px-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">{printMode ? 'Final Document Stream' : 'Document Content Editor'}</label>
-                                <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl shadow-lg no-print">
-                                    <button onClick={() => formatText('bold')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Bold"><Bold size={14} /></button>
-                                    <button onClick={() => formatText('italic')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Italic"><Italic size={14} /></button>
-                                    <button onClick={() => formatText('underline')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Underline"><Underline size={14} /></button>
-                                    <div className="w-px h-4 bg-white/10 mx-1"></div>
-                                    <button onClick={() => formatText('insertUnorderedList')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="List"><List size={14} /></button>
-                                    <div className="w-px h-4 bg-white/10 mx-1"></div>
-                                    <button onClick={() => formatText('justifyLeft')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Align Left"><AlignLeft size={14} /></button>
-                                    <button onClick={() => formatText('justifyCenter')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Align Center"><AlignCenter size={14} /></button>
-                                    <button onClick={() => formatText('justifyRight')} className="p-2 text-white/50 hover:text-blue-400 transition-colors" title="Align Right"><AlignRight size={14} /></button>
-                                    <div className="w-px h-4 bg-white/10 mx-1"></div>
-                                    <label className="p-2 text-white/50 hover:text-blue-400 transition-colors cursor-pointer" title="Insert Image">
-                                        <ImageIcon size={14} />
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                        <div className={`${printMode ? 'p-0' : 'p-10'} space-y-8`}>
+                            {!printMode && (
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic flex items-center gap-2">
+                                        <Shield size={12} className="text-blue-500" /> Template Identity Mapping
                                     </label>
-                                    <div className="w-px h-4 bg-white/10 mx-1"></div>
-                                    <select 
-                                        onChange={(e) => applyFontSize(e.target.value)}
-                                        className="bg-slate-800 text-white/50 text-[9px] font-black outline-none cursor-pointer hover:text-blue-400 px-2 py-1 rounded-md max-w-[60px]"
-                                        defaultValue="16"
-                                    >
-                                        {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
-                                            <option key={size} value={size}>{size}px</option>
-                                        ))}
-                                    </select>
+                                    <input 
+                                        type="text"
+                                        placeholder="ENTER_TEMPLATE_NAME (e.g. Cyber Bank Notice)"
+                                        className="w-full px-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-3xl text-sm font-black italic focus:border-blue-500/50 focus:bg-white outline-none transition-all shadow-inner"
+                                        value={activeTemplate?.template_name}
+                                        onChange={(e) => setActiveTemplate(p => ({ ...p, template_name: e.target.value }))}
+                                    />
                                 </div>
-                            </div>
-                            
-                            <div className={`relative ${printMode ? 'bg-white p-0' : ''}`}>
-                                {!printMode && (
-                                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                                        <Shield size={200} />
-                                    </div>
-                                )}
-                                <div 
-                                    key={(activeTemplate?.template_id || 'new') + (printMode ? '_print' : '_edit')}
-                                    ref={editorRef}
-                                    contentEditable="true"
-                                    suppressContentEditableWarning
-                                    onPaste={handlePaste}
-                                    onMouseUp={saveSelection}
-                                    onKeyUp={saveSelection}
-                                    className={`${printMode ? 'min-h-[1100px] p-20 shadow-2xl border border-slate-100' : 'min-h-[600px] p-10 border border-slate-200'} bg-white rounded-3xl outline-none prose prose-slate max-w-none text-slate-800 shadow-inner focus:bg-slate-50/20 transition-colors print:shadow-none print:p-0 print:m-0 print:border-none cursor-text`}
-                                    dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
-                                />
+                            )}
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between px-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">{printMode ? 'Final Document Stream' : 'Document Content Matrix'}</label>
+                                </div>
+                                
+                                <div className={`relative ${printMode ? 'bg-white p-0' : 'bg-slate-100/30 p-10 rounded-[40px] border-2 border-dashed border-slate-200 shadow-inner'}`}>
+                                    {!printMode && (
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+                                            <Shield size={400} />
+                                        </div>
+                                    )}
+                                    <div 
+                                        key={(activeTemplate?.template_id || 'new') + (printMode ? '_print' : '_edit')}
+                                        ref={editorRef}
+                                        contentEditable="true"
+                                        suppressContentEditableWarning
+                                        onPaste={handlePaste}
+                                        onMouseUp={saveSelection}
+                                        onKeyUp={saveSelection}
+                                        style={{
+                                            paddingTop: `${margins.top}px`,
+                                            paddingLeft: `${margins.left}px`,
+                                            paddingRight: `${margins.right}px`,
+                                        }}
+                                        className={`${printMode ? 'min-h-[1100px] shadow-2xl border border-slate-100' : 'min-h-[800px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto`}
+                                        dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
+                                    />
+
+                                    {/* Margin Controls */}
+                                    {!printMode && (
+                                        <>
+                                            {/* Top Margin Handle */}
+                                            <motion.div 
+                                                drag="y"
+                                                dragConstraints={{ top: 0, bottom: 200 }}
+                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, top: Math.max(0, prev.top + info.delta.y) }))}
+                                                className="absolute left-10 right-10 h-1 bg-blue-500/20 hover:bg-blue-500 cursor-ns-resize z-20 group"
+                                                style={{ top: `${margins.top + 40}px` }}
+                                            >
+                                                <div className="absolute left-1/2 -translate-x-1/2 -top-6 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Top: {Math.round(margins.top)}px</div>
+                                            </motion.div>
+
+                                            {/* Left Margin Handle */}
+                                            <motion.div 
+                                                drag="x"
+                                                dragConstraints={{ left: 0, right: 200 }}
+                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left + info.delta.x) }))}
+                                                className="absolute top-10 bottom-10 w-1 bg-blue-500/20 hover:bg-blue-500 cursor-ew-resize z-20 group"
+                                                style={{ left: `${margins.left + 40}px` }}
+                                            >
+                                                <div className="absolute top-1/2 -translate-y-1/2 -left-20 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase origin-center -rotate-90">Margin Left: {Math.round(margins.left)}px</div>
+                                            </motion.div>
+
+                                            {/* Right Margin Handle */}
+                                            <motion.div 
+                                                drag="x"
+                                                dragConstraints={{ left: -200, right: 0 }}
+                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, right: Math.max(0, prev.right - info.delta.x) }))}
+                                                className="absolute top-10 bottom-10 w-1 bg-blue-500/20 hover:bg-blue-500 cursor-ew-resize z-20 group"
+                                                style={{ right: `${margins.right + 40}px` }}
+                                            >
+                                                <div className="absolute top-1/2 -translate-y-1/2 -right-20 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase origin-center rotate-90">Margin Right: {Math.round(margins.right)}px</div>
+                                            </motion.div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </Card>
@@ -551,16 +663,44 @@ const TemplatesConfig = () => {
                         <Card className="p-8 border-slate-200 shadow-xl bg-slate-900 text-white">
                         <div className="flex items-center justify-between mb-8">
                             <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-600 rounded-lg"><Database size={18} /></div>
+                                <h3 className="text-xs font-black uppercase tracking-widest italic">Protocol Registry</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-emerald-400 shadow-lg" title="View All Variables"><Eye size={16} /></button>
+                                <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400 shadow-lg" title="Add New Variable"><Plus size={16} /></button>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mb-12">
+                            {globalVars.length === 0 ? (
+                                <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No protocol variables defined</p>
+                            ) : globalVars.map(v => (
+                                <div key={v.variable_id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-emerald-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(v.variable_name)}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></div>
+                                            <div>
+                                                <p className="text-[10px] font-black italic text-emerald-400">{"{" + v.variable_name + "}"}</p>
+                                                <p className="text-[8px] text-slate-300 font-bold mt-1 uppercase truncate max-w-[150px]">Value: {v.variable_value}</p>
+                                            </div>
+                                    </div>
+                                    <div className="opacity-0 group-hover:opacity-100 p-1.5 text-white/20"><Plus size={14} /></div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-600 rounded-lg"><Type size={18} /></div>
-                                <h3 className="text-xs font-black uppercase tracking-widest italic">Field Manager</h3>
+                                <h3 className="text-xs font-black uppercase tracking-widest italic">Template Fields</h3>
                             </div>
                             <button onClick={() => openModal('field')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400"><Plus size={16} /></button>
                         </div>
                         
                         <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
-                            {activeTemplate?.json_data?.fields.length === 0 ? (
+                            {(!activeTemplate?.json_data?.fields || activeTemplate.json_data.fields.length === 0) ? (
                                 <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No custom fields defined</p>
-                            ) : activeTemplate?.json_data?.fields.map(field => (
+                            ) : activeTemplate.json_data.fields.map(field => (
                                 <div key={field.name} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-blue-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(field.name)}>
                                     <div className="flex items-center gap-3">
                                         <div className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></div>
@@ -584,9 +724,9 @@ const TemplatesConfig = () => {
                             </div>
 
                             <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
-                                {activeTemplate?.json_data?.table_columns.length === 0 ? (
+                                {(!activeTemplate?.json_data?.table_columns || activeTemplate.json_data.table_columns.length === 0) ? (
                                     <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No dynamic columns defined</p>
-                                ) : activeTemplate?.json_data?.table_columns.map(col => (
+                                ) : activeTemplate.json_data.table_columns.map(col => (
                                     <div key={col} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-emerald-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(col)}>
                                         <div className="flex items-center gap-3">
                                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></div>
@@ -711,10 +851,18 @@ const TemplatesConfig = () => {
                 @media print {
                     .no-print { display: none !important; }
                     body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    .prose { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+                    .prose { max-width: 100% !important; }
                     main { margin: 0 !important; padding: 0 !important; }
                     aside { display: none !important; }
                     header { display: none !important; }
+                    .bg-white.rounded-3xl.outline-none { 
+                        padding-top: ${margins.top}px !important; 
+                        padding-left: ${margins.left}px !important; 
+                        padding-right: ${margins.right}px !important; 
+                        border: none !important;
+                        box-shadow: none !important;
+                        min-height: auto !important;
+                    }
                 }
             `}</style>
         </div>

@@ -32,12 +32,16 @@ echo [2/3] Executing Commit...
 git commit -m "%msg%"
 
 echo.
+echo [Step 2.2] Switching to branch %branch%...
+git checkout %branch% 2>nul || git checkout -b %branch%
+
+echo.
 echo [Step 2.5] Updating from main branch to sync code...
 git pull origin main --no-edit
 
 echo.
 echo [3/3] Pushing Current Code to Origin/%branch%...
-git push origin HEAD:%branch%
+git push origin %branch%
 
 echo.
 echo ==========================================

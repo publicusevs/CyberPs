@@ -15,6 +15,7 @@ import CaseNotices from './pages/CaseNotices';
 import NoticeConfigForm from './pages/NoticeConfigForm';
 import NoticeEditor from './pages/NoticeEditor';
 import TemplatesConfig from './pages/TemplatesConfig';
+import GlobalVariables from './pages/GlobalVariables';
 import GenerateLetter from './pages/GenerateLetter';
 import MoneyTrailStandalone, { CaseMoneyTrail } from './pages/MoneyTrailAnalyzer';
 import EmailTest from './pages/EmailTest';
@@ -35,7 +36,8 @@ import {
     Upload,
     BarChart3,
     Settings2,
-    Network
+    Network,
+    Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -189,14 +191,15 @@ const Layout = ({ children }) => {
                             <SidebarLink to="/templates-config" icon={Settings2} label="Templates Config" active={location.pathname === '/templates-config'} collapsed={collapsed && !mobileOpen} />
                             <SidebarLink to="/generate-letter" icon={FileText} label="Generate Letter" active={location.pathname === '/generate-letter'} collapsed={collapsed && !mobileOpen} />
                             <SidebarLink to="/admin/police-stations" icon={ShieldCheck} label="Unit Registry" active={location.pathname === '/admin/police-stations'} collapsed={collapsed && !mobileOpen} />
+                            <SidebarLink to="/global-variables" icon={Database} label="Protocol Registry" active={location.pathname === '/global-variables'} collapsed={collapsed && !mobileOpen} />
                         </>
                     )}
-                </nav>
 
-                <div className="pt-6 border-t border-slate-100 space-y-3">
-                    <SidebarLink to="/settings" icon={Settings} label="Protocols" active={location.pathname === '/settings'} collapsed={collapsed && !mobileOpen} />
-                    {(!collapsed || mobileOpen) && <p className="text-[8px] text-center text-slate-300 font-bold tracking-widest uppercase mt-4 italic">v2.4.0 secure_node</p>}
-                </div>
+                    <div className="pt-6 border-t border-slate-100 space-y-3">
+                        <SidebarLink to="/settings" icon={Settings} label="Protocols" active={location.pathname === '/settings'} collapsed={collapsed && !mobileOpen} />
+                        {(!collapsed || mobileOpen) && <p className="text-[8px] text-center text-slate-300 font-bold tracking-widest uppercase mt-4 italic">v2.4.0 secure_node</p>}
+                    </div>
+                </nav>
             </aside>
 
             {/* Main Content Area */}
@@ -241,6 +244,7 @@ function App() {
                             <Route path="/cases/:id/notices/config" element={<NoticeConfigForm />} />
                             <Route path="/cases/:id/notices/editor" element={<NoticeEditor />} />
                             <Route path="/templates-config" element={<TemplatesConfig />} />
+                            <Route path="/global-variables" element={<GlobalVariables />} />
                             <Route path="/generate-letter" element={<GenerateLetter />} />
                             <Route path="/reports" element={<div className="p-20 text-center font-black uppercase text-slate-400 italic">Reports Module Coming Soon</div>} />
                             <Route path="/admin/police-stations" element={<PoliceStationRegistration />} />

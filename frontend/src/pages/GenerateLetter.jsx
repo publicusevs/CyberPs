@@ -12,6 +12,7 @@ import { Button } from '../components/ui/Button';
 
 const GenerateLetter = () => {
     const [templates, setTemplates] = useState([]);
+    const [globalVars, setGlobalVars] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [inputMethod, setInputMethod] = useState('json'); // 'json' | 'excel'
     const [jsonData, setJsonData] = useState('');
@@ -20,17 +21,19 @@ const GenerateLetter = () => {
     const [showPreview, setShowPreview] = useState(false);
 
     useEffect(() => {
-        const fetchTemplates = async () => {
+        const fetchConfig = async () => {
             try {
-                const res = await api.get('/templates');
-                if (res.data.success) {
-                    setTemplates(res.data.data);
-                }
+                const [tplRes, varRes] = await Promise.all([
+                    api.get('/templates'),
+                    api.get('/variables')
+                ]);
+                if (tplRes.data.success) setTemplates(tplRes.data.data);
+                if (varRes.data.success) setGlobalVars(varRes.data.data);
             } catch (err) {
-                console.error('Failed to load templates');
+                console.error('Failed to load configuration');
             }
         };
-        fetchTemplates();
+        fetchConfig();
     }, []);
 
     const handleGenerate = () => {
@@ -48,6 +51,15 @@ const GenerateLetter = () => {
                 ? JSON.parse(selectedTemplate.json_data) 
                 : selectedTemplate.json_data;
 
+            // 1. Replace Global Protocol Variables
+            if (globalVars) {
+                globalVars.forEach(v => {
+                    const regex = new RegExp(`\\{${v.variable_name}\\}`, 'g');
+                    content = content.replace(regex, v.variable_value || '');
+                });
+            }
+
+            // 2. Replace Local Template Fields
             if (tplData.fields) {
                 tplData.fields.forEach(field => {
                     const value = data[field.name] || `[MISSING_${field.name}]`;

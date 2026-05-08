@@ -13,7 +13,11 @@ const policeStationRoutes = require('./src/routes/policeStationRoutes');
 const noticeRoutes = require('./src/routes/noticeRoutes');
 const templateRoutes = require('./src/routes/templateRoutes');
 const trailRoutes = require('./src/routes/trailRoutes');
+<<<<<<< HEAD
+const variableRoutes = require('./src/routes/variableRoutes');
+=======
 const emailRoutes = require('./src/routes/emailRoutes');
+>>>>>>> d70efa7ebd8dbfe9ac08a880f6ae1a13916e3966
 
 const app = express();
 
@@ -34,7 +38,11 @@ app.use('/api/police-stations', policeStationRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/trail', trailRoutes);
+<<<<<<< HEAD
+app.use('/api/variables', variableRoutes);
+=======
 app.use('/api/email', emailRoutes);
+>>>>>>> d70efa7ebd8dbfe9ac08a880f6ae1a13916e3966
 
 // Error Handling
 app.use((err, req, res, next) => {
