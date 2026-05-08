@@ -9,8 +9,17 @@ echo Current Status:
 git status -s
 echo.
 
+:: Auto-detect current branch
+for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD') do set current_branch=%%i
+
+echo Current Branch: %current_branch%
+git status -s
+echo.
+
 :: Get inputs from user
-set /p branch="Step 1: Enter Target Branch Name (e.g. vsdevnew): "
+set /p branch="Step 1: Enter Target Remote Branch (Default: %current_branch%): "
+if "%branch%"=="" set branch=%current_branch%
+
 set /p msg="Step 2: Enter Commit Message: "
 
 echo.
@@ -23,8 +32,8 @@ echo [2/3] Executing Commit...
 git commit -m "%msg%"
 
 echo.
-echo [3/3] Pushing to Origin/%branch%...
-git push origin %branch%
+echo [3/3] Pushing Current Code to Origin/%branch%...
+git push origin HEAD:%branch%
 
 echo.
 echo ==========================================
