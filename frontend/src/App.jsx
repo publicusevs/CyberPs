@@ -166,9 +166,11 @@ const Layout = ({ children }) => {
                         <ShieldCheck size={22} className="text-white" />
                     </div>
                     {(!collapsed || mobileOpen) && (
-                        <div className="whitespace-nowrap overflow-hidden">
-                            <span className="text-2xl font-black italic tracking-tighter text-slate-900 uppercase">Investigation <span className="text-blue-600">Hunter</span></span>
-                            <p className="text-[8px] font-bold text-slate-400 tracking-[0.4em] uppercase -mt-1 ml-0.5">Tactical Terminal</p>
+                        <div className="flex flex-col whitespace-nowrap overflow-hidden">
+                            <span className="text-[17px] font-black text-slate-900 tracking-tighter uppercase leading-none italic">
+                                Investigation <span className="text-blue-600">Hunter</span>
+                            </span>
+                            <span className="text-[8px] font-bold text-slate-400 tracking-[0.4em] uppercase mt-1.5 ml-0.5">Tactical Command OS</span>
                         </div>
                     )}
                     {mobileOpen && (
