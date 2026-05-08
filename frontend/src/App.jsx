@@ -177,17 +177,18 @@ const Layout = ({ children }) => {
 
                 <nav className="flex-1 space-y-3 overflow-y-auto no-scrollbar">
                     {(!collapsed || mobileOpen) && <div className="text-[9px] font-black text-slate-400 px-4 mb-3 tracking-[0.3em] uppercase opacity-70">Intelligence Hub</div>}
-                    <SidebarLink to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} collapsed={collapsed && !mobileOpen} />
-                    <SidebarLink to="/generate-letter" icon={FileText} label="Generate Letter" active={location.pathname === '/generate-letter'} collapsed={collapsed && !mobileOpen} />
-                    <SidebarLink to="/cases" icon={Upload} label="Upload Excel" active={location.pathname.startsWith('/cases') && !location.pathname.includes('/trail')} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/" icon={LayoutDashboard} label="Command Deck" active={location.pathname === '/'} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/cases" icon={Briefcase} label="Evidence Vault" active={location.pathname.startsWith('/cases') && !location.pathname.includes('/trail')} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/search" icon={Search} label="Global Intel" active={location.pathname === '/search'} collapsed={collapsed && !mobileOpen} />
                     <SidebarLink to="/trail" icon={Network} label="Trail Analyzer" active={location.pathname === '/trail'} collapsed={collapsed && !mobileOpen} />
-                    <SidebarLink to="/reports" icon={BarChart3} label="Reports" active={location.pathname === '/reports'} collapsed={collapsed && !mobileOpen} />
-                    
-                    {(!collapsed || mobileOpen) && <div className="text-[9px] font-black text-slate-400 px-4 mt-6 mb-3 tracking-[0.3em] uppercase opacity-70">Admin Controls</div>}
-                    <SidebarLink to="/templates-config" icon={Settings2} label="Templates Config" active={location.pathname === '/templates-config'} collapsed={collapsed && !mobileOpen} />
                     
                     {user?.role === 'Admin' && (
-                        <SidebarLink to="/admin/police-stations" icon={ShieldCheck} label="Unit Registry" active={location.pathname === '/admin/police-stations'} collapsed={collapsed && !mobileOpen} />
+                        <>
+                            {(!collapsed || mobileOpen) && <div className="text-[9px] font-black text-slate-400 px-4 mt-6 mb-3 tracking-[0.3em] uppercase opacity-70">Administration</div>}
+                            <SidebarLink to="/templates-config" icon={Settings2} label="Templates Config" active={location.pathname === '/templates-config'} collapsed={collapsed && !mobileOpen} />
+                            <SidebarLink to="/generate-letter" icon={FileText} label="Generate Letter" active={location.pathname === '/generate-letter'} collapsed={collapsed && !mobileOpen} />
+                            <SidebarLink to="/admin/police-stations" icon={ShieldCheck} label="Unit Registry" active={location.pathname === '/admin/police-stations'} collapsed={collapsed && !mobileOpen} />
+                        </>
                     )}
                 </nav>
 

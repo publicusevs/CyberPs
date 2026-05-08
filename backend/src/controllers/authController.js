@@ -13,7 +13,14 @@ exports.login = async (req, res) => {
 
         const result = await pool.request()
             .input('identifier', mssql.NVarChar, identifier)
-            .query('SELECT * FROM users WHERE (username = @identifier OR email = @identifier OR mobile = @identifier) AND is_active = 1');
+            .query(`
+                SELECT u.*, usm.police_station_id, ps.station_name, ps.station_code 
+                FROM users u
+                LEFT JOIN user_station_mapping usm ON u.user_id = usm.user_id
+                LEFT JOIN police_stations ps ON usm.police_station_id = ps.police_station_id
+                WHERE (u.username = @identifier OR u.email = @identifier OR u.mobile = @identifier) 
+                AND u.is_active = 1
+            `);
 
         if (result.recordset.length === 0) {
             return res.status(401).json({ success: false, message: 'Invalid credentials or account inactive' });
@@ -32,7 +39,12 @@ exports.login = async (req, res) => {
 
         // Generate Tokens
         const token = jwt.sign(
-            { user_id: user.user_id, role: user.role },
+            { 
+                user_id: user.user_id, 
+                role: user.role,
+                police_station_id: user.police_station_id,
+                station_name: user.station_name
+            },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRE }
         );
@@ -60,7 +72,9 @@ exports.login = async (req, res) => {
                 user_id: user.user_id,
                 name: user.name,
                 role: user.role,
-                username: user.username
+                username: user.username,
+                police_station_id: user.police_station_id,
+                station_name: user.station_name
             }
         });
 
@@ -92,7 +106,12 @@ exports.refreshToken = async (req, res) => {
 
         const user = userResult.recordset[0];
         const newToken = jwt.sign(
-            { user_id: user.user_id, role: user.role },
+            { 
+                user_id: user.user_id, 
+                role: user.role,
+                police_station_id: user.police_station_id,
+                station_name: user.station_name
+            },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRE }
         );
