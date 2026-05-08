@@ -33,7 +33,7 @@ git commit -m "%msg%"
 
 echo.
 echo [Step 2.5] Updating from main branch to sync code...
-git pull origin main
+git pull origin main --no-edit
 
 echo.
 echo [3/3] Pushing Current Code to Origin/%branch%...
