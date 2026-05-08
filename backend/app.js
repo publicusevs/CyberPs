@@ -12,12 +12,6 @@ const transactionRoutes = require('./src/routes/transactionRoutes');
 const policeStationRoutes = require('./src/routes/policeStationRoutes');
 const noticeRoutes = require('./src/routes/noticeRoutes');
 const templateRoutes = require('./src/routes/templateRoutes');
-const trailRoutes = require('./src/routes/trailRoutes');
-<<<<<<< HEAD
-const variableRoutes = require('./src/routes/variableRoutes');
-=======
-const emailRoutes = require('./src/routes/emailRoutes');
->>>>>>> d70efa7ebd8dbfe9ac08a880f6ae1a13916e3966
 
 const app = express();
 
@@ -37,12 +31,6 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/police-stations', policeStationRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/templates', templateRoutes);
-app.use('/api/trail', trailRoutes);
-<<<<<<< HEAD
-app.use('/api/variables', variableRoutes);
-=======
-app.use('/api/email', emailRoutes);
->>>>>>> d70efa7ebd8dbfe9ac08a880f6ae1a13916e3966
 
 // Error Handling
 app.use((err, req, res, next) => {
@@ -56,8 +44,21 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const serverInstance = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+});
+
+process.on('exit', (code) => {
+    console.log(`About to exit with code: ${code}`);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('There was an uncaught error', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 module.exports = app;

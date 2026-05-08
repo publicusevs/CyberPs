@@ -4,12 +4,8 @@ const { poolPromise, mssql } = require('../config/db');
 
 exports.login = async (req, res) => {
     try {
-        const { identifier, password } = req.body; // identifier can be username, email, or mobile
-
+        const { identifier, password } = req.body;
         const pool = await poolPromise;
-        if (!pool) {
-            return res.status(503).json({ success: false, message: 'CRITICAL: Database offline. Ensure SQL Server Browser is running.' });
-        }
 
         const result = await pool.request()
             .input('identifier', mssql.NVarChar, identifier)
@@ -22,17 +18,14 @@ exports.login = async (req, res) => {
                 AND u.is_active = 1
             `);
 
-        if (result.recordset.length === 0) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials or account inactive' });
-        }
-
         const user = result.recordset[0];
 
-        if (user.is_locked) {
-            return res.status(403).json({ success: false, message: 'Account is locked. Please contact admin.' });
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
+
         if (!isMatch) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
@@ -55,7 +48,7 @@ exports.login = async (req, res) => {
             { expiresIn: process.env.JWT_REFRESH_EXPIRE }
         );
 
-        // Store Session
+        // Optional: Save refresh token in DB
         await pool.request()
             .input('user_id', mssql.Int, user.user_id)
             .input('token', mssql.NVarChar, token)
@@ -64,18 +57,14 @@ exports.login = async (req, res) => {
             .input('device_info', mssql.NVarChar, req.headers['user-agent'])
             .query('INSERT INTO login_sessions (user_id, token, refresh_token, ip_address, device_info) VALUES (@user_id, @token, @refresh_token, @ip_address, @device_info)');
 
+        // Prepare User Data (exclude sensitive fields)
+        const { password_hash, ...userData } = user;
+
         res.json({
             success: true,
             token,
             refreshToken,
-            user: {
-                user_id: user.user_id,
-                name: user.name,
-                role: user.role,
-                username: user.username,
-                police_station_id: user.police_station_id,
-                station_name: user.station_name
-            }
+            user: userData
         });
 
     } catch (err) {
@@ -85,26 +74,24 @@ exports.login = async (req, res) => {
 };
 
 exports.refreshToken = async (req, res) => {
-    const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(401).json({ message: 'Refresh Token required' });
-
     try {
-        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-        const pool = await poolPromise;
-        const result = await pool.request()
-            .input('user_id', mssql.Int, decoded.user_id)
-            .input('refresh_token', mssql.NVarChar, refreshToken)
-            .query('SELECT * FROM login_sessions WHERE user_id = @user_id AND refresh_token = @refresh_token');
-
-        if (result.recordset.length === 0) {
-            return res.status(403).json({ message: 'Invalid Refresh Token' });
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            return res.status(401).json({ success: false, message: 'Refresh token required' });
         }
 
-        const userResult = await pool.request()
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        const pool = await poolPromise;
+        
+        const result = await pool.request()
             .input('user_id', mssql.Int, decoded.user_id)
-            .query('SELECT * FROM users WHERE user_id = @user_id');
+            .query('SELECT u.*, usm.police_station_id, ps.station_name FROM users u LEFT JOIN user_station_mapping usm ON u.user_id = usm.user_id LEFT JOIN police_stations ps ON usm.police_station_id = ps.police_station_id WHERE u.user_id = @user_id AND u.is_active = 1');
 
-        const user = userResult.recordset[0];
+        const user = result.recordset[0];
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'User not found' });
+        }
+
         const newToken = jwt.sign(
             { 
                 user_id: user.user_id, 
@@ -117,8 +104,9 @@ exports.refreshToken = async (req, res) => {
         );
 
         res.json({ success: true, token: newToken });
+
     } catch (err) {
-        res.status(403).json({ message: 'Invalid or expired Refresh Token' });
+        res.status(403).json({ success: false, message: 'Invalid refresh token' });
     }
 };
 
@@ -128,9 +116,10 @@ exports.getStatus = async (req, res) => {
         res.json({
             success: true,
             database: !!pool,
-            internet: true // If they can reach this, they have some connection to the host
+            error: pool ? null : 'Database connection returned null',
+            internet: true
         });
     } catch (err) {
-        res.json({ success: true, database: false, internet: true });
+        res.json({ success: true, database: false, error: err.message, internet: true });
     }
 };
