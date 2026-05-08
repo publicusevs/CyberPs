@@ -130,7 +130,7 @@ const FileManager = () => {
                             </div>
                             <div className="flex gap-4">
                                 <a 
-                                    href={`http://localhost:5000/${fir.file_path}`} 
+                                    href={`http://localhost:1433/${fir.file_path}`} 
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
@@ -186,7 +186,7 @@ const FileManager = () => {
                                                 </div>
                                                 <div className="flex gap-3">
                                                     <a 
-                                                        href={`http://localhost:5000/${ev.file_path}`} 
+                                                        href={`http://localhost:1433/${ev.file_path}`} 
                                                         target="_blank" 
                                                         rel="noreferrer" 
                                                         className="p-3 bg-white text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 shadow-sm"

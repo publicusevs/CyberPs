@@ -3,11 +3,11 @@ import { twMerge } from 'tailwind-merge';
 
 export const Badge = ({ children, variant = "default", className }) => {
     const variants = {
-        default: "bg-hunter-primary/10 border-hunter-primary/30 text-hunter-primary",
+        default: "bg-cyber-primary/10 border-cyber-primary/30 text-cyber-primary",
         success: "bg-emerald-500/10 border-emerald-500/30 text-emerald-500",
         warning: "bg-amber-500/10 border-amber-500/30 text-amber-500",
         danger: "bg-rose-500/10 border-rose-500/30 text-rose-500",
-        muted: "bg-hunter-muted/10 border-hunter-muted/30 text-hunter-muted"
+        muted: "bg-cyber-muted/10 border-cyber-muted/30 text-cyber-muted"
     };
 
     return (
@@ -25,14 +25,14 @@ export const Table = ({ headers, children, className }) => {
     return (
         <div className={twMerge("overflow-x-auto", className)}>
             <table className="w-full text-left">
-                <thead className="bg-white/[0.02] border-b border-hunter-border/30 text-hunter-muted text-[10px] uppercase font-bold tracking-widest">
+                <thead className="bg-white/[0.02] border-b border-cyber-border/30 text-cyber-muted text-[10px] uppercase font-bold tracking-widest">
                     <tr>
                         {headers.map((h, i) => (
                             <th key={i} className="py-4 px-6">{h}</th>
                         ))}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-hunter-border/20">
+                <tbody className="divide-y divide-cyber-border/20">
                     {children}
                 </tbody>
             </table>

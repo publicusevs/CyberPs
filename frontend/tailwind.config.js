@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        hunter: {
+        cyber: {
           dark: '#f8fafc',
           card: '#ffffff',
           border: '#e2e8f0',

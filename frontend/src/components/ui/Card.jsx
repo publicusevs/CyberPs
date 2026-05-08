@@ -15,7 +15,7 @@ export const Card = ({ children, className, animate = true }) => {
         <Component
             {...animationProps}
             className={twMerge(
-                "bg-hunter-card/60 backdrop-blur-xl border border-hunter-border/50 rounded-2xl shadow-2xl relative overflow-hidden",
+                "bg-cyber-card/60 backdrop-blur-xl border border-cyber-border/50 rounded-2xl shadow-2xl relative overflow-hidden",
                 className
             )}
         >
@@ -25,7 +25,7 @@ export const Card = ({ children, className, animate = true }) => {
 };
 
 export const CardHeader = ({ title, subtitle, icon: Icon, color = "blue" }) => (
-    <div className="flex items-center gap-4 mb-6 border-b border-hunter-border/30 pb-4">
+    <div className="flex items-center gap-4 mb-6 border-b border-cyber-border/30 pb-4">
         {Icon && (
             <div className={clsx(
                 "p-2.5 rounded-xl border",
@@ -39,7 +39,7 @@ export const CardHeader = ({ title, subtitle, icon: Icon, color = "blue" }) => (
         )}
         <div>
             <h3 className="text-lg font-bold text-white tracking-tight">{title}</h3>
-            {subtitle && <p className="text-xs text-hunter-muted font-medium">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-cyber-muted font-medium">{subtitle}</p>}
         </div>
     </div>
 );

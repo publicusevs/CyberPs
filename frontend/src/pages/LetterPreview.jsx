@@ -55,27 +55,13 @@ const LetterPreview = () => {
     const [filters, setFilters] = useState([]); // {id, column, value}
     const [remark, setRemark] = useState('');
     const [isCompleting, setIsCompleting] = useState(false);
-    const [layerFilter, setLayerFilter] = useState('ALL');
-
-    const [letterTemplate, setLetterTemplate] = useState({
-        headerLine1: 'OFFICE OF THE DEPUTY SUPERITENDENT OF POLICE',
-        headerLine2: 'STATION, JAIPUR, RAJASTHAN, INDIA',
-        headerLine3: 'Ghat Gate, Agra Road, Jaipur, Rajasthan 302003',
-        subjectText: 'SUBJECT: NOTICE UNDER SECTION 94/106 BNSS 2023 - REQUEST FOR INFORMATION AND DEBIT FREEZE OF FRAUDULENT ACCOUNT(S).',
-        bodyText: 'This is to inform you that a cyber crime investigation is currently underway regarding multiple fraudulent transactions. During technical analysis, the following account(s) held in your bank have been identified as involved in the receipt/transfer of misappropriated funds:',
-        footerText: 'FURTHER, YOU ARE REQUESTED TO IMMEDIATELY DEBIT FREEZE THE AFOREMENTIONED ACCOUNT(S) TO PREVENT FURTHER LOSS OF FUNDS.'
-    });
 
     const filterColumns = [
-        { id: 'ackNo', label: 'Ack No', type: 'text' },
         { id: 'account', label: 'Account Number', type: 'text' },
         { id: 'bank', label: 'Bank', type: 'text' },
         { id: 'utr', label: 'UTR Payload', type: 'text' },
         { id: 'layer', label: 'Layer', type: 'text' },
-        { id: 'amount', label: 'Amount', type: 'number' },
-        { id: 'dateStr', label: 'Trans Date', type: 'text' },
-        { id: 'actionTaken', label: 'Action Status', type: 'text' },
-        { id: 'remarks', label: 'Remarks', type: 'text' }
+        { id: 'amount', label: 'Amount', type: 'number' }
     ];
 
     const filterOperators = [
@@ -93,14 +79,7 @@ const LetterPreview = () => {
     ];
 
     const addFilter = () => {
-        setFilters([...filters, {
-            id: Date.now(),
-            column: 'bank',
-            operator: 'contains',
-            value: '',
-            joiner: 'AND',
-            isNot: false
-        }]);
+        setFilters([...filters, { id: Date.now(), column: 'bank', operator: 'contains', value: '', joiner: 'AND', isNot: false }]);
     };
 
     const removeFilter = (id) => {
@@ -127,7 +106,6 @@ const LetterPreview = () => {
     const evaluateClause = (rec, f) => {
         const targetVal = rec[f.column];
         const queryVal = f.value;
-
         let result = true;
 
         if (f.operator === 'null') {
@@ -155,13 +133,10 @@ const LetterPreview = () => {
                 default: result = true;
             }
         }
-
         return f.isNot ? !result : result;
     };
 
     const passesAllFilters = (rec) => {
-        if (layerFilter !== 'ALL' && rec.layer.toString() !== layerFilter.toString()) return false;
-        
         if (filters.length === 0) return true;
         let finalResult = evaluateClause(rec, filters[0]);
         for (let i = 1; i < filters.length; i++) {
@@ -189,51 +164,28 @@ const LetterPreview = () => {
                 setSelectedBank(null);
             }
         }
-    }, [filters, layerFilter, selectedRecordUtrs]);
+    }, [filters, selectedRecordUtrs]);
 
     const fetchProcessData = async () => {
         try {
             const res = await api.get(`/cases/${id}`);
             if (res.data.success) {
                 setCaseData(res.data);
-                let transactions = res.data.transactions || [];
-
-                try {
-                    const flowRes = await api.get(`/transactions/case/${id}/flow`);
-                    if (flowRes.data.success && flowRes.data.data.length > 0) {
-                        transactions = flowRes.data.data.map(t => ({
-                            ...t,
-                            trans_date: t.date,
-                            receiver_acc: t.account,
-                            utr_no: t.utr,
-                            platform: t.bank
-                        }));
-                    }
-                } catch (flowErr) {
-                    console.warn('Could not fetch rich flow data, using fallback DB data');
-                }
-
+                const transactions = res.data.transactions;
                 const groups = {};
                 const allUtrs = new Set();
+
                 transactions.forEach(t => {
                     const bank = (t.platform || 'Unknown Bank').trim();
-
                     if (!groups[bank]) groups[bank] = { name: bank, records: [] };
                     const record = {
-                        account: t.cleanAccount || t.receiver_acc,
-                        originalAccount: t.receiver_acc,
+                        account: t.receiver_acc,
                         utr: t.utr_no,
                         amount: t.amount,
                         date: t.trans_date,
-                        dateStr: t.dateStr || t.trans_date,
                         bank: bank,
-                        layer: t.layer ? t.layer.toString() : '1',
-                        ifsc: t.ifsc || 'N/A',
-                        ackNo: t.ackNo || 'N/A',
-                        remarks: t.remarks || 'N/A',
-                        actionTaken: t.actionTaken || 'N/A',
-                        actionDate: t.actionDate || 'N/A',
-                        raw: t.raw || {}
+                        layer: 'L' + (Math.floor(Math.random() * 3) + 1),
+                        ifsc: 'SBIN000123'
                     };
                     groups[bank].records.push(record);
                     allUtrs.add(record.utr);
@@ -243,12 +195,7 @@ const LetterPreview = () => {
                 setBankGroups(groupArray);
                 setSelectedBankIds(new Set(groupArray.map(g => g.name)));
                 setSelectedRecordUtrs(allUtrs);
-
-                setStats({
-                    totalBanks: groupArray.length,
-                    totalRecords: allUtrs.size,
-                    status: 'CLEAN'
-                });
+                setStats({ totalBanks: groupArray.length, totalRecords: allUtrs.size, status: 'CLEAN' });
 
                 if (groupArray.length > 0) {
                     prepareSelectedBank(groupArray[0], allUtrs);
@@ -264,7 +211,6 @@ const LetterPreview = () => {
     const prepareSelectedBank = (group, activeUtrs = null) => {
         if (!group) return;
         const currentUtrs = activeUtrs || selectedRecordUtrs;
-
         const filteredRecords = group.records.filter(r => {
             return currentUtrs.has(r.utr) && passesAllFilters(r);
         });
@@ -285,13 +231,7 @@ const LetterPreview = () => {
                 amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
             })),
             startDate: '01/01/2024',
-            endDate: new Date().toLocaleDateString('en-GB'),
-            headerLine1: letterTemplate.headerLine1,
-            headerLine2: letterTemplate.headerLine2,
-            headerLine3: letterTemplate.headerLine3,
-            subjectText: letterTemplate.subjectText,
-            bodyText: letterTemplate.bodyText,
-            footerText: letterTemplate.footerText
+            endDate: new Date().toLocaleDateString('en-GB')
         };
         setSelectedBank(letterData);
     };
@@ -353,12 +293,10 @@ const LetterPreview = () => {
         let isFirst = true;
 
         const selectedGroups = bankGroups.filter(g => selectedBankIds.has(g.name));
-
         for (const group of selectedGroups) {
             const filteredRecords = group.records.filter(r => {
                 return selectedRecordUtrs.has(r.utr) && passesAllFilters(r);
             });
-
             if (filteredRecords.length === 0) continue;
 
             const letterData = {
@@ -379,7 +317,6 @@ const LetterPreview = () => {
             generateBulkPdf(pdf, letterData, isFirst);
             isFirst = false;
         }
-
         pdf.save(`BULK_NOTICES_CASE_${id}.pdf`);
     };
 
@@ -399,7 +336,6 @@ const LetterPreview = () => {
     const handleSaveToDossier = async () => {
         if (!selectedBank) return;
         setGenerating(true);
-
         try {
             const { default: jsPDF } = await import('jspdf');
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -409,12 +345,7 @@ const LetterPreview = () => {
             generateBulkPdf(pdf, selectedBank, true);
             const pdfBase64 = pdf.output('datauristring');
 
-            const res = await api.post('/cases/save-notice', {
-                case_id: id,
-                bank_name: selectedBank.bankName,
-                pdf_base64: pdfBase64
-            });
-
+            const res = await api.post('/cases/save-notice', { case_id: id, bank_name: selectedBank.bankName, pdf_base64: pdfBase64 });
             if (res.data.success) {
                 alert('Success: Notice saved to Secure Evidence Repository');
                 setProcessStep(4);
@@ -460,16 +391,10 @@ const LetterPreview = () => {
             const detailedRemark = `[FORENSIC PROCESS FINALIZED]\nTarget Banks Analyzed: ${selectedBanksCount}\nVerified Transactions Sealed: ${targetRecordsCount}\nOrigin Log Remarks: ${remark || 'System notices generated and deposited to secure dossier.'}`;
 
             // 1. Update status hierarchy
-            await api.post(`/cases/${id}/status`, {
-                status: 'Closed',
-                remarks: detailedRemark
-            });
+            await api.post(`/cases/${id}/status`, { status: 'Closed', remarks: detailedRemark });
 
             // 2. Auto-Broadcast as Internal Memo for Timeline sync
-            await api.post('/cases/notes', {
-                case_id: id,
-                note_text: detailedRemark
-            });
+            await api.post('/cases/notes', { case_id: id, note_text: detailedRemark });
 
             navigate(`/cases/${id}`);
         } catch (err) {
@@ -483,10 +408,8 @@ const LetterPreview = () => {
     if (loading) return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-[0.5em] text-xs">Initializing Forensic Engine...</div>;
 
     const rawActiveRecords = bankGroups.filter(g => selectedBankIds.has(g.name)).flatMap(g => g.records);
-
     // Apply Multi-Filters with Logic (AND, OR, NOT)
     const activeRecords = rawActiveRecords.filter(rec => passesAllFilters(rec));
-
     const areAllRecordsSelected = activeRecords.length > 0 && activeRecords.every(r => selectedRecordUtrs.has(r.utr));
 
     return (
@@ -576,23 +499,11 @@ const LetterPreview = () => {
                                         )}
 
                                         <div className="flex gap-4">
-                                            <Button
-                                                variant="primary"
-                                                className="flex-1 py-5 text-xs tracking-widest"
-                                                disabled={!excelFile || importing}
-                                                loading={importing}
-                                                onClick={handleExcelUpload}
-                                                icon={FileSearch}
-                                            >
+                                            <Button variant="primary" className="flex-1 py-5 text-xs tracking-widest" disabled={!excelFile || importing} loading={importing} onClick={handleExcelUpload} icon={FileSearch} >
                                                 {importing ? 'Processing...' : 'Process & Continue to Review'}
                                             </Button>
                                             {bankGroups.length > 0 && (
-                                                <Button
-                                                    variant="outline"
-                                                    className="px-8 py-5 text-xs tracking-widest"
-                                                    onClick={() => handleStepChange(2)}
-                                                    icon={ExternalLink}
-                                                >
+                                                <Button variant="outline" className="px-8 py-5 text-xs tracking-widest" onClick={() => handleStepChange(2)} icon={ExternalLink} >
                                                     Skip to Review
                                                 </Button>
                                             )}
@@ -616,19 +527,6 @@ const LetterPreview = () => {
                                             </div>
                                         </div>
                                         <div className="flex gap-4">
-                                            <select 
-                                                value={layerFilter} 
-                                                onChange={(e) => setLayerFilter(e.target.value)}
-                                                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-blue-500 cursor-pointer"
-                                            >
-                                                <option value="ALL">All Layers</option>
-                                                {(() => {
-                                                    const maxLayer = Math.max(...bankGroups.flatMap(g => g.records.map(r => parseInt(r.layer) || 1)), 1);
-                                                    return Array.from({ length: maxLayer }, (_, i) => (
-                                                        <option key={i + 1} value={(i + 1).toString()}>Layer {i + 1}</option>
-                                                     ));
-                                                })()}
-                                            </select>
                                             <Button variant="outline" className={`px-6 text-[10px] font-black tracking-widest uppercase transition-all ${filters.length > 0 ? 'bg-blue-600 text-white border-blue-600' : ''}`} icon={Filter} onClick={addFilter}>
                                                 {filters.length > 0 ? `Filters Active (${filters.length})` : 'Add Intelligence Filter'}
                                             </Button>
@@ -649,72 +547,37 @@ const LetterPreview = () => {
                                                             <div key={f.id} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm animate-in zoom-in duration-300">
                                                                 {idx > 0 && (
                                                                     <>
-                                                                        <select
-                                                                            value={f.joiner}
-                                                                            onChange={(e) => updateFilter(f.id, 'joiner', e.target.value)}
-                                                                            className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-tighter px-2 py-2 rounded-lg border-none focus:ring-0 cursor-pointer"
-                                                                        >
+                                                                        <select value={f.joiner} onChange={(e) => updateFilter(f.id, 'joiner', e.target.value)} className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-tighter px-2 py-2 rounded-lg border-none focus:ring-0 cursor-pointer" >
                                                                             <option value="AND">AND</option>
                                                                             <option value="OR">OR</option>
                                                                         </select>
-
-                                                                        <button
-                                                                            onClick={() => updateFilter(f.id, 'isNot', !f.isNot)}
-                                                                            className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${f.isNot ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 text-slate-400'}`}
-                                                                        >
-                                                                            NOT
-                                                                        </button>
+                                                                        <button onClick={() => updateFilter(f.id, 'isNot', !f.isNot)} className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${f.isNot ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 text-slate-400'}`} > NOT </button>
                                                                     </>
                                                                 )}
-
-                                                                <select
-                                                                    value={f.column}
-                                                                    onChange={(e) => updateFilter(f.id, 'column', e.target.value)}
-                                                                    className="bg-slate-50 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500"
-                                                                >
+                                                                <select value={f.column} onChange={(e) => updateFilter(f.id, 'column', e.target.value)} className="bg-slate-50 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500" >
                                                                     {filterColumns.map(col => (
                                                                         <option key={col.id} value={col.id}>{col.label}</option>
                                                                     ))}
                                                                 </select>
-
-                                                                <select
-                                                                    value={f.operator}
-                                                                    onChange={(e) => updateFilter(f.id, 'operator', e.target.value)}
-                                                                    className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500"
-                                                                >
+                                                                <select value={f.operator} onChange={(e) => updateFilter(f.id, 'operator', e.target.value)} className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tighter px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500" >
                                                                     {validOperators.map(op => (
                                                                         <option key={op.id} value={op.id}>{op.label}</option>
                                                                     ))}
                                                                 </select>
-
                                                                 <div className="h-4 w-[1px] bg-slate-200"></div>
-
                                                                 {f.operator !== 'null' && f.operator !== 'not_null' && (
                                                                     <div className="relative">
                                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-                                                                        <input
-                                                                            type="text"
-                                                                            placeholder={col?.type === 'number' ? 'Value...' : 'Contains...'}
-                                                                            value={f.value}
-                                                                            onChange={(e) => updateFilter(f.id, 'value', e.target.value)}
-                                                                            className="pl-9 pr-4 py-2 bg-slate-50 text-[10px] font-bold text-slate-700 placeholder:text-slate-300 rounded-lg border-none focus:ring-2 focus:ring-blue-500 w-48"
-                                                                        />
+                                                                        <input type="text" placeholder={col?.type === 'number' ? 'Value...' : 'Contains...'} value={f.value} onChange={(e) => updateFilter(f.id, 'value', e.target.value)} className="pl-9 pr-4 py-2 bg-slate-50 text-[10px] font-bold text-slate-700 placeholder:text-slate-300 rounded-lg border-none focus:ring-2 focus:ring-blue-500 w-48" />
                                                                     </div>
                                                                 )}
-
-                                                                <button
-                                                                    onClick={() => removeFilter(f.id)}
-                                                                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                                                >
+                                                                <button onClick={() => removeFilter(f.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" >
                                                                     <X size={14} />
                                                                 </button>
                                                             </div>
                                                         );
                                                     })}
-                                                    <button
-                                                        onClick={addFilter}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl border border-dashed border-blue-200 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
-                                                    >
+                                                    <button onClick={addFilter} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl border border-dashed border-blue-200 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest" >
                                                         <Plus size={14} /> Add Clause
                                                     </button>
                                                 </div>
@@ -725,67 +588,41 @@ const LetterPreview = () => {
                                     <div className="max-h-[800px] overflow-y-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead className="sticky top-0 bg-white shadow-sm z-10">
-                                                <tr className="border-b border-slate-100 bg-slate-50">
-                                                    <th className="px-3 py-4 w-12 text-center border-r border-slate-200">
-                                                        <button
-                                                            onClick={toggleSelectAllRecords}
-                                                            className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}
-                                                        >
-                                                            {areAllRecordsSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="px-6 py-5 w-16 text-center">
+                                                        <button onClick={toggleSelectAllRecords} className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
+                                                            {areAllRecordsSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                                                         </button>
                                                     </th>
-                                                    <th className="px-3 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200 text-center">S.No</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Acknowledgement No</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Account No / Wallet / PG / PA Id</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Transaction Id / UTR Number</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Bank/FIs</th>
-                                                    <th className="px-3 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter border-r border-slate-200 text-center bg-blue-50/50">Layer</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Account No.</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">IFSC Code</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Transaction Date</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Transaction Id / UTR Number2</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Transaction Amount</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Disputed Amount</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Reference No</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Remarks</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Action Taken By Bank</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter border-r border-slate-200">Date of Action</th>
-                                                    <th className="px-4 py-4 text-[9px] font-black text-slate-500 uppercase tracking-tighter">pisnodal</th>
+                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest">Account Number</th>
+                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center">Bank</th>
+                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest">Transaction Payload (UTR)</th>
+                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center">Layer</th>
+                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-right">Credit Asset</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {activeRecords.map((rec, i) => {
-                                                    const raw = rec.raw || {};
-                                                    return (
-                                                        <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                                                            <td className="px-3 py-3 text-center border-r border-slate-100">
-                                                                <button
-                                                                    onClick={() => toggleRecordSelection(rec.utr)}
-                                                                    className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}
-                                                                >
-                                                                    {selectedRecordUtrs.has(rec.utr) ? <CheckSquare size={14} /> : <Square size={14} />}
-                                                                </button>
-                                                            </td>
-                                                            <td className="px-3 py-3 text-[10px] text-center font-bold text-slate-400 border-r border-slate-100">{raw['S.No'] || raw['S. No'] || raw['S No'] || (i + 1)}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-600 border-r border-slate-100">{raw['Acknowledgement No'] || rec.ackNo}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-black text-slate-900 border-r border-slate-100">{raw['Account No / Wallet / PG / PA Id'] || rec.originalAccount}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-mono text-slate-500 border-r border-slate-100">{raw['Transaction Id / UTR Number'] || rec.utr}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-700 border-r border-slate-100">{raw['Bank/FIs'] || rec.bank}</td>
-                                                            <td className="px-3 py-3 text-[10px] text-center font-black text-blue-600 border-r border-slate-100 bg-blue-50/20">{rec.layer}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-600 border-r border-slate-100">{raw['Account No.'] || raw['Account No'] || 'N/A'}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-500 border-r border-slate-100">{raw['IFSC Code'] || rec.ifsc}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-500 border-r border-slate-100">{raw['Transaction Date'] || rec.dateStr}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-mono text-slate-400 border-r border-slate-100">{raw['Transaction Id / UTR Number2'] || 'N/A'}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-black text-slate-900 border-r border-slate-100 italic">₹{parseFloat(raw['Transaction Amount'] || rec.amount).toLocaleString()}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-black text-rose-600 border-r border-slate-100">₹{parseFloat(raw['Disputed Amount'] || 0).toLocaleString()}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-400 border-r border-slate-100">{raw['Reference No'] || 'N/A'}</td>
-                                                            <td className="px-4 py-3 text-[9px] font-medium text-slate-400 border-r border-slate-100 max-w-[150px] truncate">{raw['Remarks'] || rec.remarks}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-black text-emerald-600 border-r border-slate-100 uppercase">{raw['Action Taken By Bank'] || rec.actionTaken}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-400 border-r border-slate-100">{raw['Date of Action'] || rec.actionDate}</td>
-                                                            <td className="px-4 py-3 text-[10px] font-bold text-slate-400">{raw['pisnodal'] || 'N/A'}</td>
-                                                        </tr>
-                                                    );
-                                                })}
+                                            <tbody className="divide-y divide-slate-50">
+                                                {activeRecords.map((rec, i) => (
+                                                    <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
+                                                        <td className="px-6 py-5 text-center">
+                                                            <button onClick={() => toggleRecordSelection(rec.utr)} className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
+                                                                {selectedRecordUtrs.has(rec.utr) ? <CheckSquare size={16} /> : <Square size={16} />}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-6 py-5">
+                                                            <p className="text-xs font-black text-slate-900 tracking-tight">{rec.account}</p>
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">AUTH_PASS: {rec.ifsc}</p>
+                                                        </td>
+                                                        <td className="px-6 py-5 text-center">
+                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100"> {rec.bank} </span>
+                                                        </td>
+                                                        <td className="px-6 py-5 font-mono text-xs text-slate-500 font-bold tracking-tight"> {rec.utr} </td>
+                                                        <td className="px-6 py-5 text-center">
+                                                            <span className="px-4 py-1 bg-slate-100 rounded-full text-[9px] font-black text-slate-600 uppercase border border-slate-200"> {rec.layer} </span>
+                                                        </td>
+                                                        <td className="px-6 py-5 text-right font-black text-sm text-slate-900 italic"> ₹{parseFloat(rec.amount).toLocaleString()} </td>
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
                                     </div>
@@ -832,75 +669,6 @@ const LetterPreview = () => {
                                         </div>
                                     </div>
 
-                                    {/* Editable Template Panel */}
-                                    <Card className="bg-white p-8 rounded-[28px] border border-slate-200 shadow-sm space-y-6">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center">
-                                                <FileText size={16} className="text-indigo-600" />
-                                            </div>
-                                            <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">Edit Notice Format</h3>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 gap-6">
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-4 border-b border-slate-100">
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Header Line 1 (Dept)</label>
-                                                    <input
-                                                        type="text"
-                                                        value={letterTemplate.headerLine1}
-                                                        onChange={(e) => setLetterTemplate({ ...letterTemplate, headerLine1: e.target.value })}
-                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Header Line 2 (Station)</label>
-                                                    <input
-                                                        type="text"
-                                                        value={letterTemplate.headerLine2}
-                                                        onChange={(e) => setLetterTemplate({ ...letterTemplate, headerLine2: e.target.value })}
-                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-rose-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Header Line 3 (Address)</label>
-                                                    <input
-                                                        type="text"
-                                                        value={letterTemplate.headerLine3}
-                                                        onChange={(e) => setLetterTemplate({ ...letterTemplate, headerLine3: e.target.value })}
-                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Subject Line</label>
-                                                <textarea
-                                                    value={letterTemplate.subjectText}
-                                                    onChange={(e) => setLetterTemplate({ ...letterTemplate, subjectText: e.target.value })}
-                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[60px]"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notice Body / Context</label>
-                                                <textarea
-                                                    value={letterTemplate.bodyText}
-                                                    onChange={(e) => setLetterTemplate({ ...letterTemplate, bodyText: e.target.value })}
-                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px]"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Footer / Directive (e.g. DEBIT FREEZE)</label>
-                                                <textarea
-                                                    value={letterTemplate.footerText}
-                                                    onChange={(e) => setLetterTemplate({ ...letterTemplate, footerText: e.target.value })}
-                                                    className="w-full bg-rose-50/50 border border-rose-100 rounded-xl p-4 text-xs font-bold text-rose-700 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 min-h-[60px]"
-                                                />
-                                            </div>
-                                        </div>
-                                    </Card>
-
                                     {/* Zoom Controls */}
                                     <div className="flex items-center justify-center gap-3">
                                         <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition-all shadow-sm"><ZoomOut size={16} className="text-slate-600" /></button>
@@ -923,26 +691,13 @@ const LetterPreview = () => {
                                             ) : allLetters.length > 0 ? (
                                                 <div className="flex flex-col items-center gap-10">
                                                     {allLetters.map((letter, idx) => (
-                                                        <motion.div
-                                                            key={letter.bankName}
-                                                            initial={{ y: 30, opacity: 0 }}
-                                                            animate={{ y: 0, opacity: 1 }}
-                                                            transition={{ delay: idx * 0.1 }}
-                                                            className="relative w-full flex flex-col items-center"
-                                                        >
+                                                        <motion.div key={letter.bankName} initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: idx * 0.1 }} className="relative w-full flex flex-col items-center" >
                                                             {/* Page Label */}
                                                             <div className="mb-3 flex items-center gap-3">
-                                                                <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]">
-                                                                    Notice {idx + 1} of {allLetters.length} — {letter.bankName}
-                                                                </span>
+                                                                <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]"> Notice {idx + 1} of {allLetters.length} — {letter.bankName} </span>
                                                             </div>
                                                             {/* Letter Paper */}
-                                                            <div
-                                                                id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`}
-                                                                className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out"
-                                                                style={{ transform: `scale(${zoom})`, width: '210mm', transformOrigin: 'top center' }}
-                                                                dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter) }}
-                                                            />
+                                                            <div id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`} className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out" style={{ transform: `scale(${zoom})`, width: '210mm', transformOrigin: 'top center' }} dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter) }} />
                                                         </motion.div>
                                                     ))}
                                                 </div>
@@ -968,28 +723,15 @@ const LetterPreview = () => {
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-4xl font-black text-slate-900 tracking-tighter italic uppercase">Operation <span className="text-emerald-600">Finalized</span></h3>
-                                        <p className="text-slate-500 text-sm leading-relaxed font-semibold italic">
-                                            All forensic warrants have been verified and sealed in the evidence repository. The dossier is ready for digital dispatch or physical printing.
-                                        </p>
+                                        <p className="text-slate-500 text-sm leading-relaxed font-semibold italic"> All forensic warrants have been verified and sealed in the evidence repository. The dossier is ready for digital dispatch or physical printing. </p>
                                     </div>
                                     <div className="text-left">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Completion Remarks / Origin Log</label>
-                                        <textarea
-                                            value={remark}
-                                            onChange={(e) => setRemark(e.target.value)}
-                                            placeholder="Enter operational log remarks here..."
-                                            className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none"
-                                        />
+                                        <textarea value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Enter operational log remarks here..." className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none" />
                                     </div>
                                     <div className="pt-8 grid grid-cols-2 gap-4">
                                         <Button variant="outline" className="py-5" icon={Mail}>Nodal Email Blast</Button>
-                                        <Button
-                                            variant="primary"
-                                            className="bg-blue-600 py-5 shadow-2xl shadow-blue-200"
-                                            icon={CheckCircle2}
-                                            onClick={handleCompleteMission}
-                                            disabled={isCompleting}
-                                        >
+                                        <Button variant="primary" className="bg-blue-600 py-5 shadow-2xl shadow-blue-200" icon={CheckCircle2} onClick={handleCompleteMission} disabled={isCompleting} >
                                             {isCompleting ? 'Finalizing...' : 'Complete Mission'}
                                         </Button>
                                     </div>

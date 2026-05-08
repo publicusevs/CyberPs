@@ -20,7 +20,7 @@ const Login = () => {
             const isOnline = navigator.onLine;
             let dbConnected = false;
             try {
-                const res = await fetch('http://localhost:5000/api/auth/status');
+                const res = await fetch('http://localhost:1433/api/auth/status');
                 const data = await res.json();
                 dbConnected = data.database;
             } catch (e) {
@@ -81,7 +81,7 @@ const Login = () => {
                         <Shield className="w-10 h-10 text-white" />
                     </motion.div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">
-                        Investigation <span className="text-blue-600">Hunter</span>
+                        Cyber <span className="text-blue-600">OPS</span>
                     </h1>
                     <p className="text-slate-500 text-[10px] font-black tracking-[0.3em] uppercase mt-2">Intelligence Investigation System</p>
                 </div>
@@ -167,7 +167,7 @@ const Login = () => {
                             </div>
                         </div>
                         <p className="text-[8px] text-slate-400 text-center uppercase tracking-tighter leading-tight font-medium">
-                            Central Bureau Investigation Hunter // Automated Forensic Audit Active
+                            Central Bureau Cyber Ops // Automated Forensic Audit Active
                         </p>
                     </div>
                 </div>

@@ -16,6 +16,7 @@ import NoticeConfigForm from './pages/NoticeConfigForm';
 import NoticeEditor from './pages/NoticeEditor';
 import TemplatesConfig from './pages/TemplatesConfig';
 import GenerateLetter from './pages/GenerateLetter';
+import MoneyTrailStandalone, { CaseMoneyTrail } from './pages/MoneyTrailAnalyzer';
 import {
     LayoutDashboard,
     Briefcase,
@@ -32,7 +33,8 @@ import {
     FileText,
     Upload,
     BarChart3,
-    Settings2
+    Settings2,
+    Network
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -63,7 +65,7 @@ const SidebarLink = ({ to, icon: Icon, label, active, collapsed, onClick }) => (
     </Link>
 );
 
-const Navbar = ({ onToggleSidebar, onProfileClick }) => {
+const Navbar = ({ onToggleSidebar, onProfileClick, isSidebarCollapsed }) => {
     const { logout, user } = useAuth();
     return (
         <header className="h-20 border-b border-slate-200 bg-white/80 backdrop-blur-2xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-[60]">
@@ -118,6 +120,8 @@ const Layout = ({ children }) => {
     }, [location.pathname]);
 
     if (location.pathname === '/login') return children;
+    if (location.pathname === '/trail' || location.pathname.endsWith('/trail')) return children;
+    if (/\/cases\/\d+\/trail/.test(location.pathname)) return children;
 
     const toggleSidebar = () => {
         if (window.innerWidth < 1024) {
@@ -175,7 +179,8 @@ const Layout = ({ children }) => {
                     {(!collapsed || mobileOpen) && <div className="text-[9px] font-black text-slate-400 px-4 mb-3 tracking-[0.3em] uppercase opacity-70">Intelligence Hub</div>}
                     <SidebarLink to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} collapsed={collapsed && !mobileOpen} />
                     <SidebarLink to="/generate-letter" icon={FileText} label="Generate Letter" active={location.pathname === '/generate-letter'} collapsed={collapsed && !mobileOpen} />
-                    <SidebarLink to="/cases" icon={Upload} label="Upload Excel" active={location.pathname.startsWith('/cases')} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/cases" icon={Upload} label="Upload Excel" active={location.pathname.startsWith('/cases') && !location.pathname.includes('/trail')} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/trail" icon={Network} label="Trail Analyzer" active={location.pathname === '/trail'} collapsed={collapsed && !mobileOpen} />
                     <SidebarLink to="/reports" icon={BarChart3} label="Reports" active={location.pathname === '/reports'} collapsed={collapsed && !mobileOpen} />
                     
                     {(!collapsed || mobileOpen) && <div className="text-[9px] font-black text-slate-400 px-4 mt-6 mb-3 tracking-[0.3em] uppercase opacity-70">Admin Controls</div>}
@@ -195,7 +200,7 @@ const Layout = ({ children }) => {
             {/* Main Content Area */}
             <main className={`flex-1 flex flex-col min-w-0 z-10 transition-all duration-500 ease-in-out
                 ${collapsed ? 'lg:ml-[96px]' : 'lg:ml-[288px]'} ml-0`}>
-                <Navbar onToggleSidebar={toggleSidebar} onProfileClick={() => setShowProfile(true)} />
+                <Navbar onToggleSidebar={toggleSidebar} onProfileClick={() => setShowProfile(true)} isSidebarCollapsed={collapsed} />
                 <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
                 <div className="p-4 md:p-8 lg:p-12 xl:p-16 max-w-[1700px] mx-auto w-full">
                     <AnimatePresence mode="wait">
@@ -237,6 +242,8 @@ function App() {
                             <Route path="/generate-letter" element={<GenerateLetter />} />
                             <Route path="/reports" element={<div className="p-20 text-center font-black uppercase text-slate-400 italic">Reports Module Coming Soon</div>} />
                             <Route path="/admin/police-stations" element={<PoliceStationRegistration />} />
+                            <Route path="/cases/:id/trail" element={<CaseMoneyTrail />} />
+                            <Route path="/trail" element={<MoneyTrailStandalone />} />
                         </Route>
                     </Routes>
                 </Layout>

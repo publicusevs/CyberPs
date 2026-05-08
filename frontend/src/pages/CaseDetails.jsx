@@ -33,7 +33,8 @@ import {
     Link2,
     Edit2,
     Save,
-    Activity
+    Activity,
+    Network
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -369,14 +370,6 @@ const CaseDetails = () => {
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-4 w-full md:w-auto justify-end">
-                    <Button 
-                        variant="outline" 
-                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all shadow-sm"
-                        icon={FileText}
-                        onClick={() => navigate(`/cases/${id}/notices`)}
-                    >
-                        Legal Notices
-                    </Button>
                     <Button variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm" icon={Edit2} onClick={() => navigate(`/cases/edit/${id}`)}>
                         Modify Core Protocol
                     </Button>
@@ -507,8 +500,8 @@ const CaseDetails = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <a href={`http://localhost:5000/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
-                                        <a href={`http://localhost:5000/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
+                                        <a href={`http://localhost:1433/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
+                                        <a href={`http://localhost:1433/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
                                         <button onClick={() => handleDeleteFile('fir', fir.doc_id)} className="p-2 text-rose-500 bg-white border border-rose-50 rounded-lg shadow-sm hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                     </div>
                                 </div>
@@ -582,6 +575,9 @@ const CaseDetails = () => {
                                 <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Money Trail</h2>
                             </div>
                             <div className="flex gap-3">
+                                <button onClick={() => navigate(`/cases/${id}/trail`)} title="Money Trail Analyzer" className="flex items-center gap-2 px-3 py-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white rounded-xl transition-all shadow-sm border border-indigo-100 text-[9px] font-black uppercase tracking-widest">
+                                    <Network size={14} /> Trail Graph
+                                </button>
                                 <button onClick={() => setShowExcelModal(true)} title="Upload Forensic Excel" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shadow-sm border border-slate-100"><Upload size={18} /></button>
                                 <button onClick={() => navigate(`/cases/${id}/files`)} title="View Excel History" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shadow-sm border border-slate-100"><Eye size={18} /></button>
                                 <button onClick={() => navigate(`/cases/${id}/files`)} title="Manage All Files" className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-slate-100"><Trash2 size={18} /></button>

@@ -32,15 +32,6 @@ exports.createCase = async (req, res) => {
 
         const caseId = caseResult.recordset[0].case_id;
 
-        // 1.5. Link to Police Station if user is assigned
-        if (req.user.police_station_id) {
-            const mappingRequest = new mssql.Request(transaction);
-            await mappingRequest
-                .input('case_id', mssql.Int, caseId)
-                .input('ps_id', mssql.Int, req.user.police_station_id)
-                .query('INSERT INTO case_station_mapping (case_id, police_station_id) VALUES (@case_id, @ps_id)');
-        }
-
         // 2. Insert into case_victims
         const victimRequest = new mssql.Request(transaction);
         await victimRequest
@@ -198,22 +189,10 @@ exports.updateFullCase = async (req, res) => {
 
 exports.getAllCases = async (req, res) => {
     try {
-        const { role, police_station_id } = req.user;
         const pool = await poolPromise;
-        let query = 'SELECT c.*, u.name as assigned_to_name FROM cases c LEFT JOIN users u ON c.assigned_to = u.user_id';
-        
-        const request = pool.request();
-        // 🛡️ BACKEND SAFE MODE: Admins bypass all station-level filtering
-        if (police_station_id && role !== 'Admin') {
-            query += ' JOIN case_station_mapping csm ON c.case_id = csm.case_id WHERE csm.police_station_id = @ps_id';
-            request.input('ps_id', mssql.Int, police_station_id);
-        }
-        
-        query += ' ORDER BY c.created_at DESC';
-        const result = await request.query(query);
+        const result = await pool.request().query('SELECT c.*, u.name as assigned_to_name FROM cases c LEFT JOIN users u ON c.assigned_to = u.user_id ORDER BY c.created_at DESC');
         res.json({ success: true, data: result.recordset });
     } catch (err) {
-        console.error(err);
         res.status(500).json({ success: false, message: 'Error fetching cases' });
     }
 };
@@ -221,34 +200,15 @@ exports.getAllCases = async (req, res) => {
 exports.getCaseById = async (req, res) => {
     try {
         const { id } = req.params;
-        const { police_station_id } = req.user;
         const pool = await poolPromise;
-        if (!pool) return res.status(503).json({ success: false, message: 'Database connection unavailable' });
 
-        let query = 'SELECT * FROM cases WHERE case_id = @case_id';
-        if (police_station_id) {
-            query = `SELECT c.*, ps.station_name, ps.address as station_address, ps.city as station_city 
-                     FROM cases c 
-                     LEFT JOIN case_station_mapping csm ON c.case_id = csm.case_id 
-                     LEFT JOIN police_stations ps ON csm.police_station_id = ps.police_station_id 
-                     WHERE c.case_id = @case_id 
-                     AND (@ps_id IS NULL OR csm.police_station_id = @ps_id OR csm.police_station_id IS NULL)`;
-        }
-
-        const caseReq = pool.request().input('case_id', mssql.Int, id);
-        if (police_station_id) {
-            caseReq.input('ps_id', mssql.Int, police_station_id);
-        }
-
-        const [caseResult, victimResult, firResult, evidenceResult, transactionsResult, notesResult, accusedResult] = await Promise.all([
-            caseReq.query(query),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_victims WHERE case_id = @case_id'),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM fir_documents WHERE case_id = @case_id'),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_evidence WHERE case_id = @case_id ORDER BY uploaded_at DESC'),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_transactions WHERE case_id = @case_id'),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT n.*, u.name as author FROM case_notes n JOIN users u ON n.user_id = u.user_id WHERE n.case_id = @case_id ORDER BY n.created_at DESC'),
-            pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_accused WHERE case_id = @case_id')
-        ]);
+        const caseResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM cases WHERE case_id = @case_id');
+        const victimResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_victims WHERE case_id = @case_id');
+        const firResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM fir_documents WHERE case_id = @case_id');
+        const evidenceResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_evidence WHERE case_id = @case_id ORDER BY uploaded_at DESC');
+        const transactionsResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_transactions WHERE case_id = @case_id');
+        const notesResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT n.*, u.name as author FROM case_notes n JOIN users u ON n.user_id = u.user_id WHERE case_id = @case_id ORDER BY n.created_at DESC');
+        const accusedResult = await pool.request().input('case_id', mssql.Int, id).query('SELECT * FROM case_accused WHERE case_id = @case_id');
 
         if (caseResult.recordset.length === 0) return res.status(404).json({ message: 'Case not found' });
 
@@ -263,7 +223,6 @@ exports.getCaseById = async (req, res) => {
             accusedList: accusedResult.recordset
         });
     } catch (err) {
-        console.error('[getCaseById Error]', err.message);
         res.status(500).json({ success: false, message: 'Error fetching case details' });
     }
 };
