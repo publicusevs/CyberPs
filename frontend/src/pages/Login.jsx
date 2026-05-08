@@ -20,7 +20,7 @@ const Login = () => {
             const isOnline = navigator.onLine;
             let dbConnected = false;
             try {
-                const res = await fetch('http://localhost:1433/api/auth/status');
+                const res = await fetch('http://localhost:5000/api/auth/status');
                 const data = await res.json();
                 dbConnected = data.database;
             } catch (e) {
