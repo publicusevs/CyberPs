@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.get('/', variableController.getAllVariables);
 router.post('/', variableController.upsertVariable);
+router.put('/:id', variableController.updateVariable);
 router.delete('/:id', variableController.deleteVariable);
 
 module.exports = router;
