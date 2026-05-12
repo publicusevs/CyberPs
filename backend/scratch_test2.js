@@ -1,14 +1,15 @@
+require('dotenv').config();
 const mssql = require('mssql');
 
 const dbConfig = {
-    user: 'db_ab6f95_cyberweb_admin',
-    password: 'Vij@3636',
-    server: 'SQL1003.site4now.net',
-    port: 1433,
-    database: 'db_ab6f95_cyberweb',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER,
+    port: parseInt(process.env.DB_PORT) || 1433,
+    database: process.env.DB_NAME,
     options: {
         encrypt: true,
-        trustServerCertificate: true,
+        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',
         connectTimeout: 30000
     },
 };

@@ -22,20 +22,22 @@ if %errorlevel% neq 0 (
 )
 
 echo  [2/4] Checking backend dependencies...
-if not exist "backend\node_modules" (
-    echo         Installing backend packages...
-    cd backend
-    call npm install --silent
-    cd ..
-)
+if exist "backend\node_modules\express-rate-limit" goto :backend_ok
+echo         Installing backend packages (this may take a moment)...
+cd backend
+call npm install
+cd ..
+:backend_ok
+echo         Backend packages verified.
 
 echo  [3/4] Checking frontend dependencies...
-if not exist "frontend\node_modules" (
-    echo         Installing frontend packages...
-    cd frontend
-    call npm install --silent
-    cd ..
-)
+if exist "frontend\node_modules" goto :frontend_ok
+echo         Installing frontend packages (this may take a moment)...
+cd frontend
+call npm install
+cd ..
+:frontend_ok
+echo         Frontend packages verified.
 
 :: ── Run DB migration (safe — IF NOT EXISTS only) ─────────────────
 echo  [4/4] Running database migration...
@@ -57,6 +59,8 @@ echo.
 start "CyberPS Backend  ^| Port 5000" cmd /k "cd /d %~dp0backend && color 0A && echo  [BACKEND] Starting... && npm run dev"
 timeout /t 2 /nobreak >nul
 start "CyberPS Frontend ^| Port 5173" cmd /k "cd /d %~dp0frontend && color 0B && echo  [FRONTEND] Starting... && npm run dev"
+timeout /t 2 /nobreak >nul
+start "CyberPS Ramail API ^| Port 8000" cmd /k "cd /d c:\Users\HP\Desktop\ramail && color 0C && echo  [RAMAIL] Starting API Service... && py main.py api"
 
 :: ── Status output ─────────────────────────────────────────────────
 echo.
@@ -66,9 +70,10 @@ echo  ============================================================
 echo.
 echo   Backend  : http://localhost:5000
 echo   Frontend : http://localhost:5173
+echo   Ramail   : http://localhost:8000
 echo   Health   : http://localhost:5000/health
 echo.
-echo   Both services are starting in separate windows.
+echo   All 3 services are starting in separate windows.
 echo   Close those windows to stop the services.
 echo.
 echo  ============================================================
