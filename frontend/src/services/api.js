@@ -1,10 +1,14 @@
 import axios from 'axios';
 
+// Base URL sourced from environment — set VITE_API_URL in frontend/.env
+// Default fallback for safety in case env is not configured
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: BASE_URL,
 });
 
-// Add a request interceptor to include the JWT token
+// Request interceptor: attach JWT from localStorage to every request
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
@@ -16,16 +20,22 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Add a response interceptor to handle token expiration
+// Response interceptor: handle token expiry with silent refresh
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
+
+        // Handle network errors (backend down, no internet)
+        if (!error.response) {
+            return Promise.reject(error);
+        }
+
         if (error.response.status === 403 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
                 const refreshToken = localStorage.getItem('refreshToken');
-                const res = await axios.post('http://localhost:5000/api/auth/refresh-token', { refreshToken });
+                const res = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
                 if (res.data.success) {
                     localStorage.setItem('token', res.data.token);
                     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;

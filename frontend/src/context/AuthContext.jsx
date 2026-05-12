@@ -18,7 +18,9 @@ export const AuthProvider = ({ children }) => {
     const login = async (identifier, password) => {
         const res = await api.post('/auth/login', { identifier, password });
         if (res.data.success) {
-            const { token, refreshToken, user: userData } = res.data;
+            // Support both: new shape (data.data.token) and old shape (data.token)
+            const payload = res.data.data || res.data;
+            const { token, refreshToken, user: userData } = payload;
             localStorage.setItem('token', token);
             localStorage.setItem('refreshToken', refreshToken);
             localStorage.setItem('user', JSON.stringify(userData));
