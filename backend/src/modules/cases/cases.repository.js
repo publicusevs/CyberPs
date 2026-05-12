@@ -12,6 +12,8 @@
 'use strict';
 
 const { poolPromise, mssql } = require('../../config/db');
+const fs = require('fs');
+const path = require('path');
 
 const CasesRepository = {
 
@@ -116,10 +118,36 @@ const CasesRepository = {
         ]);
 
         if (caseR.recordset.length === 0) return null;
+
+        // --- Self-Healing File Paths ---
+        const healedDocs = firR.recordset.map(doc => {
+            const relativePath = doc.file_path.replace(/^\//, '');
+            const physicalPath = path.resolve(process.cwd(), relativePath);
+
+            if (!fs.existsSync(physicalPath)) {
+                // Try removing _1, _2 suffix
+                const dir = path.dirname(physicalPath);
+                const base = path.basename(physicalPath, '.pdf');
+                const cleanedBase = base.replace(/_\d+$/, '');
+                const fallbackPath = path.join(dir, cleanedBase + '.pdf');
+
+                if (fs.existsSync(fallbackPath)) {
+                    const healedFileName = cleanedBase + '.pdf';
+                    return {
+                        ...doc,
+                        file_path: `/uploads/notices/${doc.case_id}/${healedFileName}`,
+                        file_name: healedFileName
+                    };
+                }
+            }
+            return doc;
+        });
+
         return {
             case: caseR.recordset[0],
             victim: victimR.recordset[0],
-            fir: firR.recordset[0],
+            fir: healedDocs[0],
+            fir_docs: healedDocs,
             evidence: evidenceR.recordset,
             transactions: transR.recordset,
             notes: notesR.recordset,
@@ -288,12 +316,13 @@ const CasesRepository = {
      * Save a PDF notice into fir_documents (old saveNotice in caseController).
      * Renamed to clarify its purpose: it saves a generated PDF artifact.
      */
-    async insertPdfNotice(pool, { caseId, filePath }) {
+    async insertPdfNotice(pool, { caseId, filePath, fileName }) {
         await pool.request()
             .input('case_id', mssql.Int, caseId)
             .input('type', mssql.NVarChar, 'Legal Notice')
             .input('path', mssql.NVarChar, filePath)
-            .query('INSERT INTO fir_documents (case_id, document_type, file_path) VALUES (@case_id, @type, @path)');
+            .input('name', mssql.NVarChar, fileName || 'Generated Notice.pdf')
+            .query('INSERT INTO fir_documents (case_id, file_type, file_path, file_name) VALUES (@case_id, @type, @path, @name)');
     },
 
     // ── Evidence ──────────────────────────────────────────────────────────────

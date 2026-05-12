@@ -35,7 +35,7 @@ exports.updateProfiles = asyncHandler(async (req, res) => {
 });
 
 exports.addNote = asyncHandler(async (req, res) => {
-    await CasesService.addNote({ ...req.body, user_id: req.user.user_id });
+    await CasesService.addNote({ ...req.body, case_id: req.params.id, user_id: req.user.user_id });
     sendSuccess(res, null, 'Note added');
 });
 
@@ -60,6 +60,16 @@ exports.deleteFile = asyncHandler(async (req, res) => {
 });
 
 exports.saveNotice = asyncHandler(async (req, res) => {
-    const filePath = await CasesService.savePdfNotice(req.body);
-    sendSuccess(res, { filePath }, 'Notice saved to dossier');
+    const result = await CasesService.saveNotice(req.body);
+    sendSuccess(res, result, 'Notice saved to dossier');
+});
+
+exports.getNodalRecipients = asyncHandler(async (req, res) => {
+    const data = await CasesService.getNodalRecipients(req.params.id);
+    sendSuccess(res, data);
+});
+
+exports.sendNodalEmails = asyncHandler(async (req, res) => {
+    const result = await CasesService.sendNodalEmails(req.body);
+    sendSuccess(res, result, 'Mailing process complete');
 });

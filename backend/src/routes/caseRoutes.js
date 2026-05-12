@@ -16,5 +16,8 @@ router.put('/:id/full', authenticate, upload.single('fir_file'), caseController.
 router.post('/evidence', authenticate, upload.array('evidence_files', 5), caseController.addEvidence);
 router.post('/delete-file', authenticate, caseController.deleteFile);
 router.post('/save-notice', authenticate, caseController.saveNotice);
+router.get('/:id/nodal-recipients', authenticate, caseController.getNodalRecipients);
+router.get('/:id/nodal-recipient', authenticate, caseController.getNodalRecipients); // Fallback
+router.post('/:id/send-nodal-emails', authenticate, caseController.sendNodalEmails);
 
 module.exports = router;
