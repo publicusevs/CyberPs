@@ -1,56 +1,69 @@
 @echo off
-echo ==========================================
-echo    Professional Git Workflow Utility
-echo ==========================================
+setlocal EnableDelayedExpansion
+title CyberPS — Git Push Utility
+
+cls
+echo.
+echo  ==========================================
+echo    CyberPS  Git Push Utility
+echo  ==========================================
 echo.
 
-:: Show current status first
-echo Current Status:
+:: Navigate to project root
+cd /d "%~dp0"
+
+:: Show current status
+echo  Current Status:
+echo  ------------------------------------------
 git status -s
 echo.
 
 :: Auto-detect current branch
 for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD') do set current_branch=%%i
-
-echo Current Branch: %current_branch%
-git status -s
+echo  Current Branch: %current_branch%
 echo.
 
-:: Get inputs from user
-set /p branch="Step 1: Enter Target Remote Branch (Default: %current_branch%): "
+:: Get inputs
+set /p branch="  Target Branch (default: %current_branch%): "
 if "%branch%"=="" set branch=%current_branch%
 
-set /p msg="Step 2: Enter Commit Message: "
+set /p msg="  Commit Message: "
+if "%msg%"=="" set msg=update
 
 echo.
-echo ------------------------------------------
-echo [1/3] Staging all changes...
+echo  ------------------------------------------
+echo  [1/4] Staging all changes...
 git add .
 
 echo.
-echo [2/3] Executing Commit...
+echo  [2/4] Committing...
 git commit -m "%msg%"
 
 echo.
-<<<<<<< Updated upstream
-echo [Step 2.2] Switching to branch %branch%...
-git checkout %branch% 2>nul || git checkout -b %branch%
+echo  [3/4] Pulling latest from origin/%branch% (if exists)...
+git pull origin %branch% --rebase --no-edit 2>nul
+if %errorlevel% neq 0 (
+    echo         No remote branch yet or rebase conflict — will force push.
+    set FORCE=--force
+) else (
+    set FORCE=
+)
 
 echo.
-echo [Step 2.5] Updating from main branch to sync code...
-git pull origin main --no-edit
-=======
-echo [Bonus] Updating from main branch to prevent conflicts...
-git pull origin main
->>>>>>> Stashed changes
+echo  [4/4] Pushing to origin/%branch%...
+git push origin %branch% %FORCE%
 
-echo.
-echo [3/3] Pushing Current Code to Origin/%branch%...
-git push origin %branch%
+if %errorlevel% equ 0 (
+    echo.
+    echo  ==========================================
+    echo    Push Successful!
+    echo  ==========================================
+) else (
+    echo.
+    echo  ==========================================
+    echo    Push Failed — check errors above.
+    echo  ==========================================
+)
 
-echo.
-echo ==========================================
-echo    Process Successful!
-echo ==========================================
 echo.
 pause
