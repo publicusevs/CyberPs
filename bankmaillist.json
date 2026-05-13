@@ -1,0 +1,26 @@
+[
+    {
+        "bank_name": "Axis Bank",
+        "bankmail": "contact@fake-axis-example.com"
+    },
+    {
+        "bank_name": "HDFC Bank",
+        "bankmail": "akshay.doit@RAJASTHAN.GOV.IN"
+    },
+    {
+        "bank_name": "ICICI Bank",
+        "bankmail": "support@icici-test-mail.org"
+    },
+    {
+        "bank_name": "Punjab National Bank",
+        "bankmail": "service@pnb-random-box.com"
+    },
+    {
+        "bank_name": "Others",
+        "bankmail": "general@others-fake-mail.io"
+    },
+    {
+        "bank_name": "Equitas Bank",
+        "bankmail": "admin@equitas-dummy-site.com"
+    }
+]

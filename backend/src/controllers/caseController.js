@@ -1,4 +1,6 @@
 const { poolPromise, mssql } = require('../config/db');
+const fs = require('fs');
+const path = require('path');
 
 exports.createCase = async (req, res) => {
     let transaction;
@@ -517,10 +519,16 @@ exports.saveNotice = async (req, res) => {
         const fs = require('fs');
         const path = require('path');
 
-        const dir = path.join('uploads', 'notices');
+        // Folder structure: uploads/notices/{case_id}/
+        const dir = path.join('uploads', 'notices', case_id.toString());
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-        const fileName = `NOTICE_${bank_name.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+        // Filename: {case_id}_{bank_name}_{index}.pdf
+        const cleanBankName = bank_name.replace(/\s+/g, '_');
+        const existingFiles = fs.readdirSync(dir).filter(f => f.startsWith(`${case_id}_${cleanBankName}_`));
+        const index = existingFiles.length + 1;
+        
+        const fileName = `${case_id}_${cleanBankName}_${index}.pdf`;
         const filePath = path.join(dir, fileName);
 
         const base64Data = pdf_base64.replace(/^data:application\/pdf;base64,/, "");
@@ -531,11 +539,112 @@ exports.saveNotice = async (req, res) => {
             .input('case_id', mssql.Int, case_id)
             .input('type', mssql.NVarChar, 'Legal Notice')
             .input('path', mssql.NVarChar, filePath)
-            .query('INSERT INTO fir_documents (case_id, document_type, file_path) VALUES (@case_id, @type, @path)');
+            .input('file_name', mssql.NVarChar, fileName)
+            .query('INSERT INTO fir_documents (case_id, document_type, file_path, file_name) VALUES (@case_id, @type, @path, @file_name)');
 
-        res.json({ success: true, message: 'Notice saved to dossier', filePath });
+        res.json({ success: true, message: 'Notice saved to dossier', filePath, fileName });
     } catch (err) {
         console.error('Save notice error:', err);
         res.status(500).json({ success: false, message: 'Failed to save notice' });
+    }
+};
+
+exports.getNodalRecipients = async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[DEBUG] Fetching recipients for case: ${id}`);
+
+        // 1. Read bank emails list
+        const rootPath = path.resolve(__dirname, '..', '..', '..');
+        const bankListPath = path.join(rootPath, 'bankmaillist.json');
+        
+        let bankEmails = [];
+        if (fs.existsSync(bankListPath)) {
+            try {
+                bankEmails = JSON.parse(fs.readFileSync(bankListPath, 'utf8'));
+            } catch (pErr) {
+                console.error('[ERROR] bankmaillist.json parsing failed:', pErr.message);
+            }
+        }
+
+        // 2. Scan case directory for notices
+        const dir = path.join(process.cwd(), 'uploads', 'notices', id.toString());
+        if (!fs.existsSync(dir)) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.pdf'));
+        
+        // Group by bank
+        const bankFiles = {};
+        files.forEach(f => {
+            const parts = f.split('_');
+            if (parts.length >= 3) {
+                // Remove ID and Index, join the rest as bank name
+                const bankName = parts.slice(1, -1).join(' ').replace(/_/g, ' ').trim();
+                if (!bankFiles[bankName]) bankFiles[bankName] = [];
+                bankFiles[bankName].push(f);
+            }
+        });
+
+        // 3. Match with emails (Case-insensitive & space-flexible)
+        const recipients = Object.keys(bankFiles).map(bankName => {
+            const normalizedBankName = bankName.toLowerCase().replace(/\s+/g, '');
+            const match = bankEmails.find(b => 
+                b.bankname.toLowerCase().replace(/\s+/g, '') === normalizedBankName
+            );
+
+            return {
+                bankname: bankName,
+                email: match ? match.bankmail : '',
+                files: bankFiles[bankName],
+                folderPath: path.resolve(dir)
+            };
+        });
+
+        res.json({ success: true, data: recipients });
+    } catch (err) {
+        console.error('[ERROR] Get recipients failed:', err);
+        res.status(500).json({ success: false, message: 'Internal Server Error: ' + err.message });
+    }
+};
+
+exports.sendNodalEmails = async (req, res) => {
+    try {
+        const { recipients, subject, body } = req.body;
+        const results = [];
+        const path = require('path');
+
+        for (const recipient of recipients) {
+            try {
+                // Construct absolute paths for ramail
+                const attachments = recipient.files.map(f => path.join(recipient.folderPath, f));
+                
+                const payload = {
+                    recipients: [recipient.email],
+                    subject: subject.replace('{{bankName}}', recipient.bankname),
+                    body: body.replace('{{bankName}}', recipient.bankname),
+                    attachments: attachments,
+                    use_queue: false
+                };
+
+                const response = await fetch('http://localhost:8000/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                results.push({ bankname: recipient.bankname, success: response.ok, response: data });
+            } catch (err) {
+                console.error(`Failed to send email to ${recipient.bankname}:`, err.message);
+                results.push({ bankname: recipient.bankname, success: false, error: err.message });
+            }
+        }
+
+        res.json({ success: true, data: results });
+    } catch (err) {
+        console.error('Send nodal emails error:', err);
+        res.status(500).json({ success: false, message: 'Batch mailing failed' });
     }
 };

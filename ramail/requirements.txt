@@ -1,0 +1,28 @@
+# Core
+fastapi[all]
+uvicorn
+exchangelib
+python-dotenv
+pydantic-settings
+loguru
+
+# PDF & OCR Processing
+pdfplumber
+pdf2image
+pytesseract
+Pillow
+
+# AI & LLM
+openai
+
+# Database
+sqlalchemy
+
+# Queue & Task Management
+celery
+redis
+
+# Utilities
+python-multipart
+aiofiles
+requests

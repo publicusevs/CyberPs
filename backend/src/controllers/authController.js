@@ -113,13 +113,20 @@ exports.refreshToken = async (req, res) => {
 exports.getStatus = async (req, res) => {
     try {
         const pool = await poolPromise;
+        if (!pool) {
+            return res.json({ success: true, database: false, error: 'Database pool is null', internet: true });
+        }
+        
+        // Live health check query
+        await pool.request().query('SELECT 1');
+        
         res.json({
             success: true,
-            database: !!pool,
-            error: pool ? null : 'Database connection returned null',
+            database: true,
             internet: true
         });
     } catch (err) {
+        console.error('Status Check Error:', err.message);
         res.json({ success: true, database: false, error: err.message, internet: true });
     }
 };

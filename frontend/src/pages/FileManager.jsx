@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { 
+    Eye,
+    X,
+    Printer,
     ChevronLeft, 
     Trash2, 
     FileText, 
@@ -24,6 +27,7 @@ const FileManager = () => {
     const [loading, setLoading] = useState(true);
     const [caseData, setCaseData] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState(null);
 
     useEffect(() => {
         fetchFiles();
@@ -65,9 +69,9 @@ const FileManager = () => {
         </div>
     );
 
-    const fir = caseData?.fir;
+    const firDocs = caseData?.fir_docs || [];
     const evidence = caseData?.evidence || [];
-    const totalFiles = (fir ? 1 : 0) + evidence.length;
+    const totalFiles = firDocs.length + evidence.length;
 
     return (
         <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500">
@@ -106,31 +110,39 @@ const FileManager = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-                {/* FIR Section */}
-                {fir && (
-                    <Card className="p-0 overflow-hidden border-blue-100 shadow-xl bg-white">
+                {/* FIR & Legal Notices Section */}
+                {(caseData?.fir_docs || [caseData?.fir]).filter(Boolean).map((doc, idx) => (
+                    <Card key={`fir-${idx}`} className="p-0 overflow-hidden border-blue-100 shadow-xl bg-white mb-4">
                         <div className="px-8 py-4 bg-blue-50/50 border-b border-blue-100 flex justify-between items-center">
                             <div className="flex items-center gap-3">
                                 <Shield className="text-blue-600" size={18} />
                                 <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest italic">Core Authorization Dossier</span>
                             </div>
-                            <Badge className="bg-blue-600 text-white border-transparent">PRIMARY_FIR</Badge>
+                            <Badge className={doc.file_type === 'Legal Notice' ? "bg-indigo-600 text-white border-transparent" : "bg-blue-600 text-white border-transparent"}>
+                                {doc.file_type === 'Legal Notice' ? 'LEGAL_NOTICE' : 'PRIMARY_FIR'}
+                            </Badge>
                         </div>
                         <div className="p-8 flex items-center justify-between">
                             <div className="flex items-center gap-6">
-                                <div className="p-4 bg-blue-50 rounded-2xl text-blue-600 border border-blue-100 ring-4 ring-blue-50/50">
+                                <div className={`p-4 rounded-2xl border ring-4 ${doc.file_type === 'Legal Notice' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 ring-indigo-50/50' : 'bg-blue-50 text-blue-600 border-blue-100 ring-blue-50/50'}`}>
                                     <FileText size={28} />
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">{fir.file_name}</h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                                        PATH: {fir.file_path} // TYPE: {fir.file_type}
+                                    <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">{doc.file_name}</h3>
+                                    <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                                        Intelligence Artifact // {doc.file_type || 'LEGAL_NOTICE'}
                                     </p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
+                                <button 
+                                    onClick={() => setPreviewUrl(`http://localhost:5000/${doc.file_path.replace(/^\//, '')}`)}
+                                    className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
+                                >
+                                    <Eye size={20} />
+                                </button>
                                 <a 
-                                    href={`http://localhost:5000/${fir.file_path}`} 
+                                    href={`http://localhost:5000/${doc.file_path.replace(/^\//, '')}`} 
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
@@ -140,15 +152,15 @@ const FileManager = () => {
                                 <Button 
                                     variant="outline" 
                                     className="border-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white p-4 h-auto shadow-sm"
-                                    onClick={() => handleDelete('fir', fir.doc_id)}
-                                    disabled={deletingId === fir.doc_id}
+                                    onClick={() => handleDelete('fir', doc.doc_id)}
+                                    disabled={deletingId === doc.doc_id}
                                 >
-                                    {deletingId === fir.doc_id ? <Loader2 className="animate-spin" size={20} /> : <Trash2 size={20} />}
+                                    {deletingId === doc.doc_id ? <Loader2 className="animate-spin" size={20} /> : <Trash2 size={20} />}
                                 </Button>
                             </div>
                         </div>
                     </Card>
-                )}
+                ))}
 
                 {/* Evidence Section */}
                 {evidence.length > 0 ? (
@@ -179,14 +191,20 @@ const FileManager = () => {
                                                             <h4 className="text-md font-black text-slate-900 tracking-tight uppercase">{ev.file_name}</h4>
                                                             {isExcel && <Badge className="bg-emerald-500 text-white border-transparent">DATA_SOURCE</Badge>}
                                                         </div>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                                                            {ev.description || 'GENERIC_EVIDENCE'} // {new Date(ev.uploaded_at).toLocaleDateString()}
+                                                        <p className="text-[9px] text-blue-500 font-black uppercase tracking-tighter">
+                                                            Forensic Evidence Artifact // SECURE_STORAGE
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-3">
+                                                    <button 
+                                                        onClick={() => setPreviewUrl(`http://localhost:5000/${ev.file_path.replace(/^\//, '')}#view=FitH`)}
+                                                        className="p-3 bg-white text-slate-400 hover:text-indigo-600 rounded-xl transition-all border border-slate-100 shadow-sm"
+                                                    >
+                                                        <Eye size={18} />
+                                                    </button>
                                                     <a 
-                                                        href={`http://localhost:5000/${ev.file_path}`} 
+                                                        href={`http://localhost:5000/${ev.file_path.replace(/^\//, '')}`} 
                                                         target="_blank" 
                                                         rel="noreferrer" 
                                                         className="p-3 bg-white text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 shadow-sm"
@@ -223,6 +241,55 @@ const FileManager = () => {
                     </p>
                 </div>
             )}
+            {/* Artifact Preview Modal */}
+            <AnimatePresence>
+                {previewUrl && (
+                    <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-900/80">
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 30 }}
+                            className="bg-white w-full max-w-6xl h-[90vh] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col border border-white/20"
+                        >
+                            {/* Modal Header */}
+                            <div className="px-8 py-6 bg-slate-900 flex items-center justify-between border-b border-white/10">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-blue-600 rounded-xl text-white">
+                                        <Shield size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-white uppercase tracking-tight italic">Forensic <span className="text-blue-400">Artifact Preview</span></h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Secure View // Intelligence Dossier #{id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <button 
+                                        onClick={() => window.open(previewUrl, '_blank')}
+                                        className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all border border-white/10"
+                                    >
+                                        <Printer size={16} /> Print Artifact
+                                    </button>
+                                    <button 
+                                        onClick={() => setPreviewUrl(null)} 
+                                        className="p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-2xl transition-all"
+                                    >
+                                        <X size={24} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* PDF Viewer */}
+                            <div className="flex-1 bg-slate-800 p-4">
+                                <iframe 
+                                    src={previewUrl} 
+                                    className="w-full h-full rounded-2xl border-none shadow-inner bg-white"
+                                    title="Artifact Viewer"
+                                />
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

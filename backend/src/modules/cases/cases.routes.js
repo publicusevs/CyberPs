@@ -21,7 +21,7 @@ router.post('/', authenticate, upload.single('fir_file'), casesController.create
 router.get('/', authenticate, casesController.getAllCases);
 router.get('/search', authenticate, casesController.searchCases);
 router.get('/:id', authenticate, casesController.getCaseById);
-router.post('/notes', authenticate, casesController.addNote);
+router.post('/:id/notes', authenticate, casesController.addNote);
 router.post('/:id/status', authenticate, casesController.updateStatus);
 // Redirect to canonical addTransaction (same endpoint, better implementation)
 router.post('/transaction', authenticate, transactionsController.addTransaction);
@@ -30,5 +30,8 @@ router.put('/:id/full', authenticate, upload.single('fir_file'), casesController
 router.post('/evidence', authenticate, upload.array('evidence_files', 5), casesController.addEvidence);
 router.post('/delete-file', authenticate, casesController.deleteFile);
 router.post('/save-notice', authenticate, casesController.saveNotice);
+router.get('/:id/nodal-recipients', authenticate, casesController.getNodalRecipients);
+router.get('/:id/nodal-recipient', authenticate, casesController.getNodalRecipients); // Fallback
+router.post('/:id/send-nodal-emails', authenticate, casesController.sendNodalEmails);
 
 module.exports = router;

@@ -274,23 +274,156 @@ const CasesService = {
      * (This was 'saveNotice' in the old caseController — renamed to avoid
      *  confusion with noticeController's saveNotice which uses legal_notices.)
      */
-    async savePdfNotice({ case_id, bank_name, pdf_base64 }) {
-        if (!pdf_base64) throw new AppError('No PDF data provided', 400);
-
-        const dir = path.join('uploads', 'notices');
+    async saveNotice({ case_id, bank_name, pdf_base64, version_mode = 'none' }) {
+        const dir = path.join(__dirname, '../../../uploads/notices', String(case_id));
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-        const fileName = `NOTICE_${bank_name.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-        const filePath = path.join(dir, fileName);
+        // Clean bank name for filename
+        const safeBankName = bank_name.replace(/[^a-z0-9]/gi, '_');
+        
+        // Find ALL existing versions for this bank
+        const existingFiles = fs.readdirSync(dir).filter(f => 
+            f.toLowerCase().includes(safeBankName.toLowerCase()) && f.endsWith('.pdf')
+        );
+
+        if (version_mode === 'none' && existingFiles.length > 0) {
+            return { 
+                success: false, 
+                conflict: true, 
+                existingFiles: existingFiles,
+                suggestedNext: `${case_id}_${safeBankName}_${existingFiles.length + 1}.pdf`
+            };
+        }
+
+        let fileName = `${case_id}_${safeBankName}.pdf`;
+        if (version_mode === 'increment') {
+            // If we are incrementing, we look for the next available slot
+            let counter = 1;
+            while (fs.existsSync(path.join(dir, `${case_id}_${safeBankName}_${counter}.pdf`))) {
+                counter++;
+            }
+            fileName = `${case_id}_${safeBankName}_${counter}.pdf`;
+        }
+        
+        let filePath = path.join(dir, fileName);
 
         const base64Data = pdf_base64.replace(/^data:application\/pdf;base64,/, '');
-        fs.writeFileSync(filePath, base64Data, 'base64');
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
         const pool = await poolPromise;
-        await CasesRepository.insertPdfNotice(pool, { caseId: case_id, filePath });
+        await CasesRepository.insertPdfNotice(pool, { 
+            caseId: case_id, 
+            filePath: `/uploads/notices/${case_id}/${fileName}`, 
+            fileName: fileName 
+        });
 
-        return filePath;
+        return { success: true, fileName };
     },
+
+    async getNodalRecipients(caseId) {
+        // 1. Read bank emails list
+        const rootPath = path.resolve(__dirname, '..', '..', '..', '..');
+        const bankListPath = path.join(rootPath, 'bankmaillist.json');
+        
+        let bankEmails = [];
+        if (fs.existsSync(bankListPath)) {
+            try {
+                bankEmails = JSON.parse(fs.readFileSync(bankListPath, 'utf8'));
+            } catch (err) {
+                logger.error('[CASES] bankmaillist.json parse error', err);
+            }
+        }
+
+        // 2. Scan case directory
+        const dir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString());
+        if (!fs.existsSync(dir)) return [];
+
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.pdf'));
+        const bankFiles = {};
+        
+        files.forEach(f => {
+            // Pattern: {caseId}_{bankName}(_{version})?.pdf
+            // We want everything between first _ and either the last _ (if version exists) or .pdf
+            const parts = f.replace('.pdf', '').split('_');
+            if (parts.length >= 2) {
+                let bankNameParts = [];
+                // Check if last part is a number (version)
+                if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
+                    bankNameParts = parts.slice(1, -1);
+                } else {
+                    bankNameParts = parts.slice(1);
+                }
+                const bankName = bankNameParts.join(' ').trim();
+                if (!bankFiles[bankName]) bankFiles[bankName] = [];
+                bankFiles[bankName].push(f);
+            }
+        });
+
+        // 3. Match with emails (using bank_name key from user's latest JSON)
+        return Object.keys(bankFiles).map(bankName => {
+            const norm = bankName.toLowerCase().replace(/\s+/g, '');
+            const match = bankEmails.find(b => {
+                const bName = (b.bank_name || b.bankname || '').toLowerCase().replace(/\s+/g, '');
+                return bName === norm;
+            });
+
+            return {
+                bankname: bankName,
+                email: match ? match.bankmail : '',
+                files: bankFiles[bankName],
+                folderPath: path.resolve(dir)
+            };
+        });
+    },
+
+    async sendNodalEmails({ recipients, subject, body }) {
+        const results = [];
+        for (const recipient of recipients) {
+            try {
+                // Ensure absolute paths for attachments
+                const attachments = recipient.files.map(f => path.resolve(recipient.folderPath, f));
+                
+                // Using Enterprise API (v2) from ramail
+                const formattedBody = `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                        <h3 style="color: #c75a57; border-bottom: 2px solid #c75a57; padding-bottom: 10px;">OFFICIAL INVESTIGATION NOTICE</h3>
+                        <p>Respected Nodal Officer,</p>
+                        <p>Please find attached the legal notice under <b>Section 94/106 BNSS 2023</b> regarding investigative proceedings for <b>Case ID: ${recipient.folderPath.split(path.sep).pop()}</b>.</p>
+                        <p>You are requested to take immediate action as per the instructions in the attached document and provide the required information at the earliest.</p>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
+                            <small><b>Entity Name:</b> {{bankName}}</small><br/>
+                            <small><b>Subject:</b> ${subject.replace('{{bankName}}', recipient.bankname)}</small>
+                        </div>
+                        <p>Regards,<br/><b>Investigation Officer</b><br/>Cyber Crime Police Station, Jaipur</p>
+                    </div>
+                `;
+
+                const payload = {
+                    recipients: [recipient.email],
+                    subject_template: subject,
+                    body_template: formattedBody,
+                    variables: {
+                        bankName: recipient.bankname,
+                        caseId: recipient.folderPath.split(path.sep).pop()
+                    },
+                    attachments,
+                    is_draft: false
+                };
+
+                const response = await fetch('http://localhost:8000/api/v2/mail/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                results.push({ bankname: recipient.bankname, email: recipient.email, success: response.ok, response: data });
+            } catch (err) {
+                logger.error(`[CASES] Enterprise Mail Dispatch Failed for ${recipient.bankname}`, err);
+                results.push({ bankname: recipient.bankname, success: false, error: err.message });
+            }
+        }
+        return results;
+    }
 };
 
 module.exports = CasesService;
