@@ -22,3 +22,8 @@ exports.getAllStations = asyncHandler(async (req, res) => {
     const data = await PoliceStationsService.getAllStations();
     sendSuccess(res, data);
 });
+
+exports.getAllDistricts = asyncHandler(async (req, res) => {
+    const data = await PoliceStationsService.getAllDistricts();
+    sendSuccess(res, data);
+});

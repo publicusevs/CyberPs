@@ -22,6 +22,129 @@ const logger = require('../../utils/logger');
 
 const CasesService = {
 
+    /**
+     * Enterprise Master Case Registration
+     * Orchestrates: File Upload -> Document ID -> Stored Procedure Execution -> Accused Mapping
+     */
+    async registerCyberCrimeCase(data, user, file) {
+        let document_id = null;
+        if (file) {
+            try {
+                document_id = await CasesRepository.insertDocument({
+                    document_type_id: 1,
+                    file_name: file.filename,
+                    original_file_name: file.originalname,
+                    file_extension: path.extname(file.originalname),
+                    mime_type: file.mimetype,
+                    file_size: file.size,
+                    file_path: `/uploads/fir/${file.filename}`,
+                    uploaded_by: user.user_id
+                });
+            } catch (docErr) {
+                // Document insert failing should not block case registration
+                logger.warn('[CASES] Document insert failed, proceeding without document_id:', docErr.message);
+            }
+        }
+
+        const combineDateTime = (dateStr, timeStr) => {
+            if (!dateStr) return null;
+            const clean = dateStr.trim();
+            if (!timeStr) return new Date(clean);
+            return new Date(`${clean}T${timeStr.trim()}`);
+        };
+
+        const toInt = (v) => {
+            const n = parseInt(v, 10);
+            return isNaN(n) ? null : n;
+        };
+
+        const params = {
+            fir_no:                   data.fir_no,
+            ackn_no:                  data.ackn_no || null,
+            fir_year:                 toInt(data.fir_year),
+            district_id:              toInt(data.district_id || data.district),
+            police_station_id:        toInt(data.police_station_id || data.police_station),
+            fir_datetime:             combineDateTime(data.fir_date, data.fir_time),
+            info_received_datetime:   combineDateTime(data.info_received_date, data.info_received_time),
+            gd_entry_no:              data.gd_no || data.gd_entry_no || null,
+
+            occurrence_from_datetime: combineDateTime(data.occurrence_date_from, data.occurrence_time_from),
+            occurrence_to_datetime:   combineDateTime(data.occurrence_date_to, data.occurrence_time_to),
+            place_of_occurrence:      data.place_of_occurrence || data.place_of_incident || null,
+            incident_address:         data.incident_address || null,
+            beat_number:              data.beat_number || null,
+
+            complainant_name:         data.complainant_name,
+            complainant_mobile:       data.complainant_mobile || null,
+            complainant_email:        data.complainant_email || null,
+            complainant_aadhar:       data.complainant_aadhaar || data.complainant_aadhar || null,
+            complainant_pan:          data.complainant_pan || null,
+            complainant_address:      data.complainant_address || null,
+
+            is_victim_same_as_complainant: data.is_victim_same === 'true' || data.is_victim_same === true,
+            victim_name:              data.victim_name || null,
+            victim_mobile:            data.victim_mobile || null,
+            victim_email:             data.victim_email || null,
+            victim_address:           data.victim_address || null,
+
+            fraud_amount:             data.fraud_amount || null,
+            target_financial_institute: data.bank_name || data.target_financial_institute || null,
+            account_number:           data.account_no || data.account_number || null,
+            fir_narrative:            data.description || data.fir_narrative || null,
+
+            assigned_to:              toInt(data.assigned_to),
+            sho_name:                 data.sho_details || data.sho_name || null,
+            created_by:               toInt(user.user_id),
+            priority_id:              toInt(data.priority_id) || null,
+            status_id:                toInt(data.status_id) || 1,
+            document_id:              document_id || null,
+        };
+
+        logger.info('[CASES] SP Params:', JSON.stringify({
+            fir_no: params.fir_no,
+            district_id: params.district_id,
+            police_station_id: params.police_station_id,
+            assigned_to: params.assigned_to,
+            created_by: params.created_by,
+            fir_datetime: params.fir_datetime,
+        }));
+
+        const result = await CasesRepository.registerCyberCrimeCase(params);
+
+        logger.info('[CASES] SP Result:', JSON.stringify(result));
+
+        if (!result) {
+            throw new AppError('Stored procedure returned no result', 500);
+        }
+
+        if (result.success === 0) {
+            const errMsg = result.error_message || result.message || 'SP execution failed';
+            logger.error(`[CASES] SP Error (line ${result.error_line}, #${result.error_number}): ${errMsg}`);
+            throw new AppError(errMsg, 400);
+        }
+
+        // Handle Accused List
+        if (data.accusedList) {
+            let accusedList = [];
+            try {
+                accusedList = typeof data.accusedList === 'string' ? JSON.parse(data.accusedList) : data.accusedList;
+            } catch (e) {
+                logger.warn('[CASES] Failed to parse accusedList:', e.message);
+            }
+            for (const acc of accusedList) {
+                if (acc.name || acc.mobile || acc.whatsapp_no) {
+                    try {
+                        await CasesRepository.insertAccused(null, result.case_id, acc);
+                    } catch (accErr) {
+                        logger.warn('[CASES] Accused insert failed:', accErr.message);
+                    }
+                }
+            }
+        }
+
+        return result;
+    },
+
     async createCase(data, user) {
         const pool = await poolPromise;
         if (!pool) throw new AppError('Database connection unavailable', 503);

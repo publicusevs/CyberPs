@@ -69,6 +69,10 @@ const PoliceStationsService = {
     async getAllStations() {
         return PoliceStationsRepository.getAll();
     },
+
+    async getAllDistricts() {
+        return PoliceStationsRepository.getAllDistricts();
+    },
 };
 
 module.exports = PoliceStationsService;

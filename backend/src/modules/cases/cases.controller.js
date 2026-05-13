@@ -9,6 +9,11 @@ const asyncHandler = require('../../core/asyncHandler');
 const { sendSuccess, sendCreated } = require('../../core/responseHelper');
 const CasesService = require('./cases.service');
 
+exports.register = asyncHandler(async (req, res) => {
+    const result = await CasesService.registerCyberCrimeCase(req.body, req.user, req.file);
+    sendCreated(res, result, 'Case Registered Successfully');
+});
+
 exports.createCase = asyncHandler(async (req, res) => {
     const result = await CasesService.createCase(req.body, req.user, req.file);
     sendCreated(res, result, 'Case registered successfully');

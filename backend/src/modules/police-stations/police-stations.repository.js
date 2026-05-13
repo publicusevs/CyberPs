@@ -81,7 +81,28 @@ const PoliceStationsRepository = {
     async getAll() {
         const pool = await poolPromise;
         const result = await pool.request()
-            .query('SELECT * FROM police_stations ORDER BY station_name ASC');
+            .query(`
+                SELECT 
+                    ps.police_station_id, 
+                    ps.station_name, 
+                    ps.station_code, 
+                    ps.state, 
+                    ps.district, 
+                    ps.city, 
+                    ps.address, 
+                    ps.is_active,
+                    m.district_id 
+                FROM police_stations ps
+                LEFT JOIN case_station_mapping m ON ps.police_station_id = m.police_station_id
+                ORDER BY ps.station_name ASC
+            `);
+        return result.recordset;
+    },
+
+    async getAllDistricts() {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .query('SELECT * FROM master_districts ORDER BY district_name ASC');
         return result.recordset;
     },
 

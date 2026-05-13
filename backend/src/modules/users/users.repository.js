@@ -11,7 +11,7 @@ const UsersRepository = {
     async getInvestigators() {
         const pool = await poolPromise;
         const result = await pool.request()
-            .query("SELECT user_id, name, role FROM users WHERE is_active = 1 AND (role = 'IO' OR role = 'Admin') ORDER BY name ASC");
+            .query("SELECT user_id, name, role FROM users WHERE is_active = 1 AND (role IN ('IO', 'Admin', 'Investigating Officer', '1', '2', '3')) ORDER BY name ASC");
         return result.recordset;
     },
 

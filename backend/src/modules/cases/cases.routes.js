@@ -17,6 +17,7 @@ const transactionsController = require('../transactions/transactions.controller'
 const { authenticate } = require('../../middleware/auth');
 const upload = require('../../middleware/fileUpload');
 
+router.post('/register', authenticate, upload.single('fir_file'), casesController.register);
 router.post('/', authenticate, upload.single('fir_file'), casesController.createCase);
 router.get('/', authenticate, casesController.getAllCases);
 router.get('/search', authenticate, casesController.searchCases);
