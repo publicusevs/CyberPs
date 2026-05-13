@@ -27,6 +27,9 @@ echo.
 set /p branch="  Target Branch (default: %current_branch%): "
 if "%branch%"=="" set branch=%current_branch%
 
+:: Replace spaces with hyphens to prevent git refspec errors
+set branch=%branch: =-%
+
 set /p msg="  Commit Message: "
 if "%msg%"=="" set msg=update
 
