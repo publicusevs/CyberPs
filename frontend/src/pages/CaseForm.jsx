@@ -55,15 +55,39 @@ const CaseForm = () => {
         gd_no: '',
         sections: '',
 
-        // Existing / Legacy Fields (for subsequent steps or compatibility)
-        ackn_no: '',
-        fraud_amount: '',
-        description: '',
-        assigned_to: '',
+        // Step 2: Occurrence / Incident Details
+        occurrence_date_from: '',
+        occurrence_date_to: '',
+        occurrence_time_from: '',
+        occurrence_time_to: '',
+        place_of_incident: '',
+        incident_address: '',
+        distance_from_ps: '',
+        beat_number: '',
+
+        // Step 3: Complainant / Victim Details
+        complainant_name: '',
+        complainant_mobile: '',
+        complainant_email: '',
+        complainant_address: '',
+        complainant_aadhaar: '',
+        complainant_pan: '',
+        is_victim_same: false,
         victim_name: '',
         victim_mobile: '',
         victim_email: '',
         victim_address: '',
+
+        // Step 4: Fraud / Cyber Crime Details
+        fraud_amount: '',
+        description: '',
+
+        // Step 6: Officer Assignment
+        assigned_to: '',
+        sho_details: '',
+
+        // Existing / Legacy Fields (for subsequent steps or compatibility)
+        ackn_no: '',
         bank_name: '',
         account_no: '',
         whatsapp_no: '',
@@ -155,8 +179,9 @@ const CaseForm = () => {
     };
 
     const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        const val = type === 'checkbox' ? checked : value;
+        setFormData(prev => ({ ...prev, [name]: val }));
         // Clear error on typing
         if (errors[name]) {
             setErrors(prev => ({ ...prev, [name]: null }));
@@ -197,6 +222,15 @@ const CaseForm = () => {
             if (!formData.fir_no) newErrors.fir_no = "FIR No is required";
             if (!formData.fir_year) newErrors.fir_year = "FIR Year is required";
             if (!formData.fir_date) newErrors.fir_date = "FIR Date is required";
+        } else if (currentStep === 3) {
+            if (!formData.complainant_name) newErrors.complainant_name = "Complainant Name is required";
+            if (!formData.complainant_mobile) newErrors.complainant_mobile = "Complainant Mobile is required";
+            if (!formData.is_victim_same && !formData.victim_name) newErrors.victim_name = "Victim Name is required";
+        } else if (currentStep === 4) {
+            if (!formData.fraud_amount) newErrors.fraud_amount = "Fraud Amount is required";
+            if (!formData.description) newErrors.description = "FIR Narrative is required";
+        } else if (currentStep === 6) {
+            if (!formData.assigned_to) newErrors.assigned_to = "Investigating Officer is required";
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -314,8 +348,20 @@ const CaseForm = () => {
                                     <Crosshair className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">2. Occurrence / Incident Details</h2>
                                 </div>
-                                <div className="py-16 text-center">
-                                    <p className="text-slate-400 font-medium uppercase tracking-widest text-sm">UI Placeholder: Incident Details</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <InputField type="date" label="Occurrence Date (From)" name="occurrence_date_from" value={formData.occurrence_date_from} onChange={handleInputChange} icon={Calendar} />
+                                    <InputField type="date" label="Occurrence Date (To)" name="occurrence_date_to" value={formData.occurrence_date_to} onChange={handleInputChange} icon={Calendar} />
+                                    
+                                    <InputField type="time" label="Occurrence Time (From)" name="occurrence_time_from" value={formData.occurrence_time_from} onChange={handleInputChange} icon={Clock} />
+                                    <InputField type="time" label="Occurrence Time (To)" name="occurrence_time_to" value={formData.occurrence_time_to} onChange={handleInputChange} icon={Clock} />
+                                    
+                                    <InputField label="Place of Incident" name="place_of_incident" value={formData.place_of_incident} onChange={handleInputChange} icon={MapPin} placeholder="e.g. Internet, WhatsApp" />
+                                    <InputField label="Distance from PS" name="distance_from_ps" value={formData.distance_from_ps} onChange={handleInputChange} icon={MapPin} placeholder="e.g. 5 KM East" />
+                                    
+                                    <div className="md:col-span-2">
+                                        <InputField label="Incident Address" name="incident_address" value={formData.incident_address} onChange={handleInputChange} icon={MapPin} placeholder="Full address if applicable" />
+                                    </div>
+                                    <InputField label="Beat Number" name="beat_number" value={formData.beat_number} onChange={handleInputChange} icon={Bookmark} placeholder="Enter Beat Number" />
                                 </div>
                             </motion.div>
                         )}
@@ -332,9 +378,39 @@ const CaseForm = () => {
                                     <User className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">3. Complainant / Victim Details</h2>
                                 </div>
-                                <div className="py-16 text-center">
-                                    <p className="text-slate-400 font-medium uppercase tracking-widest text-sm">UI Placeholder: Victim Details</p>
+                                
+                                <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase">Complainant Profile</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <InputField label="Complainant Name" name="complainant_name" required value={formData.complainant_name} onChange={handleInputChange} error={errors.complainant_name} icon={User} placeholder="Full Name" />
+                                    <InputField label="Mobile Number" name="complainant_mobile" required value={formData.complainant_mobile} onChange={handleInputChange} error={errors.complainant_mobile} icon={Activity} placeholder="+91..." />
+                                    <InputField label="Email Address" name="complainant_email" value={formData.complainant_email} onChange={handleInputChange} icon={Mail} placeholder="email@example.com" />
+                                    <InputField label="Aadhaar Number" name="complainant_aadhaar" value={formData.complainant_aadhaar} onChange={handleInputChange} icon={Fingerprint} placeholder="XXXX XXXX XXXX" />
+                                    <InputField label="PAN Number" name="complainant_pan" value={formData.complainant_pan} onChange={handleInputChange} icon={FilePlus} placeholder="ABCDE1234F" />
+                                    <div className="md:col-span-2">
+                                        <InputField label="Residential Address" name="complainant_address" value={formData.complainant_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" />
+                                    </div>
                                 </div>
+
+                                <div className="pt-6 border-t border-slate-100">
+                                    <label className="flex items-center gap-3 cursor-pointer group">
+                                        <input type="checkbox" name="is_victim_same" checked={formData.is_victim_same} onChange={handleInputChange} className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" />
+                                        <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Victim is same as Complainant</span>
+                                    </label>
+                                </div>
+
+                                {!formData.is_victim_same && (
+                                    <div className="space-y-8 pt-4">
+                                        <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase">Victim Profile</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <InputField label="Victim Name" name="victim_name" required value={formData.victim_name} onChange={handleInputChange} error={errors.victim_name} icon={User} placeholder="Full Name" />
+                                            <InputField label="Mobile Number" name="victim_mobile" value={formData.victim_mobile} onChange={handleInputChange} icon={Activity} placeholder="+91..." />
+                                            <InputField label="Email Address" name="victim_email" value={formData.victim_email} onChange={handleInputChange} icon={Mail} placeholder="email@example.com" />
+                                            <div className="md:col-span-2">
+                                                <InputField label="Residential Address" name="victim_address" value={formData.victim_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
 
@@ -350,8 +426,24 @@ const CaseForm = () => {
                                     <Banknote className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">4. Fraud / Cyber Crime Details</h2>
                                 </div>
-                                <div className="py-16 text-center">
-                                    <p className="text-slate-400 font-medium uppercase tracking-widest text-sm">UI Placeholder: Cyber Crime Details</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <InputField label="Fraud Asset Value (₹)" name="fraud_amount" type="number" required value={formData.fraud_amount} onChange={handleInputChange} error={errors.fraud_amount} icon={Banknote} placeholder="Numerical value only" />
+                                    <InputField label="Target Financial Institute" name="bank_name" value={formData.bank_name} onChange={handleInputChange} icon={Banknote} placeholder="Bank/Wallet Name" />
+                                    <InputField label="Account ID / Number" name="account_no" value={formData.account_no} onChange={handleInputChange} icon={Shield} placeholder="Target Account" />
+                                    <InputField label="Portal Reference (ACKN)" name="ackn_no" value={formData.ackn_no} onChange={handleInputChange} icon={Shield} placeholder="REF://CYBER/..." />
+                                </div>
+                                <div className="space-y-1.5 mt-6">
+                                    <label className="text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1">FIR Narrative / Event Log</label>
+                                    <textarea
+                                        name="description"
+                                        rows="6"
+                                        required
+                                        className={`w-full bg-slate-50 border ${errors.description ? 'border-rose-500' : 'border-slate-200'} rounded-2xl p-4 text-sm outline-none focus:border-blue-600 focus:bg-white transition-all resize-none text-slate-800`}
+                                        placeholder="Detailed event log..."
+                                        value={formData.description}
+                                        onChange={handleInputChange}
+                                    ></textarea>
+                                    {errors.description && <p className="text-[10px] text-rose-500 font-bold ml-1 uppercase">{errors.description}</p>}
                                 </div>
                             </motion.div>
                         )}
@@ -364,12 +456,41 @@ const CaseForm = () => {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-8"
                             >
-                                <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                                    <Globe className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">5. Accused / Social Footprint Details</h2>
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        <Globe className="text-blue-600" size={24} />
+                                        <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">5. Accused / Social Footprint Details</h2>
+                                    </div>
+                                    <Button variant="outline" type="button" onClick={addAccusedProfile} className="text-[10px] uppercase font-bold tracking-widest text-blue-600 bg-blue-50 border-blue-100 shadow-sm py-2 h-auto" icon={FilePlus}>
+                                        Add Accused
+                                    </Button>
                                 </div>
-                                <div className="py-16 text-center">
-                                    <p className="text-slate-400 font-medium uppercase tracking-widest text-sm">UI Placeholder: Accused Footprints</p>
+                                <div className="space-y-6">
+                                    {accusedList.map((accused, idx) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-100 p-6 rounded-[24px]">
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <div className="bg-rose-500 text-white font-black text-[10px] w-6 h-6 flex items-center justify-center rounded-full leading-none">{idx + 1}</div>
+                                                <h4 className="text-[11px] font-black uppercase text-slate-900 tracking-widest">Accused Profile</h4>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                                <InputField label="Accused Name" name="name" value={accused.name} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="John Doe" />
+                                                <InputField label="Alias / Nickname" name="alias" value={accused.alias} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="Phantom..." />
+                                                <InputField label="Suspect Mobile" name="mobile" value={accused.mobile} onChange={(e) => handleAccusedChange(idx, e)} icon={Activity} placeholder="+91..." />
+                                            </div>
+                                            <h4 className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-4 border-b border-slate-200 pb-2">Acquired Footprints</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <InputField label="WhatsApp Number" name="whatsapp_no" value={accused.whatsapp_no} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="+91..." />
+                                                <InputField label="Gmail / Email Link" name="gmail_id" value={accused.gmail_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Mail} placeholder="fraud@gmail.com" />
+                                                <InputField label="Telegram ID" name="telegram_id" value={accused.telegram_id} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="@username" />
+                                                <InputField label="Facebook Profile" name="facebook_id" value={accused.facebook_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="fb.com/..." />
+                                                <InputField label="Instagram Handle" name="insta_id" value={accused.insta_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Hash} placeholder="@username" />
+                                                <InputField label="Twitter / X ID" name="twitter_id" value={accused.twitter_id} onChange={(e) => handleAccusedChange(idx, e)} icon={AtSign} placeholder="@username" />
+                                                <InputField label="LinkedIn Profile" name="linkedin_id" value={accused.linkedin_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="linkedin.com/in/..." />
+                                                <InputField label="Associated Website" name="website_url" value={accused.website_url} onChange={(e) => handleAccusedChange(idx, e)} icon={Link} placeholder="https://..." />
+                                                <InputField label="Other Social Footprint" name="other_social" value={accused.other_social} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="Snapchat, Discord, etc." />
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </motion.div>
                         )}
@@ -386,8 +507,45 @@ const CaseForm = () => {
                                     <CheckCircle2 className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">6. Officer Assignment & Review</h2>
                                 </div>
-                                <div className="py-16 text-center">
-                                    <p className="text-slate-400 font-medium uppercase tracking-widest text-sm">UI Placeholder: Final Review</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <SelectField
+                                        label="Investigating Officer (IO)"
+                                        name="assigned_to"
+                                        required
+                                        icon={ShieldAlert}
+                                        value={formData.assigned_to}
+                                        onChange={handleInputChange}
+                                        error={errors.assigned_to}
+                                        options={investigators.map(i => ({ value: i.user_id, label: `${i.name} (${i.role})` }))}
+                                        placeholder="Select Assignee"
+                                    />
+                                    <InputField label="SHO Details" name="sho_details" value={formData.sho_details} onChange={handleInputChange} icon={Shield} placeholder="Enter SHO Info" />
+                                </div>
+
+                                <div className="mt-8">
+                                    <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase mb-4">Secure Artifact Upload</h3>
+                                    <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-16 text-center hover:border-blue-600 hover:bg-blue-50 transition-all cursor-pointer group">
+                                        <input type="file" onChange={handleFileChange} className="hidden" />
+                                        <div className="w-20 h-20 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                                            {preview ? (
+                                                <img src={preview} alt="Upload Preview" className="w-full h-full object-cover rounded-full" />
+                                            ) : (
+                                                <Upload className="text-blue-600" size={32} />
+                                            )}
+                                        </div>
+                                        <p className="text-lg font-bold text-slate-900 mb-2">{firFile ? firFile.name : 'Drop signed FIR artifact here'}</p>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">Verifiable PDF, JPG or PNG formats only // Limit: 10MB</p>
+                                    </label>
+                                </div>
+
+                                <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100 flex gap-4 mt-8">
+                                    <AlertTriangle className="text-rose-600 flex-shrink-0" size={24} />
+                                    <div>
+                                        <h4 className="text-xs font-black text-rose-600 uppercase tracking-widest mb-1">Critical Verification Required</h4>
+                                        <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                                            By Finalizing this entry, you acknowledge that all data matches the physical case file. Incorrect entries will initiate a level-2 audit trail.
+                                        </p>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}
