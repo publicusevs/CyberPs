@@ -51,7 +51,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo  [4/4] Pushing to origin/%branch%...
-git push origin %branch% %FORCE%
+git push origin HEAD:%branch% %FORCE%
 
 if %errorlevel% equ 0 (
     echo.

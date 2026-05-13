@@ -37,8 +37,10 @@ api.interceptors.response.use(
                 const refreshToken = localStorage.getItem('refreshToken');
                 const res = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
                 if (res.data.success) {
-                    localStorage.setItem('token', res.data.token);
-                    api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+                    // Support both new shape (data.data.token) and old shape (data.token)
+                    const newToken = res.data.data ? res.data.data.token : res.data.token;
+                    localStorage.setItem('token', newToken);
+                    api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
                     return api(originalRequest);
                 }
             } catch (err) {
