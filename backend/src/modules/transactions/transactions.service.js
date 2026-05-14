@@ -122,12 +122,12 @@ const TransactionsService = {
             logger.warn('[EXCEL] Evidence insert skipped:', evErr.message);
         }
 
-        // 4. Clear old transactions for this case
-        try {
-            await TransactionsRepository.deleteByCase(caseId);
-        } catch (delErr) {
-            logger.warn('[EXCEL] Clear old transactions failed:', delErr.message);
-        }
+        // 4. Clear old transactions for this case (DISABLED to support multi-upload)
+        // try {
+        //     await TransactionsRepository.deleteByCase(caseId);
+        // } catch (delErr) {
+        //     logger.warn('[EXCEL] Clear old transactions failed:', delErr.message);
+        // }
 
         // 5. Parse rows — with Layer-aware sender inference
         const bankGroups = {};
@@ -214,6 +214,7 @@ const TransactionsService = {
                     platform: bankName.substring(0, 50),
                     layer: layer || null,
                     ifsc_code: ifsc !== 'N/A' ? ifsc.toString().trim().substring(0, 20) : null,
+                    source_file: file.originalname ? file.originalname.substring(0, 255) : 'Unknown Source',
                 });
 
                 if (!bankGroups[bankName]) bankGroups[bankName] = { name: bankName, records: [] };

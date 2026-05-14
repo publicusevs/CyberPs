@@ -49,7 +49,7 @@ const getTransporter = () => {
  * @param {string} [options.from] - defaults to SMTP_USER
  * @returns {Promise<object>} - Nodemailer send info
  */
-const sendMail = async ({ to, subject, text, html, from }) => {
+const sendMail = async ({ to, subject, text, html, from, attachments }) => {
     const transporter = getTransporter();
 
     const mailOptions = {
@@ -58,6 +58,7 @@ const sendMail = async ({ to, subject, text, html, from }) => {
         subject: subject || 'Notification from CyberPS',
         text,
         html,
+        attachments,
     };
 
     const info = await transporter.sendMail(mailOptions);

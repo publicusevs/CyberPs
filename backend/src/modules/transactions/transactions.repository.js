@@ -38,15 +38,16 @@ const TransactionsRepository = {
     async bulkInsert(rows) {
         const pool = await poolPromise;
 
-        // Check if layer/ifsc_code columns exist (migration-safe)
+        // Check if layer/ifsc_code/source_file columns exist (migration-safe)
         const colCheck = await pool.request().query(`
             SELECT name FROM sys.columns 
             WHERE object_id = OBJECT_ID('case_transactions') 
-            AND name IN ('layer', 'ifsc_code')
+            AND name IN ('layer', 'ifsc_code', 'source_file')
         `);
         const existingCols = colCheck.recordset.map(r => r.name);
         const hasLayer = existingCols.includes('layer');
         const hasIfsc = existingCols.includes('ifsc_code');
+        const hasSourceFile = existingCols.includes('source_file');
 
         try {
             const table = new mssql.Table('case_transactions');
@@ -58,13 +59,15 @@ const TransactionsRepository = {
             table.columns.add('utr_no', mssql.NVarChar(100), { nullable: true });
             table.columns.add('trans_date', mssql.DateTime, { nullable: true });
             table.columns.add('platform', mssql.NVarChar(50), { nullable: true });
-            if (hasLayer)   table.columns.add('layer',     mssql.NVarChar(20), { nullable: true });
-            if (hasIfsc)    table.columns.add('ifsc_code', mssql.NVarChar(20), { nullable: true });
+            if (hasLayer)       table.columns.add('layer', mssql.NVarChar(50), { nullable: true });
+            if (hasIfsc)        table.columns.add('ifsc_code', mssql.NVarChar(20), { nullable: true });
+            if (hasSourceFile)  table.columns.add('source_file', mssql.NVarChar(255), { nullable: true });
 
             for (const r of rows) {
                 const rowData = [r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform];
-                if (hasLayer) rowData.push(r.layer || null);
-                if (hasIfsc)  rowData.push(r.ifsc_code || null);
+                if (hasLayer)       rowData.push(r.layer || null);
+                if (hasIfsc)        rowData.push(r.ifsc_code || null);
+                if (hasSourceFile)  rowData.push(r.source_file || null);
                 table.rows.add(...rowData);
             }
 
@@ -94,6 +97,10 @@ const TransactionsRepository = {
                     if (hasIfsc) {
                         req.input('ifsc_code', mssql.NVarChar, r.ifsc_code || null);
                         cols += ', ifsc_code'; vals += ', @ifsc_code';
+                    }
+                    if (hasSourceFile) {
+                        req.input('source_file', mssql.NVarChar, r.source_file || null);
+                        cols += ', source_file'; vals += ', @source_file';
                     }
 
                     await req.query(`INSERT INTO case_transactions (${cols}) VALUES (${vals})`);

@@ -28,17 +28,26 @@ const stripHtml = (value) => {
     return value;
 };
 
+const HTML_ALLOWED_KEYS = ['body_text', 'footer_text', 'content', 'notice_content', 'preview_html', 'template_html', 'json_data', 'subject_text'];
+
 /**
  * Recursively sanitize all string values in an object.
  * @param {any} obj
+ * @param {string} [currentKey]
  * @returns {any}
  */
-const sanitizeDeep = (obj) => {
-    if (typeof obj === 'string') return stripHtml(obj);
-    if (Array.isArray(obj)) return obj.map(sanitizeDeep);
+const sanitizeDeep = (obj, currentKey = null) => {
+    if (typeof obj === 'string') {
+        if (currentKey && HTML_ALLOWED_KEYS.includes(currentKey)) {
+            // Only remove null bytes, preserve HTML
+            return obj.replace(/\0/g, '');
+        }
+        return stripHtml(obj);
+    }
+    if (Array.isArray(obj)) return obj.map(item => sanitizeDeep(item, currentKey));
     if (obj !== null && typeof obj === 'object') {
         for (const key of Object.keys(obj)) {
-            obj[key] = sanitizeDeep(obj[key]);
+            obj[key] = sanitizeDeep(obj[key], key);
         }
     }
     return obj;

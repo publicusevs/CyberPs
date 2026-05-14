@@ -70,7 +70,7 @@ exports.saveNotice = asyncHandler(async (req, res) => {
 });
 
 exports.getNodalRecipients = asyncHandler(async (req, res) => {
-    const data = await CasesService.getNodalRecipients(req.params.id);
+    const data = await CasesService.getNodalRecipients(req.params.id, req.query.category);
     sendSuccess(res, data);
 });
 

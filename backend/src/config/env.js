@@ -20,7 +20,7 @@ const REQUIRED = [
 ];
 
 const DEFAULTS = {
-    PORT: '5000',
+    PORT: process.env.BACKEND_PORT || '5174',
     DB_PORT: '1433',
     NODE_ENV: 'development',
     JWT_EXPIRE: '1h',

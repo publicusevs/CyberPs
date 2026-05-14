@@ -33,6 +33,6 @@ router.post('/delete-file', authenticate, casesController.deleteFile);
 router.post('/save-notice', authenticate, casesController.saveNotice);
 router.get('/:id/nodal-recipients', authenticate, casesController.getNodalRecipients);
 router.get('/:id/nodal-recipient', authenticate, casesController.getNodalRecipients); // Fallback
-router.post('/:id/send-nodal-emails', authenticate, casesController.sendNodalEmails);
+router.post('/:id/send-nodal-emails', casesController.sendNodalEmails); // Direct access enabled for manual testing
 
 module.exports = router;

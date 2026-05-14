@@ -8,7 +8,7 @@
  *
  * Usage:
  *   const logger = require('../utils/logger');
- *   logger.info('Server started on port 5000');
+ *   logger.info('Server started on port 5174');
  *   logger.error('DB connection failed', err);
  */
 

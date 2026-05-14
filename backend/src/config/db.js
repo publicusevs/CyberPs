@@ -28,17 +28,25 @@ const dbConfig = {
     },
 };
 
-const poolPromise = new mssql.ConnectionPool(dbConfig)
-    .connect()
-    .then(pool => {
-        console.log('✔ Connected to MSSQL Database');
-        return pool;
-    })
-    .catch(err => {
-        console.error('✘ Database Connection Failed! ', err.message);
-        // Do not exit process, so the API server can still serve "Server Error" instead of "Connection Failed"
-        return null; 
-    });
+let globalPoolInstance = null;
+
+const poolPromise = {
+    then: async function(resolve, reject) {
+        if (globalPoolInstance) {
+            return resolve(globalPoolInstance);
+        }
+        try {
+            const pool = new mssql.ConnectionPool(dbConfig);
+            globalPoolInstance = await pool.connect();
+            console.log('✔ Connected to MSSQL Database');
+            resolve(globalPoolInstance);
+        } catch (err) {
+            console.error('✘ Database Connection Failed! ', err.message);
+            globalPoolInstance = null;
+            resolve(null);
+        }
+    }
+};
 
 module.exports = {
     mssql,

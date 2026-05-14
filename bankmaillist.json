@@ -1,26 +1,190 @@
 [
     {
         "bank_name": "Axis Bank",
-        "bankmail": "contact@fake-axis-example.com"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     },
     {
         "bank_name": "HDFC Bank",
-        "bankmail": "akshay.doit@RAJASTHAN.GOV.IN"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     },
     {
         "bank_name": "ICICI Bank",
-        "bankmail": "support@icici-test-mail.org"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     },
     {
         "bank_name": "Punjab National Bank",
-        "bankmail": "service@pnb-random-box.com"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     },
     {
         "bank_name": "Others",
-        "bankmail": "general@others-fake-mail.io"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     },
     {
         "bank_name": "Equitas Bank",
-        "bankmail": "admin@equitas-dummy-site.com"
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "State Bank of India",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Bank of Baroda",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Canara Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Yes Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "PhonePe",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Airtel Payments Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Google Pay",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Kotak Mahindra Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Indian Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Union Bank of India",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "IndusInd Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Bank of India",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Indian Overseas Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Federal Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Paytm",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "DBS Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "India Post Payments Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "NSDL Payments Bank Ltd",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Fino Payments Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "IDBI Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Central Bank of India",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Jio Payments Bank Ltd",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "UCO Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Bandhan Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Ujjivan Small Finance Bank Ltd",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Karur Vysya Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Bank of Maharashtra",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "IDFC First Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Karnataka Bank Ltd",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "AU Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Standard Chartered Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Deutsche Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "DCB Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "South Indian Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "City Union Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Tamilnad Mercantile Bank Ltd.",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Punjab & Sind Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Jammu and Kashmir Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "Catholic Syrian Bank LTD.",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "ESAF Small Finance Bank",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
+    },
+    {
+        "bank_name": "YESB0PPIUPI Yes Bank Ltd",
+        "bankmail": "op.rajpolice@rajpolice.gov.in"
     }
 ]

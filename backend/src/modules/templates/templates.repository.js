@@ -1,70 +1,106 @@
-/**
- * templates.repository.js — Database access layer for Notice Templates.
- *
- * IMPORTANT: The ensureTableExists DDL check has been removed from every
- * request and moved to a one-time startup migration (src/scripts/migrate.js).
- * This prevents DDL execution on every API call — a major performance issue.
- *
- * The table must exist before the API is used. Run: npm run migrate
- */
-
 'use strict';
 
-const { poolPromise } = require('../../config/db');
+const { poolPromise, mssql } = require('../../config/db');
 
 const TemplatesRepository = {
-
-    async getAll() {
+    // ---- TEMPLATES ----
+    async getAllTemplates() {
         const pool = await poolPromise;
-        const result = await pool.request()
-            .query('SELECT * FROM notice_templates ORDER BY created_at DESC');
+        const result = await pool.request().query('SELECT * FROM templates ORDER BY updated_at DESC');
         return result.recordset;
     },
 
-    async getById(id) {
+    async getTemplateById(id) {
         const pool = await poolPromise;
         const result = await pool.request()
-            .input('id', id)
-            .query('SELECT * FROM notice_templates WHERE template_id = @id');
-        return result.recordset[0] || null;
+            .input('id', mssql.Int, id)
+            .query('SELECT * FROM templates WHERE template_id = @id');
+        return result.recordset[0];
     },
 
-    async insert({ templateName, templateType, subjectText, bodyText, footerText, jsonData }) {
+    async createTemplate(data) {
         const pool = await poolPromise;
-        const finalJsonData = jsonData || { fields: [], table_columns: [], mapping: {} };
-        await pool.request()
-            .input('name', templateName)
-            .input('type', templateType || 'Standard')
-            .input('subject', subjectText || '')
-            .input('body', bodyText || '')
-            .input('footer', footerText || '')
-            .input('json', JSON.stringify(finalJsonData))
-            .query(`INSERT INTO notice_templates (template_id, template_name, template_type, subject_text, body_text, footer_text, json_data)
-                    VALUES (NEWID(), @name, @type, @subject, @body, @footer, @json)`);
+        const result = await pool.request()
+            .input('name', mssql.NVarChar, data.template_name)
+            .input('type', mssql.NVarChar, data.template_type || 'Standard')
+            .input('subject', mssql.NVarChar, data.subject_text || '')
+            .input('body', mssql.NVarChar, data.body_text || '')
+            .input('footer', mssql.NVarChar, data.footer_text || '')
+            .input('json', mssql.NVarChar, typeof data.json_data === 'string' ? data.json_data : JSON.stringify(data.json_data || {}))
+            .query(`
+                INSERT INTO templates (template_name, template_type, subject_text, body_text, footer_text, json_data, created_at, updated_at)
+                OUTPUT INSERTED.template_id
+                VALUES (@name, @type, @subject, @body, @footer, @json, GETDATE(), GETDATE())
+            `);
+        return result.recordset[0].template_id;
     },
 
-    async update(id, { templateName, templateType, subjectText, bodyText, footerText, jsonData }) {
+    async updateTemplate(id, data) {
         const pool = await poolPromise;
         await pool.request()
-            .input('id', id)
-            .input('name', templateName)
-            .input('type', templateType || 'Standard')
-            .input('subject', subjectText || '')
-            .input('body', bodyText || '')
-            .input('footer', footerText || '')
-            .input('json', jsonData ? JSON.stringify(jsonData) : null)
-            .query(`UPDATE notice_templates 
+            .input('id', mssql.Int, id)
+            .input('name', mssql.NVarChar, data.template_name)
+            .input('type', mssql.NVarChar, data.template_type || 'Standard')
+            .input('subject', mssql.NVarChar, data.subject_text || '')
+            .input('body', mssql.NVarChar, data.body_text || '')
+            .input('footer', mssql.NVarChar, data.footer_text || '')
+            .input('json', mssql.NVarChar, typeof data.json_data === 'string' ? data.json_data : JSON.stringify(data.json_data || {}))
+            .query(`
+                UPDATE templates 
                 SET template_name = @name, template_type = @type, subject_text = @subject, 
                     body_text = @body, footer_text = @footer, json_data = @json, updated_at = GETDATE()
-                WHERE template_id = @id`);
+                WHERE template_id = @id
+            `);
     },
 
-    async remove(id) {
+    async deleteTemplate(id) {
         const pool = await poolPromise;
         await pool.request()
-            .input('id', id)
-            .query('DELETE FROM notice_templates WHERE template_id = @id');
+            .input('id', mssql.Int, id)
+            .query('DELETE FROM templates WHERE template_id = @id');
     },
+
+    // ---- GLOBAL VARIABLES ----
+    async getAllVariables() {
+        const pool = await poolPromise;
+        const result = await pool.request().query('SELECT * FROM global_variables ORDER BY variable_name ASC');
+        return result.recordset;
+    },
+
+    async createVariable(data) {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('name', mssql.NVarChar, data.variable_name)
+            .input('value', mssql.NVarChar, data.variable_value)
+            .input('desc', mssql.NVarChar, data.description || '')
+            .query(`
+                INSERT INTO global_variables (variable_name, variable_value, description)
+                OUTPUT INSERTED.variable_id
+                VALUES (@name, @value, @desc)
+            `);
+        return result.recordset[0].variable_id;
+    },
+
+    async updateVariable(id, data) {
+        const pool = await poolPromise;
+        await pool.request()
+            .input('id', mssql.Int, id)
+            .input('name', mssql.NVarChar, data.variable_name)
+            .input('value', mssql.NVarChar, data.variable_value)
+            .input('desc', mssql.NVarChar, data.description || '')
+            .query(`
+                UPDATE global_variables 
+                SET variable_name = @name, variable_value = @value, description = @desc
+                WHERE variable_id = @id
+            `);
+    },
+
+    async deleteVariable(id) {
+        const pool = await poolPromise;
+        await pool.request()
+            .input('id', mssql.Int, id)
+            .query('DELETE FROM global_variables WHERE variable_id = @id');
+    }
 };
 
 module.exports = TemplatesRepository;

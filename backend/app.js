@@ -1,7 +1,13 @@
 'use strict';
 
-// Load .env file FIRST — must happen before env.js validation reads process.env
+const path = require('path');
+// Load local .env first
 require('dotenv').config();
+// Load centralized root .env
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+if (process.env.BACKEND_PORT) {
+    process.env.PORT = process.env.BACKEND_PORT;
+}
 
 // Validate all required env vars — crashes with a clear message if any are missing
 require('./src/config/env');
@@ -10,7 +16,6 @@ require('./src/config/env');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const path = require('path');
 
 const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
@@ -202,7 +207,7 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ── Server Bootstrap ──────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.PORT) || 5000;
+const PORT = parseInt(process.env.PORT) || 5174;
 
 const serverInstance = app.listen(PORT, () => {
     logger.info(`✔ Server running on http://localhost:${PORT} [${process.env.NODE_ENV}]`);

@@ -12,6 +12,16 @@ echo.
 :: Resolve script location — always runs from the CyberPs root
 cd /d "%~dp0"
 
+:: Load centralized port configuration
+if exist "%~dp0.env" (
+    for /f "usebackq tokens=1,* delims==" %%a in ("%~dp0.env") do (
+        set "%%a=%%b"
+    )
+)
+if not defined BACKEND_PORT set BACKEND_PORT=5174
+if not defined FRONTEND_PORT set FRONTEND_PORT=5173
+if not defined RAMAIL_PORT set RAMAIL_PORT=8000
+
 :: ── Pre-flight checks ───────────────────────────────────────────
 echo  [1/4] Checking Node.js...
 where node >nul 2>&1
@@ -56,11 +66,11 @@ echo.
 echo  Starting services...
 echo.
 
-start "CyberPS Backend  ^| Port 5000" cmd /k "cd /d %~dp0backend && color 0A && echo  [BACKEND] Starting... && npm run dev"
+start "CyberPS Backend  ^| Port !BACKEND_PORT!" cmd /k "cd /d %~dp0backend && color 0A && echo  [BACKEND] Starting... && npm run dev"
 timeout /t 2 /nobreak >nul
-start "CyberPS Frontend ^| Port 5173" cmd /k "cd /d %~dp0frontend && color 0B && echo  [FRONTEND] Starting... && npm run dev"
+start "CyberPS Frontend ^| Port !FRONTEND_PORT!" cmd /k "cd /d %~dp0frontend && color 0B && echo  [FRONTEND] Starting... && npm run dev"
 timeout /t 2 /nobreak >nul
-start "CyberPS Ramail API ^| Port 8000" cmd /k "cd /d c:\Users\HP\Desktop\ramail && color 0C && echo  [RAMAIL] Starting API Service... && py main.py api"
+start "CyberPS Ramail API ^| Port !RAMAIL_PORT!" cmd /k "cd /d %~dp0ramail && color 0C && echo  [RAMAIL] Installing Python packages... && pip install -r requirements.txt && echo  [RAMAIL] Starting API Service... && python main.py api"
 
 :: ── Status output ─────────────────────────────────────────────────
 echo.
@@ -68,10 +78,10 @@ echo  ============================================================
 echo   System Initialized
 echo  ============================================================
 echo.
-echo   Backend  : http://localhost:5000
-echo   Frontend : http://localhost:5173
-echo   Ramail   : http://localhost:8000
-echo   Health   : http://localhost:5000/health
+echo   Backend  : http://localhost:!BACKEND_PORT!
+echo   Frontend : http://localhost:!FRONTEND_PORT!
+echo   Ramail   : http://localhost:!RAMAIL_PORT!
+echo   Health   : http://localhost:!BACKEND_PORT!/health
 echo.
 echo   All 3 services are starting in separate windows.
 echo   Close those windows to stop the services.

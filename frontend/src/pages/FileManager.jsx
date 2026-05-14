@@ -136,13 +136,13 @@ const FileManager = () => {
                             </div>
                             <div className="flex gap-4">
                                 <button 
-                                    onClick={() => setPreviewUrl(`http://localhost:5000/${doc.file_path.replace(/^\//, '')}`)}
+                                    onClick={() => setPreviewUrl(`http://localhost:${__BACKEND_PORT__}/${doc.file_path.replace(/^\//, '')}`)}
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
                                 >
                                     <Eye size={20} />
                                 </button>
                                 <a 
-                                    href={`http://localhost:5000/${doc.file_path.replace(/^\//, '')}`} 
+                                    href={`http://localhost:${__BACKEND_PORT__}/${doc.file_path.replace(/^\//, '')}`} 
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
@@ -198,13 +198,13 @@ const FileManager = () => {
                                                 </div>
                                                 <div className="flex gap-3">
                                                     <button 
-                                                        onClick={() => setPreviewUrl(`http://localhost:5000/${ev.file_path.replace(/^\//, '')}#view=FitH`)}
+                                                        onClick={() => setPreviewUrl(`http://localhost:${__BACKEND_PORT__}/${ev.file_path.replace(/^\//, '')}#view=FitH`)}
                                                         className="p-3 bg-white text-slate-400 hover:text-indigo-600 rounded-xl transition-all border border-slate-100 shadow-sm"
                                                     >
                                                         <Eye size={18} />
                                                     </button>
                                                     <a 
-                                                        href={`http://localhost:5000/${ev.file_path.replace(/^\//, '')}`} 
+                                                        href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path.replace(/^\//, '')}`} 
                                                         target="_blank" 
                                                         rel="noreferrer" 
                                                         className="p-3 bg-white text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 shadow-sm"

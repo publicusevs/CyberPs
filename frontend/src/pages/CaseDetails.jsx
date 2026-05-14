@@ -34,23 +34,29 @@ import {
     Edit2,
     Save,
     Activity,
-    Network
+    AlertTriangle,
+    Network,
+    Inbox
 } from 'lucide-react';
+
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Table';
 import { InputField } from '../components/ui/InputField';
 import { motion, AnimatePresence } from 'framer-motion';
+import NoticesEngine from './NoticesEngine';
 
 const CaseDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [caseData, setCaseData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [newNote, setNewNote] = useState('');
     const [showEvidModal, setShowEvidModal] = useState(false);
     const [showExcelModal, setShowExcelModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showNoticesEngine, setShowNoticesEngine] = useState(false);
+    const [noticesTab, setNoticesTab] = useState('wizard');
 
     // Excel Upload State
     const [excelFile, setExcelFile] = useState(null);
@@ -153,6 +159,15 @@ const CaseDetails = () => {
 
     const { case: details, victim, transactions, notes, fir, evidence, accusedList } = caseData;
     const forensicExcel = evidence?.find(e => e.description === 'Forensic Money Trail Excel Artifact');
+
+    // Group transactions by source_file
+    const transactionGroups = (transactions || []).reduce((acc, t) => {
+        const source = t.source_file || 'Legacy Excel Data';
+        if (!acc[source]) acc[source] = [];
+        acc[source].push(t);
+        return acc;
+    }, {});
+    const groupedSources = Object.entries(transactionGroups);
 
     return (
         <div className="space-y-10 animate-in fade-in duration-500 pb-20">
@@ -500,8 +515,8 @@ const CaseDetails = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <a href={`http://localhost:5000/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
-                                        <a href={`http://localhost:5000/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
+                                        <a href={`http://localhost:${__BACKEND_PORT__}/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
+                                        <a href={`http://localhost:${__BACKEND_PORT__}/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
                                         <button onClick={() => handleDeleteFile('fir', fir.doc_id)} className="p-2 text-rose-500 bg-white border border-rose-50 rounded-lg shadow-sm hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                     </div>
                                 </div>
@@ -520,7 +535,7 @@ const CaseDetails = () => {
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={() => navigate(`/cases/${id}/process`)} title="Process Logic" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Play size={14} /></button>
-                                        <a href={`http://localhost:5000/${forensicExcel.file_path}`} target="_blank" rel="noreferrer" title="Download Excel" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Download size={14} /></a>
+                                        <a href={`http://localhost:${__BACKEND_PORT__}/${forensicExcel.file_path}`} target="_blank" rel="noreferrer" title="Download Excel" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Download size={14} /></a>
                                         <button onClick={() => handleDeleteFile('evidence', forensicExcel.evidence_id)} title="Purge Artifact" className="p-2 bg-white text-rose-500 rounded-lg shadow-sm border border-rose-100 hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                     </div>
                                 </div>
@@ -557,8 +572,8 @@ const CaseDetails = () => {
                                             </div>
                                         </div>
                                         <div className="flex gap-2">
-                                            <a href={`http://localhost:5000/${ev.file_path}`} target="_blank" rel="noreferrer" title="Quick View" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
-                                            <a href={`http://localhost:5000/${ev.file_path}`} target="_blank" rel="noreferrer" title="Download Source" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
+                                            <a href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path}`} target="_blank" rel="noreferrer" title="Quick View" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
+                                            <a href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path}`} target="_blank" rel="noreferrer" title="Download Source" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
                                             <button onClick={() => handleDeleteFile('evidence', ev.evidence_id)} title="Delete Forever" className="p-2 text-rose-500 bg-white border border-rose-50 rounded-lg shadow-sm hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                         </div>
                                     </div>
@@ -585,10 +600,27 @@ const CaseDetails = () => {
                             </div>
                         </div>
 
+                        {/* LETTERS & NOTICES ENGINE BUTTON */}
+                        <button
+                            onClick={() => { setNoticesTab('wizard'); setShowNoticesEngine(true); }}
+                            className="w-full mb-6 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl transition-all shadow-lg shadow-blue-200 group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    <FileText size={18} />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-[11px] font-black uppercase tracking-widest">Letters & Notices Engine</p>
+                                    <p className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">KYC · Freeze · Hold · Statement · Txn Details</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+
                         {forensicExcel ? (
                             <Button
                                 variant="primary"
-                                className="w-full mb-8 bg-[#cc5a51] border-none shadow-xl shadow-rose-50 py-5 text-[10px] tracking-[0.2em] font-black"
+                                className="w-full mb-6 bg-[#cc5a51] border-none shadow-xl shadow-rose-50 py-5 text-[10px] tracking-[0.2em] font-black"
                                 onClick={() => navigate(`/cases/${id}/process`)}
                                 icon={FileSearch}
                             >
@@ -597,7 +629,7 @@ const CaseDetails = () => {
                         ) : (
                             <Button
                                 variant="outline"
-                                className="w-full mb-8 border-dashed border-slate-200 py-6 text-[10px] tracking-widest font-black text-slate-400"
+                                className="w-full mb-6 border-dashed border-slate-200 py-6 text-[10px] tracking-widest font-black text-slate-400"
                                 onClick={() => setShowExcelModal(true)}
                                 icon={FileSpreadsheet}
                             >
@@ -605,26 +637,38 @@ const CaseDetails = () => {
                             </Button>
                         )}
 
-                        <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                            {transactions.map(t => (
-                                <div key={t.trans_id} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-emerald-200 transition-all">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">UTR: {t.utr_no}</p>
-                                        <p className="text-sm font-bold text-emerald-600 italic">₹{parseFloat(t.amount).toLocaleString()}</p>
-                                    </div>
-                                    <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-100 shadow-sm">
-                                        <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full"></div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-bold text-slate-700 tracking-tighter truncate">{t.receiver_acc}</p>
-                                            <p className="text-[8px] text-slate-400 font-bold uppercase">{t.platform || 'Unknown Bank'}</p>
-                                        </div>
-                                    </div>
+                        {/* DISPATCH REGISTER BUTTON */}
+                        <button
+                            onClick={() => { setNoticesTab('register'); setShowNoticesEngine(true); }}
+                            className="w-full mb-8 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl transition-all shadow-lg shadow-emerald-200 group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    <Inbox size={18} />
                                 </div>
-                            ))}
-                        </div>
+                                <div className="text-left">
+                                    <p className="text-[11px] font-black uppercase tracking-widest">Dispatch Register</p>
+                                    <p className="text-[9px] text-emerald-200 font-bold uppercase tracking-widest">View & Print Generated Official Records</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+
                     </Card>
                 </div>
             </div>
+
+        {/* Notices Engine Modal */}
+        <AnimatePresence>
+            {showNoticesEngine && (
+                <NoticesEngine
+                    caseId={id}
+                    caseData={caseData}
+                    onClose={() => setShowNoticesEngine(false)}
+                    initialTab={noticesTab}
+                />
+            )}
+        </AnimatePresence>
         </div>
     );
 };

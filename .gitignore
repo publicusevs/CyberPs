@@ -40,5 +40,7 @@ Thumbs.db
 # Project specific
 temp/
 scratch/
-uploads/excels/*
-!uploads/excels/.gitkeep
+backend/uploads/excels/*
+backend/uploads/notices/*
+!backend/uploads/excels/.gitkeep
+!backend/uploads/notices/.gitkeep
