@@ -40,6 +40,8 @@ const CaseForm = () => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [investigators, setInvestigators] = useState([]);
+    const [districts, setDistricts] = useState([]);
+    const [allStations, setAllStations] = useState([]);
     const [errors, setErrors] = useState({});
 
     const [formData, setFormData] = useState({
@@ -80,16 +82,12 @@ const CaseForm = () => {
 
         // Step 4: Fraud / Cyber Crime Details
         fraud_amount: '',
-        description: '',
-
-        // Step 6: Officer Assignment
-        assigned_to: '',
-        sho_details: '',
-
-        // Existing / Legacy Fields (for subsequent steps or compatibility)
-        ackn_no: '',
         bank_name: '',
         account_no: '',
+        ackn_no: '',
+        description: '',
+
+        // Step 5: Accused Social Footprint (legacy single-accused fields)
         whatsapp_no: '',
         gmail_id: '',
         facebook_id: '',
@@ -98,7 +96,14 @@ const CaseForm = () => {
         insta_id: '',
         telegram_id: '',
         website_url: '',
-        other_social: ''
+        other_social: '',
+
+        // Step 6: Officer Assignment & Review
+        assigned_to: '',
+        sho_details: '',
+        priority_id: '3',
+        status_id: '1',
+        remarks: '',
     });
 
     const [accusedList, setAccusedList] = useState([{
@@ -121,6 +126,8 @@ const CaseForm = () => {
 
     useEffect(() => {
         fetchInvestigators();
+        fetchDistricts();
+        fetchStations();
         if (isEditMode) {
             fetchCaseData();
         } else {
@@ -167,6 +174,12 @@ const CaseForm = () => {
         }
     };
 
+    useEffect(() => {
+        if (formData.district) {
+            setFormData(prev => ({ ...prev, police_station: '' }));
+        }
+    }, [formData.district]);
+
     const fetchInvestigators = async () => {
         try {
             const res = await api.get('/users/investigators');
@@ -175,6 +188,28 @@ const CaseForm = () => {
             }
         } catch (err) {
             console.error('Failed to sync investigator uplink');
+        }
+    };
+
+    const fetchDistricts = async () => {
+        try {
+            const res = await api.get('/police-stations/districts');
+            if (res.data.success) {
+                setDistricts(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch districts');
+        }
+    };
+
+    const fetchStations = async () => {
+        try {
+            const res = await api.get('/police-stations');
+            if (res.data.success) {
+                setAllStations(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch stations');
         }
     };
 
@@ -216,22 +251,53 @@ const CaseForm = () => {
 
     const validateStep = (currentStep) => {
         const newErrors = {};
+        
+        // Regex Patterns
+        const mobileRegex = /^[6-9]\d{9}$/;
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        const aadhaarRegex = /^\d{12}$/;
+        const today = new Date().toISOString().split('T')[0];
+
         if (currentStep === 1) {
             if (!formData.district) newErrors.district = "District is required";
             if (!formData.police_station) newErrors.police_station = "Police Station is required";
             if (!formData.fir_no) newErrors.fir_no = "FIR No is required";
             if (!formData.fir_year) newErrors.fir_year = "FIR Year is required";
             if (!formData.fir_date) newErrors.fir_date = "FIR Date is required";
+            if (formData.fir_date > today) newErrors.fir_date = "FIR Date cannot be in the future";
+            if (formData.info_received_date > today) newErrors.info_received_date = "Date cannot be in the future";
+        } else if (currentStep === 2) {
+            if (formData.occurrence_date_from > today) newErrors.occurrence_date_from = "Date cannot be in the future";
+            if (formData.occurrence_date_to > today) newErrors.occurrence_date_to = "Date cannot be in the future";
         } else if (currentStep === 3) {
             if (!formData.complainant_name) newErrors.complainant_name = "Complainant Name is required";
-            if (!formData.complainant_mobile) newErrors.complainant_mobile = "Complainant Mobile is required";
+            if (!formData.complainant_mobile) {
+                newErrors.complainant_mobile = "Complainant Mobile is required";
+            } else if (!mobileRegex.test(formData.complainant_mobile)) {
+                newErrors.complainant_mobile = "Invalid 10-digit mobile number";
+            }
+
+            if (formData.complainant_pan && !panRegex.test(formData.complainant_pan.toUpperCase())) {
+                newErrors.complainant_pan = "Invalid PAN format (e.g. ABCDE1234F)";
+            }
+
+            if (formData.complainant_aadhaar && !aadhaarRegex.test(formData.complainant_aadhaar)) {
+                newErrors.complainant_aadhaar = "Invalid 12-digit Aadhaar number";
+            }
+
             if (!formData.is_victim_same && !formData.victim_name) newErrors.victim_name = "Victim Name is required";
+            if (!formData.is_victim_same && formData.victim_mobile && !mobileRegex.test(formData.victim_mobile)) {
+                newErrors.victim_mobile = "Invalid 10-digit mobile number";
+            }
         } else if (currentStep === 4) {
             if (!formData.fraud_amount) newErrors.fraud_amount = "Fraud Amount is required";
             if (!formData.description) newErrors.description = "FIR Narrative is required";
+            if (!formData.bank_name) newErrors.bank_name = "Target Financial Institute is required";
+            if (!formData.account_no) newErrors.account_no = "Account Number is required";
         } else if (currentStep === 6) {
             if (!formData.assigned_to) newErrors.assigned_to = "Investigating Officer is required";
         }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -245,31 +311,51 @@ const CaseForm = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // This is a placeholder for the final phase
-        if (!validateStep(step)) return;
+        if (!validateStep(6)) return;
 
         setLoading(true);
 
         const data = new FormData();
-        Object.keys(formData).forEach(key => data.append(key, formData[key]));
-        if (firFile) data.append('fir_file', firFile);
-        data.append('uploadType', 'fir');
+        
+        // Append all form fields
+        Object.keys(formData).forEach(key => {
+            if (formData[key] !== null && formData[key] !== undefined) {
+                data.append(key, formData[key]);
+            }
+        });
+
+        // Append file
+        if (firFile) {
+            data.append('fir_file', firFile);
+        }
+
+        // Append Accused List as JSON string
         data.append('accusedList', JSON.stringify(accusedList));
 
         try {
-            // Placeholder: currently disabled backend API execution to prevent errors in this phase as per request.
-            // const res = isEditMode
-            //    ? await api.put(`/cases/${id}/full`, data)
-            //    : await api.post('/cases', data);
-            // if (res.data.success) {
-            
-            // Temporary clear draft and navigate simulation
-            localStorage.removeItem('caseFormDraft');
-            alert("Success: Case Registration Wizard UI Completed.");
-            navigate('/cases');
+            const res = await api.post('/cases/register', data, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            if (res.data.success) {
+                localStorage.removeItem('caseFormDraft');
+                alert(res.data.message || "Case Registered Successfully");
+                navigate('/cases');
+            } else {
+                alert(res.data.message || "Case Registration Failed");
+            }
             
         } catch (err) {
-            alert(err.response?.data?.message || 'Data sync failed');
+            const errorMsg = err.response?.data?.message || err.response?.data?.error_message || 'Enterprise Data Sync Failed';
+            alert(errorMsg);
+            
+            // If duplicate FIR error (check message content)
+            if (errorMsg.toLowerCase().includes('duplicate') || errorMsg.toLowerCase().includes('exists')) {
+                setStep(1); // Take user back to Phase 1 to check FIR No
+                setErrors(prev => ({ ...prev, fir_no: "Potential Duplicate FIR Number detected" }));
+            }
         } finally {
             setLoading(false);
         }
@@ -318,8 +404,31 @@ const CaseForm = () => {
                                     <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">1. FIR Core Details</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField label="District / Commissionerate" name="district" required value={formData.district} onChange={handleInputChange} error={errors.district} icon={MapPin} placeholder="Enter District" />
-                                    <InputField label="Police Station" name="police_station" required value={formData.police_station} onChange={handleInputChange} error={errors.police_station} icon={Shield} placeholder="Enter Police Station" />
+                                    <SelectField 
+                                        label="District / Commissionerate" 
+                                        name="district" 
+                                        required 
+                                        value={formData.district} 
+                                        onChange={handleInputChange} 
+                                        error={errors.district} 
+                                        icon={MapPin} 
+                                        options={districts.map(d => ({ value: d.district_id, label: d.district_name }))}
+                                        placeholder="Select District" 
+                                    />
+                                    <SelectField 
+                                        label="Police Station" 
+                                        name="police_station" 
+                                        required 
+                                        value={formData.police_station} 
+                                        onChange={handleInputChange} 
+                                        error={errors.police_station} 
+                                        icon={Shield} 
+                                        options={allStations
+                                            .filter(s => !formData.district || s.district_id === parseInt(formData.district))
+                                            .map(s => ({ value: s.police_station_id, label: s.station_name }))
+                                        }
+                                        placeholder="Select Police Station" 
+                                    />
                                     
                                     <InputField label="FIR Number" name="fir_no" required value={formData.fir_no} onChange={handleInputChange} error={errors.fir_no} icon={Fingerprint} placeholder="EX: 0451" />
                                     <InputField label="FIR Year" name="fir_year" required value={formData.fir_year} onChange={handleInputChange} error={errors.fir_year} icon={Calendar} placeholder="YYYY" />
@@ -520,6 +629,45 @@ const CaseForm = () => {
                                         placeholder="Select Assignee"
                                     />
                                     <InputField label="SHO Details" name="sho_details" value={formData.sho_details} onChange={handleInputChange} icon={Shield} placeholder="Enter SHO Info" />
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <SelectField
+                                        label="Case Priority"
+                                        name="priority_id"
+                                        icon={AlertTriangle}
+                                        value={formData.priority_id}
+                                        onChange={handleInputChange}
+                                        options={[
+                                            { value: '1', label: 'Low' },
+                                            { value: '2', label: 'Medium' },
+                                            { value: '3', label: 'High' },
+                                            { value: '4', label: 'Critical' }
+                                        ]}
+                                    />
+                                    <SelectField
+                                        label="Initial Case Status"
+                                        name="status_id"
+                                        icon={Activity}
+                                        value={formData.status_id}
+                                        onChange={handleInputChange}
+                                        options={[
+                                            { value: '1', label: 'Active' },
+                                            { value: '2', label: 'Pending' },
+                                            { value: '3', label: 'Under Investigation' }
+                                        ]}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black text-slate-500 tracking-widest uppercase ml-1">Investigation Remarks / Notes</label>
+                                    <textarea
+                                        name="remarks"
+                                        value={formData.remarks}
+                                        onChange={handleInputChange}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-3xl py-6 px-8 text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all min-h-[120px] font-medium"
+                                        placeholder="Enter any initial investigative remarks or administrative notes..."
+                                    />
                                 </div>
 
                                 <div className="mt-8">

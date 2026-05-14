@@ -185,6 +185,64 @@ const CasesRepository = {
         return result.recordset;
     },
 
+    /**
+     * Executes the Enterprise Master Stored Procedure for Case Registration.
+     * Maps all normalized form data into a single transactional SP call.
+     */
+    async registerCyberCrimeCase(params) {
+        const pool = await poolPromise;
+        const request = pool.request();
+
+        // Phase 1: Core Details
+        request.input('fir_no', mssql.NVarChar, params.fir_no);
+        request.input('ackn_no', mssql.NVarChar, params.ackn_no || null);
+        request.input('fir_year', mssql.Int, parseInt(params.fir_year));
+        request.input('district_id', mssql.Int, parseInt(params.district_id));
+        request.input('police_station_id', mssql.Int, parseInt(params.police_station_id));
+        request.input('fir_datetime', mssql.DateTime, params.fir_datetime);
+        request.input('info_received_datetime', mssql.DateTime, params.info_received_datetime || null);
+        request.input('gd_entry_no', mssql.NVarChar, params.gd_entry_no || null);
+
+        // Phase 2: Occurrence
+        request.input('occurrence_from_datetime', mssql.DateTime, params.occurrence_from_datetime || null);
+        request.input('occurrence_to_datetime', mssql.DateTime, params.occurrence_to_datetime || null);
+        request.input('place_of_occurrence', mssql.NVarChar, params.place_of_occurrence || null);
+        request.input('incident_address', mssql.NVarChar, params.incident_address || null);
+        request.input('beat_number', mssql.NVarChar, params.beat_number || null);
+
+        // Phase 3: Complainant
+        request.input('complainant_name', mssql.NVarChar, params.complainant_name);
+        request.input('complainant_mobile', mssql.NVarChar, params.complainant_mobile || null);
+        request.input('complainant_email', mssql.NVarChar, params.complainant_email || null);
+        request.input('complainant_aadhar', mssql.NVarChar, params.complainant_aadhar || null);
+        request.input('complainant_pan', mssql.NVarChar, params.complainant_pan || null);
+        request.input('complainant_address', mssql.NVarChar, params.complainant_address || null);
+
+        // Victim Details
+        request.input('is_victim_same_as_complainant', mssql.Bit, params.is_victim_same_as_complainant ? 1 : 0);
+        request.input('victim_name', mssql.NVarChar, params.victim_name || null);
+        request.input('victim_mobile', mssql.NVarChar, params.victim_mobile || null);
+        request.input('victim_email', mssql.NVarChar, params.victim_email || null);
+        request.input('victim_address', mssql.NVarChar, params.victim_address || null);
+
+        // Phase 4: Fraud Details
+        request.input('fraud_amount', mssql.Decimal(18, 2), params.fraud_amount ? parseFloat(params.fraud_amount) : null);
+        request.input('target_financial_institute', mssql.NVarChar, params.target_financial_institute || null);
+        request.input('account_number', mssql.NVarChar, params.account_number || null);
+        request.input('fir_narrative', mssql.NVarChar, params.fir_narrative || null);
+
+        // Phase 5: Assignment & System
+        request.input('assigned_to', mssql.Int, parseInt(params.assigned_to));
+        request.input('sho_name', mssql.NVarChar, params.sho_name || null);
+        request.input('created_by', mssql.Int, parseInt(params.created_by));
+        request.input('priority_id', mssql.Int, params.priority_id ? parseInt(params.priority_id) : null);
+        request.input('status_id', mssql.Int, params.status_id ? parseInt(params.status_id) : 1);
+        request.input('document_id', mssql.BigInt, params.document_id || null);
+
+        const result = await request.execute('dbo.sp_RegisterCyberCrimeCase');
+        return result.recordset[0];
+    },
+
     // ── Status History ────────────────────────────────────────────────────────
 
     async insertStatusHistory(transaction, { caseId, oldStatus, newStatus, updatedBy, reason }) {
@@ -367,6 +425,27 @@ const CasesRepository = {
         await new mssql.Request(transaction)
             .input('case_id', mssql.Int, caseId)
             .query('DELETE FROM case_transactions WHERE case_id = @case_id');
+    },
+
+    // ── Document Management ───────────────────────────────────────────────────
+
+    async insertDocument(params) {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('type_id', mssql.Int, params.document_type_id || 1)
+            .input('name', mssql.NVarChar, params.file_name)
+            .input('orig_name', mssql.NVarChar, params.original_file_name)
+            .input('ext', mssql.NVarChar, params.file_extension)
+            .input('mime', mssql.NVarChar, params.mime_type)
+            .input('size', mssql.BigInt, params.file_size)
+            .input('path', mssql.NVarChar, params.file_path)
+            .input('uploaded_by', mssql.Int, params.uploaded_by)
+            .query(`INSERT INTO documents 
+                (document_type_id, file_name, original_file_name, file_extension, mime_type, file_size, file_path, uploaded_by) 
+                OUTPUT INSERTED.document_id 
+                VALUES 
+                (@type_id, @name, @orig_name, @ext, @mime, @size, @path, @uploaded_by)`);
+        return result.recordset[0].document_id;
     },
 
     // ── Pool access for operations that need it ───────────────────────────────

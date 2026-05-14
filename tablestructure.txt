@@ -1,0 +1,1059 @@
+USE [db_ab6f95_cyberweb]
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+/* ============================================================
+MODULE: MASTER CASE STATUS
+PURPOSE:
+- Stores all allowed case statuses
+- Used in dropdowns
+- Used for filtering
+- Used for workflow engine
+- Used for analytics/dashboard
+============================================================ */
+
+IF NOT EXISTS (
+    SELECT * FROM sys.objects
+    WHERE object_id = OBJECT_ID(N'[dbo].[master_case_status]')
+    AND type = 'U'
+)
+BEGIN
+
+CREATE TABLE [dbo].[master_case_status](
+    [status_id] INT IDENTITY(1,1) PRIMARY KEY,
+    [status_name] NVARCHAR(50) NOT NULL UNIQUE,
+    [is_active] BIT DEFAULT 1,
+    [created_at] DATETIME DEFAULT GETDATE()
+)
+
+END
+GO
+
+/* ============================================================
+MODULE: MASTER CASE PRIORITY
+PURPOSE:
+- Defines severity of case
+- Used for escalation
+- Used for SLA handling
+- Used for dashboard highlighting
+============================================================ */
+
+IF NOT EXISTS (
+    SELECT * FROM sys.objects
+    WHERE object_id = OBJECT_ID(N'[dbo].[master_case_priority]')
+    AND type = 'U'
+)
+BEGIN
+
+CREATE TABLE [dbo].[master_case_priority](
+    [priority_id] INT IDENTITY(1,1) PRIMARY KEY,
+    [priority_name] NVARCHAR(50) NOT NULL UNIQUE,
+    [severity_level] INT,
+    [is_active] BIT DEFAULT 1,
+    [created_at] DATETIME DEFAULT GETDATE()
+)
+
+END
+GO
+
+/* ============================================================
+MODULE: MASTER DISTRICTS
+PURPOSE:
+- Central district registry
+- Used by police stations
+- Used by FIRs
+- Used for jurisdiction mapping
+============================================================ */
+GO
+
+/******************************************************************/
+/*
+Cyber Crime Investigation Database Architecture
+Enterprise-Level Refined SQL Structure
+
+This architecture is designed for:
+
+Cyber Crime Investigation
+FIR Management
+Money Trail Analysis
+Legal Notice Workflow
+Digital Evidence Management
+Investigation Workflow Tracking
+Multi-Police Station Handling
+Audit & Timeline Tracking
+Future Scalability
+1. MASTER TABLES
+1.1 Master Case Status
+CREATE TABLE master_case_status(
+    status_id INT IDENTITY(1,1) PRIMARY KEY,
+    status_name NVARCHAR(50) NOT NULL UNIQUE,
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.2 Master Case Priority
+CREATE TABLE master_case_priority(
+    priority_id INT IDENTITY(1,1) PRIMARY KEY,
+    priority_name NVARCHAR(50) NOT NULL UNIQUE,
+    severity_level INT,
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.3 Master Districts
+CREATE TABLE master_districts(
+    district_id INT IDENTITY(1,1) PRIMARY KEY,
+    district_name NVARCHAR(150) NOT NULL,
+    commissionerate_name NVARCHAR(150),
+    state_name NVARCHAR(100),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.4 Master Legal Sections
+CREATE TABLE master_legal_sections(
+    section_id INT IDENTITY(1,1) PRIMARY KEY,
+    act_name NVARCHAR(150),
+    section_code NVARCHAR(50),
+    section_description NVARCHAR(MAX),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.5 Master Social Platforms
+CREATE TABLE master_social_platforms(
+    platform_id INT IDENTITY(1,1) PRIMARY KEY,
+    platform_name NVARCHAR(100) NOT NULL,
+    platform_type NVARCHAR(50),
+    website_url NVARCHAR(255),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.6 Master Evidence Types
+CREATE TABLE master_evidence_types(
+    evidence_type_id INT IDENTITY(1,1) PRIMARY KEY,
+    evidence_type_name NVARCHAR(100),
+    description NVARCHAR(MAX),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.7 Master Transaction Status
+CREATE TABLE master_transaction_status(
+    transaction_status_id INT IDENTITY(1,1) PRIMARY KEY,
+    status_name NVARCHAR(50),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+1.8 Master Notice Status
+CREATE TABLE master_notice_status(
+    notice_status_id INT IDENTITY(1,1) PRIMARY KEY,
+    status_name NVARCHAR(50),
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE()
+);
+2. USERS TABLE REFINEMENT
+ALTER TABLE users
+ADD
+    designation NVARCHAR(100) NULL,
+    badge_no NVARCHAR(50) NULL,
+    department_name NVARCHAR(150) NULL,
+    last_login DATETIME NULL,
+    profile_photo NVARCHAR(500) NULL,
+    updated_at DATETIME NULL;
+3. POLICE STATIONS TABLE REFINEMENT
+ALTER TABLE police_stations
+ADD
+    commissionerate NVARCHAR(150) NULL,
+    station_type NVARCHAR(50) NULL,
+    contact_no NVARCHAR(20) NULL,
+    email NVARCHAR(150) NULL,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+    district_id INT NULL;
+ALTER TABLE police_stations
+ADD CONSTRAINT FK_police_station_district
+FOREIGN KEY(district_id)
+REFERENCES master_districts(district_id);
+4. CASES TABLE REFINEMENT
+Remove Generic Social Media Fields (Future Cleanup)
+-- Optional Future Cleanup
+-- ALTER TABLE cases DROP COLUMN whatsapp_no;
+-- ALTER TABLE cases DROP COLUMN gmail_id;
+-- ALTER TABLE cases DROP COLUMN facebook_id;
+-- ALTER TABLE cases DROP COLUMN twitter_id;
+-- ALTER TABLE cases DROP COLUMN linkedin_id;
+-- ALTER TABLE cases DROP COLUMN insta_id;
+-- ALTER TABLE cases DROP COLUMN telegram_id;
+-- ALTER TABLE cases DROP COLUMN website_url;
+-- ALTER TABLE cases DROP COLUMN other_social;
+Add Refined FIR & Investigation Fields
+ALTER TABLE cases
+ADD
+    fir_year INT NULL,
+    fir_datetime DATETIME NULL,
+    district_id INT NULL,
+    police_station_id INT NULL,
+    status_id INT NULL,
+    priority_id INT NULL,
+
+
+    occurrence_from_datetime DATETIME NULL,
+    occurrence_to_datetime DATETIME NULL,
+    info_received_datetime DATETIME NULL,
+
+
+    gd_entry_no NVARCHAR(100) NULL,
+    place_of_occurrence NVARCHAR(MAX) NULL,
+
+
+    property_value DECIMAL(18,2) NULL,
+
+
+    fir_narrative NVARCHAR(MAX) NULL,
+
+
+    updated_at DATETIME NULL,
+    updated_by INT NULL,
+
+
+    is_deleted BIT DEFAULT 0,
+    deleted_at DATETIME NULL,
+    deleted_by INT NULL;
+Foreign Keys for Cases
+ALTER TABLE cases
+ADD CONSTRAINT FK_cases_district
+FOREIGN KEY(district_id)
+REFERENCES master_districts(district_id);
+ALTER TABLE cases
+ADD CONSTRAINT FK_cases_police_station
+FOREIGN KEY(police_station_id)
+REFERENCES police_stations(police_station_id);
+ALTER TABLE cases
+ADD CONSTRAINT FK_cases_status
+FOREIGN KEY(status_id)
+REFERENCES master_case_status(status_id);
+ALTER TABLE cases
+ADD CONSTRAINT FK_cases_priority
+FOREIGN KEY(priority_id)
+REFERENCES master_case_priority(priority_id);
+5. CASE COMPLAINANTS TABLE
+CREATE TABLE case_complainants(
+    complainant_id INT IDENTITY(1,1) PRIMARY KEY,
+    case_id INT NOT NULL,
+
+
+    name NVARCHAR(150),
+    father_name NVARCHAR(150),
+
+
+    mobile NVARCHAR(20),
+    email NVARCHAR(150),
+
+
+    aadhar_no NVARCHAR(20),
+    pan_no NVARCHAR(20),
+
+
+    address NVARCHAR(MAX),
+    city NVARCHAR(100),
+    state NVARCHAR(100),
+    pincode NVARCHAR(20),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+    updated_at DATETIME NULL,
+
+
+    CONSTRAINT FK_case_complainants_case
+    FOREIGN KEY(case_id)
+    REFERENCES cases(case_id)
+    ON DELETE CASCADE
+);
+6. CASE VICTIMS TABLE REFINEMENT
+ALTER TABLE case_victims
+ADD
+    updated_at DATETIME NULL,
+    updated_by INT NULL,
+
+
+    is_deleted BIT DEFAULT 0,
+    deleted_at DATETIME NULL,
+    deleted_by INT NULL;
+7. CASE ACCUSED TABLE REFINEMENT
+Remove Fixed Social Media Fields Later
+-- Future Recommended Cleanup
+-- facebook_id
+-- twitter_id
+-- linkedin_id
+-- insta_id
+-- telegram_id
+Add Refined Fields
+ALTER TABLE case_accused
+ADD
+    father_name NVARCHAR(150) NULL,
+    email NVARCHAR(150) NULL,
+    aadhar_no NVARCHAR(20) NULL,
+    pan_no NVARCHAR(20) NULL,
+
+
+    address NVARCHAR(MAX) NULL,
+    city NVARCHAR(100) NULL,
+    state NVARCHAR(100) NULL,
+    pincode NVARCHAR(20) NULL,
+
+
+    ip_address NVARCHAR(100) NULL,
+    device_info NVARCHAR(255) NULL,
+    geo_location NVARCHAR(255) NULL,
+
+
+    updated_at DATETIME NULL,
+    updated_by INT NULL,
+
+
+    is_deleted BIT DEFAULT 0,
+    deleted_at DATETIME NULL,
+    deleted_by INT NULL;
+8. CASE ACCUSED SOCIAL ACCOUNTS TABLE
+CREATE TABLE case_accused_social_accounts(
+    social_id INT IDENTITY(1,1) PRIMARY KEY,
+    accused_id INT NOT NULL,
+    platform_id INT NOT NULL,
+
+
+    account_identifier NVARCHAR(255),
+    profile_url NVARCHAR(500),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_social_accused
+    FOREIGN KEY(accused_id)
+    REFERENCES case_accused(accused_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_social_platform
+    FOREIGN KEY(platform_id)
+    REFERENCES master_social_platforms(platform_id)
+);
+9. CASE SECTIONS MAPPING TABLE
+CREATE TABLE case_sections(
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    case_id INT NOT NULL,
+    section_id INT NOT NULL,
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_case_sections_case
+    FOREIGN KEY(case_id)
+    REFERENCES cases(case_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_case_sections_section
+    FOREIGN KEY(section_id)
+    REFERENCES master_legal_sections(section_id)
+);
+10. CASE TRANSACTIONS REFINEMENT
+ALTER TABLE case_transactions
+ADD
+    sender_bank NVARCHAR(150) NULL,
+    receiver_bank NVARCHAR(150) NULL,
+
+
+    sender_ifsc NVARCHAR(20) NULL,
+    receiver_ifsc NVARCHAR(20) NULL,
+
+
+    transaction_type NVARCHAR(50) NULL,
+    payment_gateway NVARCHAR(100) NULL,
+
+
+    freeze_status BIT DEFAULT 0,
+    freeze_amount DECIMAL(18,2) NULL,
+
+
+    wallet_id NVARCHAR(255) NULL,
+    crypto_wallet NVARCHAR(255) NULL,
+
+
+    updated_at DATETIME NULL;
+11. CASE EVIDENCE REFINEMENT
+ALTER TABLE case_evidence
+ADD
+    evidence_type_id INT NULL,
+
+
+    mime_type NVARCHAR(100) NULL,
+    file_size BIGINT NULL,
+
+
+    hash_sha256 NVARCHAR(255) NULL,
+
+
+    uploaded_by INT NULL,
+
+
+    chain_of_custody NVARCHAR(MAX) NULL,
+
+
+    updated_at DATETIME NULL;
+ALTER TABLE case_evidence
+ADD CONSTRAINT FK_evidence_type
+FOREIGN KEY(evidence_type_id)
+REFERENCES master_evidence_types(evidence_type_id);
+12. LEGAL NOTICES REFINEMENT
+ALTER TABLE legal_notices
+ADD
+    notice_status_id INT NULL,
+
+
+    sent_email NVARCHAR(255) NULL,
+    delivery_status NVARCHAR(100) NULL,
+
+
+    acknowledgement_no NVARCHAR(100) NULL,
+
+
+    reply_received BIT DEFAULT 0,
+    reply_date DATETIME NULL,
+
+
+    sent_at DATETIME NULL;
+ALTER TABLE legal_notices
+ADD CONSTRAINT FK_notice_status
+FOREIGN KEY(notice_status_id)
+REFERENCES master_notice_status(notice_status_id);
+13. CASE ACTIVITY LOGS (VERY IMPORTANT)
+CREATE TABLE case_activity_logs(
+    activity_id INT IDENTITY(1,1) PRIMARY KEY,
+
+
+    case_id INT NOT NULL,
+
+
+    activity_type NVARCHAR(100),
+    activity_description NVARCHAR(MAX),
+
+
+    performed_by INT,
+
+
+    ip_address NVARCHAR(100),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_activity_case
+    FOREIGN KEY(case_id)
+    REFERENCES cases(case_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_activity_user
+    FOREIGN KEY(performed_by)
+    REFERENCES users(user_id)
+);
+14. CASE TASKS TABLE
+CREATE TABLE case_tasks(
+    task_id INT IDENTITY(1,1) PRIMARY KEY,
+
+
+    case_id INT NOT NULL,
+
+
+    title NVARCHAR(255),
+    description NVARCHAR(MAX),
+
+
+    assigned_to INT,
+    assigned_by INT,
+
+
+    due_date DATETIME,
+
+
+    task_status NVARCHAR(50),
+
+
+    priority_level NVARCHAR(50),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+    completed_at DATETIME NULL,
+
+
+    CONSTRAINT FK_task_case
+    FOREIGN KEY(case_id)
+    REFERENCES cases(case_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_task_assigned_to
+    FOREIGN KEY(assigned_to)
+    REFERENCES users(user_id),
+
+
+    CONSTRAINT FK_task_assigned_by
+    FOREIGN KEY(assigned_by)
+    REFERENCES users(user_id)
+);
+15. NOTICE DISPATCH LOGS
+CREATE TABLE notice_dispatch_logs(
+    dispatch_id INT IDENTITY(1,1) PRIMARY KEY,
+
+
+    notice_id INT NOT NULL,
+
+
+    dispatch_method NVARCHAR(50),
+
+
+    recipient NVARCHAR(255),
+
+
+    dispatch_status NVARCHAR(100),
+
+
+    response_message NVARCHAR(MAX),
+
+
+    dispatched_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_dispatch_notice
+    FOREIGN KEY(notice_id)
+    REFERENCES legal_notices(notice_id)
+    ON DELETE CASCADE
+);
+16. GLOBAL INDEXING STRATEGY
+Cases
+CREATE INDEX IX_cases_status_id ON cases(status_id);
+CREATE INDEX IX_cases_police_station_id ON cases(police_station_id);
+CREATE INDEX IX_cases_created_at ON cases(created_at);
+CREATE INDEX IX_cases_fir_datetime ON cases(fir_datetime);
+Transactions
+CREATE INDEX IX_transactions_case_id ON case_transactions(case_id);
+CREATE INDEX IX_transactions_utr_no ON case_transactions(utr_no);
+Victims
+CREATE INDEX IX_victims_case_id ON case_victims(case_id);
+CREATE INDEX IX_victims_mobile ON case_victims(mobile);
+Accused
+CREATE INDEX IX_accused_case_id ON case_accused(case_id);
+CREATE INDEX IX_accused_mobile ON case_accused(mobile);
+Notices
+CREATE INDEX IX_notices_case_id ON legal_notices(case_id);
+17. AUDIT COLUMN STANDARDIZATION
+Recommended for ALL tables
+created_at DATETIME DEFAULT GETDATE(),
+created_by INT NULL,
+updated_at DATETIME NULL,
+updated_by INT NULL,
+is_deleted BIT DEFAULT 0,
+deleted_at DATETIME NULL,
+deleted_by INT NULL
+FINAL ENTERPRISE STRUCTURE
+Core Tables
+users
+police_stations
+cases
+Person Tables
+case_complainants
+case_victims
+case_accused
+case_accused_social_accounts
+Financial Tables
+case_transactions
+Investigation Tables
+case_notes
+case_activity_logs
+case_tasks
+case_status_history
+case_io_history
+Legal Tables
+legal_notices
+case_sections
+master_legal_sections
+Evidence Tables
+case_evidence
+fir_documents
+Master Tables
+master_case_status
+master_case_priority
+master_districts
+master_social_platforms
+master_evidence_types
+master_transaction_status
+master_notice_status
+
+This refined architecture is enterprise-grade, scalable, normalized, audit-friendly, and ready for advanced cyber crime investigation workflows.
+
+18. ENTERPRISE DOCUMENT MAPPING & DOCUMENT MANAGEMENT ARCHITECTURE
+WHY DOCUMENT MAPPING IS REQUIRED
+
+In cyber investigation systems:
+
+One FIR can have multiple documents
+One notice can have multiple attachments
+One email reply can contain multiple files
+One evidence can relate to multiple notices
+One transaction can have multiple bank response PDFs
+
+Therefore enterprise systems NEVER store documents directly in one table.
+
+A centralized document management architecture is required.
+
+18.1 MASTER DOCUMENT TYPES
+CREATE TABLE master_document_types(
+    document_type_id INT IDENTITY(1,1) PRIMARY KEY,
+
+
+    document_type_name NVARCHAR(150) NOT NULL,
+
+
+    module_name NVARCHAR(100),
+
+
+    allowed_extensions NVARCHAR(255),
+
+
+    max_file_size_mb INT,
+
+
+    is_mandatory BIT DEFAULT 0,
+
+
+    is_active BIT DEFAULT 1,
+
+
+    created_at DATETIME DEFAULT GETDATE()
+);
+TABLE PURPOSE
+
+This table defines:
+
+FIR Copy
+Bank Statement
+Notice PDF
+Reply Attachment
+Screenshot
+Email Header
+Call Recording
+Transaction Proof
+KYC Documents
+IP Logs
+Social Media Export
+
+This helps:
+
+validation
+upload control
+UI dropdowns
+API validation
+workflow automation
+18.2 CENTRAL DOCUMENTS TABLE
+CREATE TABLE documents(
+    document_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    document_type_id INT NOT NULL,
+
+
+    file_name NVARCHAR(255),
+    original_file_name NVARCHAR(255),
+
+
+    file_extension NVARCHAR(20),
+    mime_type NVARCHAR(100),
+
+
+    file_size BIGINT,
+
+
+    file_path NVARCHAR(1000),
+    storage_provider NVARCHAR(100),
+
+
+    file_hash_sha256 NVARCHAR(255),
+
+
+    encrypted_file_key NVARCHAR(MAX),
+
+
+    is_sensitive BIT DEFAULT 0,
+
+
+    uploaded_by INT,
+
+
+    uploaded_at DATETIME DEFAULT GETDATE(),
+
+
+    updated_at DATETIME NULL,
+
+
+    is_deleted BIT DEFAULT 0,
+    deleted_at DATETIME NULL,
+    deleted_by INT NULL,
+
+
+    CONSTRAINT FK_documents_document_type
+    FOREIGN KEY(document_type_id)
+    REFERENCES master_document_types(document_type_id),
+
+
+    CONSTRAINT FK_documents_uploaded_by
+    FOREIGN KEY(uploaded_by)
+    REFERENCES users(user_id)
+);
+TABLE PURPOSE
+
+This is the CENTRAL FILE STORAGE REGISTRY.
+
+All uploaded files:
+
+PDFs
+Images
+Audio
+Videos
+Email attachments
+Reply documents
+FIR scans
+Notices
+Reports
+
+will come here.
+
+This allows:
+
+centralized document security
+audit logging
+cloud migration
+scalable storage
+document deduplication
+hash validation
+malware scanning
+access control
+18.3 UNIVERSAL DOCUMENT MAPPING TABLE
+CREATE TABLE document_entity_mapping(
+    mapping_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    document_id BIGINT NOT NULL,
+
+
+    entity_type NVARCHAR(100) NOT NULL,
+
+
+    entity_id BIGINT NOT NULL,
+
+
+    mapping_description NVARCHAR(MAX),
+
+
+    created_by INT,
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_mapping_document
+    FOREIGN KEY(document_id)
+    REFERENCES documents(document_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_mapping_user
+    FOREIGN KEY(created_by)
+    REFERENCES users(user_id)
+);
+TABLE PURPOSE
+
+This is MOST IMPORTANT.
+
+This table maps any document to any module.
+
+Example:
+
+entity_type	entity_id
+CASE	1
+NOTICE	55
+TRANSACTION	88
+EMAIL	101
+EVIDENCE	22
+
+Benefits:
+
+reusable architecture
+no duplicate documents
+flexible system
+enterprise scalability
+19. ENTERPRISE EMAIL & NOTICE TRAIL ARCHITECTURE
+WHY THIS IS REQUIRED
+
+Your system requirement:
+
+notices will be generated
+notices will go via email
+replies will come back
+attachments will arrive
+complete communication trail must be visible
+threading/history required
+audit tracking required
+
+Therefore enterprise communication architecture is required.
+
+19.1 EMAIL ACCOUNTS CONFIG TABLE
+CREATE TABLE email_accounts(
+    email_account_id INT IDENTITY(1,1) PRIMARY KEY,
+
+
+    account_name NVARCHAR(150),
+
+
+    email_address NVARCHAR(255),
+
+
+    smtp_host NVARCHAR(255),
+    smtp_port INT,
+
+
+    imap_host NVARCHAR(255),
+    imap_port INT,
+
+
+    smtp_username NVARCHAR(255),
+    encrypted_password NVARCHAR(MAX),
+
+
+    use_ssl BIT DEFAULT 1,
+
+
+    is_active BIT DEFAULT 1,
+
+
+    created_at DATETIME DEFAULT GETDATE()
+);
+TABLE PURPOSE
+
+Stores official email accounts:
+
+cybercell@...
+nodalofficer@...
+police station mail ids
+
+Used by:
+
+mail sending engine
+reply fetching engine
+IMAP sync service
+19.2 EMAIL THREADS TABLE
+CREATE TABLE email_threads(
+    thread_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    case_id INT,
+
+
+    thread_subject NVARCHAR(500),
+
+
+    external_thread_id NVARCHAR(500),
+
+
+    platform_name NVARCHAR(150),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    updated_at DATETIME NULL,
+
+
+    CONSTRAINT FK_email_thread_case
+    FOREIGN KEY(case_id)
+    REFERENCES cases(case_id)
+    ON DELETE CASCADE
+);
+TABLE PURPOSE
+
+Groups all related communication.
+
+Example:
+
+Notice sent to Google
+Google replied
+Further clarification sent
+Google shared attachments
+
+All become one thread.
+
+UI can show:
+
+Gmail-style conversation timeline
+19.3 EMAIL MESSAGES TABLE
+CREATE TABLE email_messages(
+    email_message_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    thread_id BIGINT NOT NULL,
+
+
+    email_account_id INT NULL,
+
+
+    direction_type NVARCHAR(20),
+
+
+    from_email NVARCHAR(255),
+    to_email NVARCHAR(MAX),
+    cc_email NVARCHAR(MAX),
+    bcc_email NVARCHAR(MAX),
+
+
+    subject_line NVARCHAR(1000),
+
+
+    body_text NVARCHAR(MAX),
+    body_html NVARCHAR(MAX),
+
+
+    internet_message_id NVARCHAR(1000),
+    in_reply_to NVARCHAR(1000),
+
+
+    sent_at DATETIME NULL,
+    received_at DATETIME NULL,
+
+
+    delivery_status NVARCHAR(100),
+
+
+    is_read BIT DEFAULT 0,
+
+
+    synced_from_server BIT DEFAULT 0,
+
+
+    created_by INT NULL,
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_email_message_thread
+    FOREIGN KEY(thread_id)
+    REFERENCES email_threads(thread_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_email_message_account
+    FOREIGN KEY(email_account_id)
+    REFERENCES email_accounts(email_account_id)
+);
+TABLE PURPOSE
+
+This is the MAIN EMAIL TABLE.
+
+Stores:
+
+sent mails
+received mails
+replies
+delivery tracking
+threading references
+message IDs
+
+This powers:
+
+inbox
+sent items
+mail trail
+timeline
+legal audit
+reply chain
+19.4 EMAIL ATTACHMENT MAPPING TABLE
+CREATE TABLE email_attachment_mapping(
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    email_message_id BIGINT NOT NULL,
+
+
+    document_id BIGINT NOT NULL,
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_email_attachment_email
+    FOREIGN KEY(email_message_id)
+    REFERENCES email_messages(email_message_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_email_attachment_document
+    FOREIGN KEY(document_id)
+    REFERENCES documents(document_id)
+    ON DELETE CASCADE
+);
+TABLE PURPOSE
+
+Maps uploaded files with emails.
+
+Example:
+
+Google reply PDF
+Bank statement
+KYC ZIP
+IP Logs CSV
+
+All become linked attachments.
+
+19.5 NOTICE EMAIL MAPPING TABLE
+CREATE TABLE notice_email_mapping(
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+
+    notice_id INT NOT NULL,
+
+
+    email_message_id BIGINT NOT NULL,
+
+
+    mapping_type NVARCHAR(50),
+
+
+    created_at DATETIME DEFAULT GETDATE(),
+
+
+    CONSTRAINT FK_notice_email_notice
+    FOREIGN KEY(notice_id)
+    REFERENCES legal_notices(notice_id)
+    ON DELETE CASCADE,
+
+
+    CONSTRAINT FK_notice_email_message
+    FOREIGN KEY(email_message_id)
+    REFERENCES email_messages(email_message_id)
+    ON DELETE CASCADE
+);
+TABLE PURPOSE
+
+Connects:
+
+legal notice WITH
+email communication
+
+This helps:
+
+full legal traceability
+notice delivery tracking
+reply verification
+audit reports
+*/

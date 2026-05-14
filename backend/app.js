@@ -94,6 +94,104 @@ app.get('/health', (req, res) => {
     res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── Master Data Seeder (dev-only) ─────────────────────────────────────────────
+app.get('/api/seed-masters', async (req, res) => {
+    try {
+        const { poolPromise, mssql } = require('./src/config/db');
+        const pool = await poolPromise;
+        const report = {};
+
+        // ── Seed master_case_status ──────────────────────────────────────────
+        const sCols = (await pool.request().query(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='master_case_status' ORDER BY ORDINAL_POSITION"
+        )).recordset.map(r => r.COLUMN_NAME.toLowerCase());
+
+        const sPk   = sCols.find(c => c.includes('status_id') || c === 'id') || sCols[0];
+        const sName = sCols.find(c => c.includes('name') || c.includes('status') && c !== sPk) || null;
+
+        const statuses = [
+            { id: 1, name: 'Active' },
+            { id: 2, name: 'Pending' },
+            { id: 3, name: 'Under Investigation' },
+            { id: 4, name: 'Closed' },
+            { id: 5, name: 'Chargesheeted' },
+            { id: 6, name: 'Court Trial' },
+        ];
+        const statusInserted = [];
+        if (sName) {
+            for (const s of statuses) {
+                const exists = (await pool.request().input('id', mssql.Int, s.id)
+                    .query(`SELECT 1 FROM master_case_status WHERE ${sPk}=@id`)).recordset.length > 0;
+                if (!exists) {
+                    let iCols = [sPk, sName];
+                    let iVals = ['@id', '@name'];
+                    if (sCols.includes('is_active'))  { iCols.push('is_active');  iVals.push('1'); }
+                    if (sCols.includes('created_at')) { iCols.push('created_at'); iVals.push('GETDATE()'); }
+                    await pool.request().input('id', mssql.Int, s.id).input('name', mssql.NVarChar, s.name)
+                        .query(`SET IDENTITY_INSERT master_case_status ON;
+                                INSERT INTO master_case_status (${iCols.join(',')}) VALUES (${iVals.join(',')});
+                                SET IDENTITY_INSERT master_case_status OFF;`);
+                    statusInserted.push(s.name);
+                }
+            }
+        }
+        report.status = { cols: sCols, inserted: statusInserted };
+
+        // ── Seed master_case_priority ────────────────────────────────────────
+        const priExists = (await pool.request().query(
+            "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='master_case_priority'"
+        )).recordset.length > 0;
+
+        const priorityInserted = [];
+        if (priExists) {
+            const pCols = (await pool.request().query(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='master_case_priority' ORDER BY ORDINAL_POSITION"
+            )).recordset.map(r => r.COLUMN_NAME.toLowerCase());
+
+            const pPk   = pCols.find(c => c.includes('priority_id') || c === 'id') || pCols[0];
+            const pName = pCols.find(c => c.includes('name') || (c.includes('priority') && c !== pPk)) || null;
+
+            const priorities = [
+                { id: 1, name: 'Low' },
+                { id: 2, name: 'Medium' },
+                { id: 3, name: 'High' },
+                { id: 4, name: 'Critical' },
+            ];
+
+            if (pName) {
+                for (const p of priorities) {
+                    const exists = (await pool.request().input('id', mssql.Int, p.id)
+                        .query(`SELECT 1 FROM master_case_priority WHERE ${pPk}=@id`)).recordset.length > 0;
+                    if (!exists) {
+                        let iCols = [pPk, pName];
+                        let iVals = ['@id', '@name'];
+                        if (pCols.includes('is_active'))  { iCols.push('is_active');  iVals.push('1'); }
+                        if (pCols.includes('created_at')) { iCols.push('created_at'); iVals.push('GETDATE()'); }
+                        await pool.request().input('id', mssql.Int, p.id).input('name', mssql.NVarChar, p.name)
+                            .query(`SET IDENTITY_INSERT master_case_priority ON;
+                                    INSERT INTO master_case_priority (${iCols.join(',')}) VALUES (${iVals.join(',')});
+                                    SET IDENTITY_INSERT master_case_priority OFF;`);
+                        priorityInserted.push(p.name);
+                    }
+                }
+            }
+            report.priority = { cols: pCols, inserted: priorityInserted };
+        } else {
+            report.priority = { error: 'Table master_case_priority not found' };
+        }
+
+        // ── Final rows ───────────────────────────────────────────────────────
+        const statusRows    = (await pool.request().query(`SELECT * FROM master_case_status ORDER BY ${sPk}`)).recordset;
+        const priorityRows  = priExists
+            ? (await pool.request().query('SELECT * FROM master_case_priority ORDER BY 1')).recordset
+            : [];
+
+        res.json({ success: true, report, statusRows, priorityRows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route not found: ${req.method} ${req.originalUrl}` });
