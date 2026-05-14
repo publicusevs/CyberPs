@@ -70,6 +70,11 @@ const LetterPreview = () => {
     const [pendingNotice, setPendingNotice] = useState(null);
     const [conflictQueue, setConflictQueue] = useState([]);
 
+    // Layer filter + sort state
+    const [layerFilter, setLayerFilter] = useState('ALL');
+    const [sortConfig, setSortConfig] = useState({ key: 'layer', dir: 'asc' });
+    const [searchText, setSearchText] = useState('');
+
     const filterColumns = [
         { id: 'account', label: 'Account Number', type: 'text' },
         { id: 'bank', label: 'Bank', type: 'text' },
@@ -192,14 +197,21 @@ const LetterPreview = () => {
                 transactions.forEach(t => {
                     const bank = (t.platform || 'Unknown Bank').trim();
                     if (!groups[bank]) groups[bank] = { name: bank, records: [] };
+                    // Extract real layer from DB — normalize to numeric for sorting
+                    const rawLayer = t.layer || '';
+                    const layerMatch = rawLayer.toString().trim().match(/\d+/);
+                    const layerNum = layerMatch ? parseInt(layerMatch[0], 10) : 999;
+                    const layerLabel = layerMatch ? `Layer ${layerNum}` : (rawLayer || 'Layer ?');
                     const record = {
                         account: t.receiver_acc,
+                        sender: t.sender_acc || 'Case Root',
                         utr: t.utr_no,
                         amount: t.amount,
                         date: t.trans_date,
                         bank: bank,
-                        layer: 'L' + (Math.floor(Math.random() * 3) + 1),
-                        ifsc: 'SBIN000123'
+                        layer: layerLabel,
+                        layerNum: layerNum,
+                        ifsc: t.ifsc_code || 'N/A'
                     };
                     groups[bank].records.push(record);
                     allUtrs.add(record.utr);
@@ -718,9 +730,62 @@ const LetterPreview = () => {
 
     if (loading) return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-[0.5em] text-xs">Initializing Forensic Engine...</div>;
 
+    // Helper: extract numeric layer for sorting
+    const getLayerNum = (rec) => rec.layerNum ?? 999;
+
+    // Collect all unique layers across all bank groups
+    const allLayers = [...new Set(
+        bankGroups.flatMap(g => g.records.map(r => r.layer))
+    )].filter(Boolean).sort((a, b) => {
+        const na = parseInt((a || '').match(/\d+/)?.[0] || 999);
+        const nb = parseInt((b || '').match(/\d+/)?.[0] || 999);
+        return na - nb;
+    });
+
     const rawActiveRecords = bankGroups.filter(g => selectedBankIds.has(g.name)).flatMap(g => g.records);
-    // Apply Multi-Filters with Logic (AND, OR, NOT)
-    const activeRecords = rawActiveRecords.filter(rec => passesAllFilters(rec));
+
+    // Apply layer filter
+    const layerFiltered = layerFilter === 'ALL'
+        ? rawActiveRecords
+        : rawActiveRecords.filter(r => r.layer === layerFilter);
+
+    // Apply search text
+    const searchFiltered = searchText.trim()
+        ? layerFiltered.filter(r =>
+            (r.account || '').toLowerCase().includes(searchText.toLowerCase()) ||
+            (r.utr || '').toLowerCase().includes(searchText.toLowerCase()) ||
+            (r.bank || '').toLowerCase().includes(searchText.toLowerCase()) ||
+            (r.sender || '').toLowerCase().includes(searchText.toLowerCase())
+        )
+        : layerFiltered;
+
+    // Apply multi-column filters (existing filter system)
+    const activeRecords = searchFiltered.filter(rec => passesAllFilters(rec));
+
+    // Apply sorting
+    const sortedRecords = [...activeRecords].sort((a, b) => {
+        const dir = sortConfig.dir === 'asc' ? 1 : -1;
+        if (sortConfig.key === 'layer') return (getLayerNum(a) - getLayerNum(b)) * dir;
+        if (sortConfig.key === 'amount') return (parseFloat(a.amount) - parseFloat(b.amount)) * dir;
+        if (sortConfig.key === 'account') return (a.account || '').localeCompare(b.account || '') * dir;
+        if (sortConfig.key === 'bank') return (a.bank || '').localeCompare(b.bank || '') * dir;
+        if (sortConfig.key === 'utr') return (a.utr || '').localeCompare(b.utr || '') * dir;
+        if (sortConfig.key === 'date') return (new Date(a.date) - new Date(b.date)) * dir;
+        return 0;
+    });
+
+    const toggleSort = (key) => {
+        setSortConfig(prev => ({
+            key,
+            dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const SortIcon = ({ colKey }) => {
+        if (sortConfig.key !== colKey) return <span className="text-slate-200 ml-1">⇅</span>;
+        return <span className="text-blue-500 ml-1">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>;
+    };
+
     const areAllRecordsSelected = activeRecords.length > 0 && activeRecords.every(r => selectedRecordUtrs.has(r.utr));
 
     return (
@@ -896,44 +961,100 @@ const LetterPreview = () => {
                                         )}
                                     </AnimatePresence>
 
-                                    <div className="max-h-[800px] overflow-y-auto">
+                                    {/* Layer Dropdown Filter + Search Bar */}
+                                    <div className="px-8 py-5 border-b border-slate-100 flex flex-wrap gap-4 items-center bg-slate-50/50">
+                                        {/* Layer Dropdown */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Layer:</span>
+                                            <select
+                                                value={layerFilter}
+                                                onChange={e => setLayerFilter(e.target.value)}
+                                                className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-[11px] font-black text-slate-700 uppercase tracking-wider focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm cursor-pointer"
+                                            >
+                                                <option value="ALL">All Layers ({allLayers.length})</option>
+                                                {allLayers.map(l => (
+                                                    <option key={l} value={l}>{l}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Search */}
+                                        <div className="relative flex-1 min-w-[200px] max-w-xs">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                                            <input
+                                                type="text"
+                                                placeholder="Search account, UTR, bank..."
+                                                value={searchText}
+                                                onChange={e => setSearchText(e.target.value)}
+                                                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-medium text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                                            />
+                                        </div>
+
+
+                                    </div>
+
+                                    <div className="max-h-[700px] overflow-y-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead className="sticky top-0 bg-white shadow-sm z-10">
                                                 <tr className="border-b border-slate-100">
                                                     <th className="px-6 py-5 w-16 text-center">
-                                                        <button onClick={toggleSelectAllRecords} className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
+                                                        <button onClick={toggleSelectAllRecords} className={`p-1 rounded-md transition-all border-2 ${areAllRecordsSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}>
                                                             {areAllRecordsSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                                                         </button>
                                                     </th>
-                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest">Account Number</th>
-                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center">Bank</th>
-                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest">Transaction Payload (UTR)</th>
-                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center">Layer</th>
-                                                    <th className="px-6 py-5 text-[10px] font-black text-slate-300 uppercase tracking-widest text-right">Credit Asset</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('layer')}>
+                                                        Layer <SortIcon colKey="layer" />
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('account')}>
+                                                        Account Number <SortIcon colKey="account" />
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none text-center" onClick={() => toggleSort('bank')}>
+                                                        Bank <SortIcon colKey="bank" />
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('utr')}>
+                                                        UTR No. <SortIcon colKey="utr" />
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('date')}>
+                                                        Date <SortIcon colKey="date" />
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none text-right" onClick={() => toggleSort('amount')}>
+                                                        Amount <SortIcon colKey="amount" />
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
-                                                {activeRecords.map((rec, i) => (
+                                                {sortedRecords.map((rec, i) => (
                                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                                                        <td className="px-6 py-5 text-center">
-                                                            <button onClick={() => toggleRecordSelection(rec.utr)} className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`} >
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button onClick={() => toggleRecordSelection(rec.utr)} className={`p-1 rounded-md transition-all border-2 ${selectedRecordUtrs.has(rec.utr) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}>
                                                                 {selectedRecordUtrs.has(rec.utr) ? <CheckSquare size={16} /> : <Square size={16} />}
                                                             </button>
                                                         </td>
-                                                        <td className="px-6 py-5">
+                                                        <td className="px-6 py-4 text-center">
+                                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${
+                                                                rec.layerNum <= 1 ? 'bg-rose-50 text-rose-600 border-rose-200' :
+                                                                rec.layerNum <= 3 ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                                                                rec.layerNum <= 6 ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                                                                'bg-slate-100 text-slate-600 border-slate-200'
+                                                            }`}>{rec.layer}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
                                                             <p className="text-xs font-black text-slate-900 tracking-tight">{rec.account}</p>
-                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">AUTH_PASS: {rec.ifsc}</p>
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">IFSC: {rec.ifsc}</p>
                                                         </td>
-                                                        <td className="px-6 py-5 text-center">
-                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100"> {rec.bank} </span>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100">{rec.bank}</span>
                                                         </td>
-                                                        <td className="px-6 py-5 font-mono text-xs text-slate-500 font-bold tracking-tight"> {rec.utr} </td>
-                                                        <td className="px-6 py-5 text-center">
-                                                            <span className="px-4 py-1 bg-slate-100 rounded-full text-[9px] font-black text-slate-600 uppercase border border-slate-200"> {rec.layer} </span>
+                                                        <td className="px-6 py-4 font-mono text-xs text-slate-500 font-bold tracking-tight">{rec.utr}</td>
+                                                        <td className="px-6 py-4 text-[10px] text-slate-400 font-bold">
+                                                            {rec.date ? new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
                                                         </td>
-                                                        <td className="px-6 py-5 text-right font-black text-sm text-slate-900 italic"> ₹{parseFloat(rec.amount).toLocaleString()} </td>
+                                                        <td className="px-6 py-4 text-right font-black text-sm text-slate-900 italic">₹{parseFloat(rec.amount || 0).toLocaleString('en-IN')}</td>
                                                     </tr>
                                                 ))}
+                                                {sortedRecords.length === 0 && (
+                                                    <tr><td colSpan={7} className="px-6 py-16 text-center text-slate-400 text-xs font-black uppercase tracking-widest">No records match the current filters</td></tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>

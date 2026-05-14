@@ -112,7 +112,15 @@ const CasesRepository = {
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_victims WHERE case_id = @case_id'),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM fir_documents WHERE case_id = @case_id'),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_evidence WHERE case_id = @case_id ORDER BY uploaded_at DESC'),
-            pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_transactions WHERE case_id = @case_id'),
+            pool.request().input('case_id', mssql.Int, caseId).query(`
+                SELECT ct.*,
+                    CASE 
+                        WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('case_transactions') AND name = 'layer')
+                        THEN 1 ELSE 0 
+                    END AS has_layer_col
+                FROM case_transactions ct
+                WHERE ct.case_id = @case_id
+                ORDER BY ct.trans_date ASC`),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT n.*, u.name as author FROM case_notes n JOIN users u ON n.user_id = u.user_id WHERE n.case_id = @case_id ORDER BY n.created_at DESC'),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_accused WHERE case_id = @case_id'),
         ]);

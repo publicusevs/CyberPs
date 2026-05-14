@@ -288,10 +288,10 @@ function parseExcelForTrail(rawData) {
         }
 
         // ── Amount ──────────────────────────────────────────────────────────
-        let rawAmount = row['Transaction Amount'] || row['Amount Rs.'] || row['Amount'] ||
+        let rawAmount = row['Transaction Amount'] || row['Disputed Amount'] || row['Amount Rs.'] || row['Amount'] ||
             row['TRANSACTION AMOUNT'] || row['Credit Amount'] || row['Debit Amount'] || 0;
         const amount = typeof rawAmount === 'string'
-            ? parseFloat(rawAmount.replace(/,/g, '').trim())
+            ? parseFloat(rawAmount.replace(/,/g, '').replace(/₹/g, '').trim())
             : parseFloat(rawAmount);
 
         // ── Date ────────────────────────────────────────────────────────────
