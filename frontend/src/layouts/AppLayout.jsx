@@ -111,7 +111,7 @@ const AppLayout = ({ children }) => {
             </aside>
 
             {/* Main Content Area */}
-            <main className={`flex-1 flex flex-col min-w-0 z-10 transition-all duration-500 ease-in-out
+            <main className={`flex-1 flex flex-col min-w-0 transition-all duration-500 ease-in-out
                 ${collapsed ? 'lg:ml-[96px]' : 'lg:ml-[288px]'} ml-0`}>
                 <Navbar onToggleSidebar={toggleSidebar} onProfileClick={() => setShowProfile(true)} isSidebarCollapsed={collapsed} />
                 <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />

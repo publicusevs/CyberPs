@@ -34,23 +34,27 @@ import {
     Edit2,
     Save,
     Activity,
+    AlertTriangle,
     Network
 } from 'lucide-react';
+
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Table';
 import { InputField } from '../components/ui/InputField';
 import { motion, AnimatePresence } from 'framer-motion';
+import NoticesEngine from './NoticesEngine';
 
 const CaseDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [caseData, setCaseData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [newNote, setNewNote] = useState('');
     const [showEvidModal, setShowEvidModal] = useState(false);
     const [showExcelModal, setShowExcelModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showNoticesEngine, setShowNoticesEngine] = useState(false);
 
     // Excel Upload State
     const [excelFile, setExcelFile] = useState(null);
@@ -153,6 +157,15 @@ const CaseDetails = () => {
 
     const { case: details, victim, transactions, notes, fir, evidence, accusedList } = caseData;
     const forensicExcel = evidence?.find(e => e.description === 'Forensic Money Trail Excel Artifact');
+
+    // Group transactions by source_file
+    const transactionGroups = (transactions || []).reduce((acc, t) => {
+        const source = t.source_file || 'Legacy Excel Data';
+        if (!acc[source]) acc[source] = [];
+        acc[source].push(t);
+        return acc;
+    }, {});
+    const groupedSources = Object.entries(transactionGroups);
 
     return (
         <div className="space-y-10 animate-in fade-in duration-500 pb-20">
@@ -585,6 +598,23 @@ const CaseDetails = () => {
                             </div>
                         </div>
 
+                        {/* LETTERS & NOTICES ENGINE BUTTON */}
+                        <button
+                            onClick={() => setShowNoticesEngine(true)}
+                            className="w-full mb-6 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl transition-all shadow-lg shadow-blue-200 group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    <FileText size={18} />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-[11px] font-black uppercase tracking-widest">Letters & Notices Engine</p>
+                                    <p className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">KYC · Freeze · Hold · Statement · Txn Details</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+
                         {forensicExcel ? (
                             <Button
                                 variant="primary"
@@ -606,25 +636,46 @@ const CaseDetails = () => {
                         )}
 
                         <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                            {transactions.map(t => (
-                                <div key={t.trans_id} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-emerald-200 transition-all">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">UTR: {t.utr_no}</p>
-                                        <p className="text-sm font-bold text-emerald-600 italic">₹{parseFloat(t.amount).toLocaleString()}</p>
-                                    </div>
-                                    <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-100 shadow-sm">
-                                        <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full"></div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-bold text-slate-700 tracking-tighter truncate">{t.receiver_acc}</p>
-                                            <p className="text-[8px] text-slate-400 font-bold uppercase">{t.platform || 'Unknown Bank'}</p>
+                            {groupedSources.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400 text-xs font-bold uppercase tracking-widest">No transaction data available</div>
+                            ) : (
+                                groupedSources.map(([source, txs], idx) => (
+                                    <div key={idx} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-blue-100 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                <FileSpreadsheet size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xs font-black text-slate-900 truncate max-w-[200px] sm:max-w-[300px] leading-tight mb-1">{source}</h3>
+                                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{txs.length} Transactions Processed</p>
+                                            </div>
                                         </div>
+                                        <Button 
+                                            variant="outline" 
+                                            className="text-[10px] tracking-widest font-black bg-white text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white transition-all w-full sm:w-auto"
+                                            onClick={() => navigate(`/cases/${id}/trail`)}
+                                            icon={Network}
+                                        >
+                                            View Money Trail
+                                        </Button>
                                     </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     </Card>
                 </div>
             </div>
+
+        {/* Notices Engine Modal */}
+        <AnimatePresence>
+            {showNoticesEngine && (
+                <NoticesEngine
+                    caseId={id}
+                    caseData={caseData}
+                    onClose={() => setShowNoticesEngine(false)}
+                />
+            )}
+        </AnimatePresence>
         </div>
     );
 };

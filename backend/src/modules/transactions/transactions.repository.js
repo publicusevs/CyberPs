@@ -48,9 +48,11 @@ const TransactionsRepository = {
             table.columns.add('utr_no', mssql.NVarChar(100), { nullable: true });
             table.columns.add('trans_date', mssql.DateTime, { nullable: true });
             table.columns.add('platform', mssql.NVarChar(50), { nullable: true });
+            table.columns.add('layer', mssql.NVarChar(50), { nullable: true });
+            table.columns.add('source_file', mssql.NVarChar(255), { nullable: true });
 
             for (const r of rows) {
-                table.rows.add(r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform);
+                table.rows.add(r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform, r.layer, r.source_file);
             }
 
             await pool.request().bulk(table);
@@ -68,7 +70,9 @@ const TransactionsRepository = {
                         .input('utr_no', mssql.NVarChar, r.utr_no)
                         .input('trans_date', mssql.DateTime, r.trans_date)
                         .input('platform', mssql.NVarChar, r.platform)
-                        .query('INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform) VALUES (@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform)');
+                        .input('layer', mssql.NVarChar, r.layer)
+                        .input('source_file', mssql.NVarChar, r.source_file)
+                        .query('INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, layer, source_file) VALUES (@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform, @layer, @source_file)');
                     inserted++;
                 } catch (rowErr) {
                     // Skip bad rows, log handled in service
@@ -95,7 +99,7 @@ const TransactionsRepository = {
         const pool = await poolPromise;
         const result = await pool.request()
             .input('case_id', mssql.Int, parseInt(caseId))
-            .query(`SELECT sender_acc, receiver_acc, amount, utr_no, trans_date, platform
+            .query(`SELECT trans_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, layer, source_file
                     FROM case_transactions WHERE case_id = @case_id ORDER BY trans_date ASC`);
         return result.recordset;
     },
