@@ -20,6 +20,8 @@ const CasesRepository = require('./cases.repository');
 const AppError = require('../../core/AppError');
 const logger = require('../../utils/logger');
 
+const { sendMail } = require('../../config/mail');
+
 const CasesService = {
 
     /**
@@ -397,8 +399,12 @@ const CasesService = {
      * (This was 'saveNotice' in the old caseController — renamed to avoid
      *  confusion with noticeController's saveNotice which uses legal_notices.)
      */
-    async saveNotice({ case_id, bank_name, pdf_base64, version_mode = 'none' }) {
-        const dir = path.join(__dirname, '../../../uploads/notices', String(case_id));
+    async saveNotice({ case_id, bank_name, pdf_base64, version_mode = 'none', notice_category = 'Others' }) {
+        // Sanitize category name
+        const safeCategory = notice_category.replace(/[^a-z0-9]/gi, '_');
+        
+        // Structure: uploads/notices/{case_id}/{notice_category}/
+        const dir = path.join(__dirname, '../../../uploads/notices', String(case_id), safeCategory);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
         // Clean bank name for filename
@@ -436,14 +442,14 @@ const CasesService = {
         const pool = await poolPromise;
         await CasesRepository.insertPdfNotice(pool, { 
             caseId: case_id, 
-            filePath: `/uploads/notices/${case_id}/${fileName}`, 
+            filePath: `/uploads/notices/${case_id}/${safeCategory}/${fileName}`, 
             fileName: fileName 
         });
 
-        return { success: true, fileName };
+        return { success: true, fileName, categoryPath: safeCategory };
     },
 
-    async getNodalRecipients(caseId) {
+    async getNodalRecipients(caseId, categoryName = '') {
         // 1. Read bank emails list
         const rootPath = path.resolve(__dirname, '..', '..', '..', '..');
         const bankListPath = path.join(rootPath, 'bankmaillist.json');
@@ -457,20 +463,34 @@ const CasesService = {
             }
         }
 
-        // 2. Scan case directory
-        const dir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString());
-        if (!fs.existsSync(dir)) return [];
+        // 2. Scan case category directory with smart fallback
+        const safeCategory = categoryName ? categoryName.replace(/[^a-z0-9]/gi, '_') : '';
+        let dir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString(), safeCategory);
+        
+        if (!fs.existsSync(dir) || fs.readdirSync(dir).filter(f => f.endsWith('.pdf')).length === 0) {
+            // Fallback 1: Check 'Others' directory
+            const othersDir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString(), 'Others');
+            if (fs.existsSync(othersDir) && fs.readdirSync(othersDir).filter(f => f.endsWith('.pdf')).length > 0) {
+                dir = othersDir;
+            } else {
+                // Fallback 2: Check root case directory
+                const rootDir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString());
+                if (fs.existsSync(rootDir) && fs.readdirSync(rootDir).filter(f => f.endsWith('.pdf')).length > 0) {
+                    dir = rootDir;
+                } else {
+                    return [];
+                }
+            }
+        }
 
         const files = fs.readdirSync(dir).filter(f => f.endsWith('.pdf'));
         const bankFiles = {};
         
         files.forEach(f => {
             // Pattern: {caseId}_{bankName}(_{version})?.pdf
-            // We want everything between first _ and either the last _ (if version exists) or .pdf
             const parts = f.replace('.pdf', '').split('_');
             if (parts.length >= 2) {
                 let bankNameParts = [];
-                // Check if last part is a number (version)
                 if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
                     bankNameParts = parts.slice(1, -1);
                 } else {
@@ -482,7 +502,7 @@ const CasesService = {
             }
         });
 
-        // 3. Match with emails (using bank_name key from user's latest JSON)
+        // 3. Match with emails
         return Object.keys(bankFiles).map(bankName => {
             const norm = bankName.toLowerCase().replace(/\s+/g, '');
             const match = bankEmails.find(b => {
@@ -494,7 +514,8 @@ const CasesService = {
                 bankname: bankName,
                 email: match ? match.bankmail : '',
                 files: bankFiles[bankName],
-                folderPath: path.resolve(dir)
+                folderPath: path.resolve(dir),
+                caseId: caseId
             };
         });
     },
@@ -503,33 +524,34 @@ const CasesService = {
         const results = [];
         for (const recipient of recipients) {
             try {
-                // Ensure absolute paths for attachments
-                const attachments = recipient.files.map(f => path.resolve(recipient.folderPath, f));
-                
-                // Using Enterprise API (v2) from ramail
+                if (!recipient.email) {
+                    throw new Error('No email address found for this entity');
+                }
+
                 const formattedBody = `
                     <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
                         <h3 style="color: #c75a57; border-bottom: 2px solid #c75a57; padding-bottom: 10px;">OFFICIAL INVESTIGATION NOTICE</h3>
                         <p>Respected Nodal Officer,</p>
-                        <p>Please find attached the legal notice under <b>Section 94/106 BNSS 2023</b> regarding investigative proceedings for <b>Case ID: ${recipient.folderPath.split(path.sep).pop()}</b>.</p>
+                        <p>Please find attached the legal notice under <b>Section 94/106 BNSS 2023</b> regarding investigative proceedings for <b>Case ID: ${recipient.caseId || recipient.folderPath.split(path.sep).pop()}</b>.</p>
                         <p>You are requested to take immediate action as per the instructions in the attached document and provide the required information at the earliest.</p>
                         <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
-                            <small><b>Entity Name:</b> {{bankName}}</small><br/>
+                            <small><b>Entity Name:</b> ${recipient.bankname}</small><br/>
                             <small><b>Subject:</b> ${subject.replace('{{bankName}}', recipient.bankname)}</small>
                         </div>
                         <p>Regards,<br/><b>Investigation Officer</b><br/>Cyber Crime Police Station, Jaipur</p>
                     </div>
                 `;
 
+                const caseIdVal = String(recipient.caseId || recipient.folderPath.split(path.sep).pop());
                 const payload = {
                     recipients: [recipient.email],
                     subject_template: subject,
                     body_template: formattedBody,
                     variables: {
                         bankName: recipient.bankname,
-                        caseId: recipient.folderPath.split(path.sep).pop()
+                        caseId: caseIdVal
                     },
-                    attachments,
+                    attachments: recipient.files.map(f => path.resolve(recipient.folderPath, f)),
                     is_draft: false
                 };
 
@@ -538,8 +560,14 @@ const CasesService = {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Enterprise API Failed (${response.status}): ${text}`);
+                }
+
                 const data = await response.json();
-                results.push({ bankname: recipient.bankname, email: recipient.email, success: response.ok, response: data });
+                results.push({ bankname: recipient.bankname, email: recipient.email, success: true, messageId: data.timeline_event || 'EWS-dispatched' });
             } catch (err) {
                 logger.error(`[CASES] Enterprise Mail Dispatch Failed for ${recipient.bankname}`, err);
                 results.push({ bankname: recipient.bankname, success: false, error: err.message });

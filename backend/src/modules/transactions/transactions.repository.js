@@ -38,6 +38,17 @@ const TransactionsRepository = {
     async bulkInsert(rows) {
         const pool = await poolPromise;
 
+        // Check if layer/ifsc_code/source_file columns exist (migration-safe)
+        const colCheck = await pool.request().query(`
+            SELECT name FROM sys.columns 
+            WHERE object_id = OBJECT_ID('case_transactions') 
+            AND name IN ('layer', 'ifsc_code', 'source_file')
+        `);
+        const existingCols = colCheck.recordset.map(r => r.name);
+        const hasLayer = existingCols.includes('layer');
+        const hasIfsc = existingCols.includes('ifsc_code');
+        const hasSourceFile = existingCols.includes('source_file');
+
         try {
             const table = new mssql.Table('case_transactions');
             table.create = false;
@@ -48,11 +59,16 @@ const TransactionsRepository = {
             table.columns.add('utr_no', mssql.NVarChar(100), { nullable: true });
             table.columns.add('trans_date', mssql.DateTime, { nullable: true });
             table.columns.add('platform', mssql.NVarChar(50), { nullable: true });
-            table.columns.add('layer', mssql.NVarChar(50), { nullable: true });
-            table.columns.add('source_file', mssql.NVarChar(255), { nullable: true });
+            if (hasLayer)       table.columns.add('layer', mssql.NVarChar(50), { nullable: true });
+            if (hasIfsc)        table.columns.add('ifsc_code', mssql.NVarChar(20), { nullable: true });
+            if (hasSourceFile)  table.columns.add('source_file', mssql.NVarChar(255), { nullable: true });
 
             for (const r of rows) {
-                table.rows.add(r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform, r.layer, r.source_file);
+                const rowData = [r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform];
+                if (hasLayer)       rowData.push(r.layer || null);
+                if (hasIfsc)        rowData.push(r.ifsc_code || null);
+                if (hasSourceFile)  rowData.push(r.source_file || null);
+                table.rows.add(...rowData);
             }
 
             await pool.request().bulk(table);
@@ -62,20 +78,35 @@ const TransactionsRepository = {
             let inserted = 0;
             for (const r of rows) {
                 try {
-                    await pool.request()
-                        .input('case_id', mssql.Int, r.case_id)
-                        .input('sender_acc', mssql.NVarChar, r.sender_acc)
-                        .input('receiver_acc', mssql.NVarChar, r.receiver_acc)
-                        .input('amount', mssql.Decimal(18, 2), r.amount)
-                        .input('utr_no', mssql.NVarChar, r.utr_no)
-                        .input('trans_date', mssql.DateTime, r.trans_date)
-                        .input('platform', mssql.NVarChar, r.platform)
-                        .input('layer', mssql.NVarChar, r.layer)
-                        .input('source_file', mssql.NVarChar, r.source_file)
-                        .query('INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, layer, source_file) VALUES (@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform, @layer, @source_file)');
+                    const req = pool.request()
+                        .input('case_id',      mssql.Int,            r.case_id)
+                        .input('sender_acc',   mssql.NVarChar,       r.sender_acc)
+                        .input('receiver_acc', mssql.NVarChar,       r.receiver_acc)
+                        .input('amount',       mssql.Decimal(18, 2), r.amount)
+                        .input('utr_no',       mssql.NVarChar,       r.utr_no)
+                        .input('trans_date',   mssql.DateTime,       r.trans_date)
+                        .input('platform',     mssql.NVarChar,       r.platform);
+
+                    let cols = 'case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform';
+                    let vals = '@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform';
+
+                    if (hasLayer) {
+                        req.input('layer', mssql.NVarChar, r.layer || null);
+                        cols += ', layer'; vals += ', @layer';
+                    }
+                    if (hasIfsc) {
+                        req.input('ifsc_code', mssql.NVarChar, r.ifsc_code || null);
+                        cols += ', ifsc_code'; vals += ', @ifsc_code';
+                    }
+                    if (hasSourceFile) {
+                        req.input('source_file', mssql.NVarChar, r.source_file || null);
+                        cols += ', source_file'; vals += ', @source_file';
+                    }
+
+                    await req.query(`INSERT INTO case_transactions (${cols}) VALUES (${vals})`);
                     inserted++;
                 } catch (rowErr) {
-                    // Skip bad rows, log handled in service
+                    // Skip bad rows
                 }
             }
             return { method: 'row-by-row', count: inserted };
@@ -99,8 +130,7 @@ const TransactionsRepository = {
         const pool = await poolPromise;
         const result = await pool.request()
             .input('case_id', mssql.Int, parseInt(caseId))
-            .query(`SELECT trans_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, layer, source_file
-                    FROM case_transactions WHERE case_id = @case_id ORDER BY trans_date ASC`);
+            .query('SELECT * FROM case_transactions WHERE case_id = @case_id ORDER BY trans_date ASC');
         return result.recordset;
     },
 

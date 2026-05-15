@@ -1,11 +1,11 @@
 import React from 'react';
 import { twMerge } from 'tailwind-merge';
 
-export const InputField = ({ label, icon: Icon, error, ...props }) => {
+export const InputField = ({ label, icon: Icon, error, labelClassName, className, ...props }) => {
     return (
         <div className="space-y-1.5 w-full">
             {label && (
-                <label className="text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                <label className={twMerge("text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1", labelClassName)}>
                     {label}
                 </label>
             )}
@@ -23,7 +23,8 @@ export const InputField = ({ label, icon: Icon, error, ...props }) => {
                         "focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/5",
                         "placeholder:text-slate-300 text-sm font-medium text-slate-900 font-body",
                         Icon && "pl-11",
-                        error && "border-rose-500/50 focus:border-rose-500 focus:ring-rose-500/5"
+                        error && "border-rose-500/50 focus:border-rose-500 focus:ring-rose-500/5",
+                        className
                     )}
                 />
             </div>
@@ -32,11 +33,11 @@ export const InputField = ({ label, icon: Icon, error, ...props }) => {
     );
 };
 
-export const SelectField = ({ label, icon: Icon, options = [], error, ...props }) => {
+export const SelectField = ({ label, icon: Icon, options = [], error, labelClassName, className, ...props }) => {
     return (
         <div className="space-y-1.5 w-full">
             {label && (
-                <label className="text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                <label className={twMerge("text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1", labelClassName)}>
                     {label}
                 </label>
             )}
@@ -54,7 +55,8 @@ export const SelectField = ({ label, icon: Icon, options = [], error, ...props }
                         "focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/5",
                         "text-sm font-medium text-slate-900",
                         Icon && "pl-11",
-                        error && "border-rose-500/50 focus:border-rose-500"
+                        error && "border-rose-500/50 focus:border-rose-500",
+                        className
                     )}
                 >
                     {props.placeholder && <option value="" disabled>{props.placeholder}</option>}

@@ -8,7 +8,8 @@ import {
     FileText, CheckCircle2, AlertTriangle, Send,
     Banknote, Search, CheckSquare, Square, Clock,
     FileSearch, Hash, User, Inbox, ChevronDown, ChevronUp, Filter, SlidersHorizontal, Upload,
-    Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ImageIcon, Printer, Download
+    Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ImageIcon, Printer, Download,
+    Mail, Check, Users, XCircle
 } from 'lucide-react';
 
 const NOTICE_CATEGORIES = [
@@ -31,7 +32,7 @@ const NOTICE_TYPES = {
 
 const STATUS_COLOR = { Generated: 'blue', Sent: 'emerald', Replied: 'violet', Draft: 'slate' };
 
-export default function NoticesEngine({ caseId, caseData, onClose }) {
+export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 'wizard' }) {
     const [step, setStep] = useState('category'); // category | type | entities | preview | generate | done
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [selectedType, setSelectedType] = useState(null);
@@ -51,7 +52,23 @@ export default function NoticesEngine({ caseId, caseData, onClose }) {
     const [importing, setImporting] = useState(false);
     const [generated, setGenerated] = useState([]);
     const [dispatchList, setDispatchList] = useState([]);
-    const [activeTab, setActiveTab] = useState('wizard'); // wizard | register
+    const [activeTab, setActiveTab] = useState(initialTab); // wizard | register
+
+    // Email Blast State
+    const [showEmailModal, setShowEmailModal] = useState(false);
+    const [fetchingRecipients, setFetchingRecipients] = useState(false);
+    const [emailRecipients, setEmailRecipients] = useState([]);
+    const [selectedRecipients, setSelectedRecipients] = useState(new Set());
+    const [missionReport, setMissionReport] = useState(null);
+    const [statusOverlay, setStatusOverlay] = useState({ show: false, type: 'success', title: '', message: '' });
+    const [isSendingEmails, setIsSendingEmails] = useState(false);
+    const [completionRemarks, setCompletionRemarks] = useState('');
+    const [genModal, setGenModal] = useState({ show: false, total: 0, generated: 0, remaining: 0, currentBank: '', isComplete: false });
+    const [mailModal, setMailModal] = useState({ show: false, total: 0, sent: 0, remaining: 0, currentBank: '', isComplete: false });
+
+    useEffect(() => {
+        if (initialTab) setActiveTab(initialTab);
+    }, [initialTab]);
 
     useEffect(() => {
         // Build bank groups from existing transactions
@@ -219,23 +236,278 @@ export default function NoticesEngine({ caseId, caseData, onClose }) {
     const handleGenerate = async () => {
         if (previewBanks.length === 0) { alert('No accounts selected'); return; }
         setGenerating(true);
+        
+        // Show modal immediately so user knows something is happening
+        setGenModal({
+            show: true,
+            total: previewBanks.length,
+            generated: 0,
+            remaining: previewBanks.length,
+            currentBank: 'Saving notices to database...',
+            isComplete: false
+        });
+
         try {
+            // 1. Generate notices in database to get dispatch numbers
             const res = await api.post('/notices/generate', {
                 case_id: caseId,
                 notice_category: selectedCategory,
                 notice_type_code: selectedType,
                 banks: previewBanks
             });
+            
             if (res.data.success) {
-                setGenerated(res.data.data);
+                const newlyGenerated = res.data.data;
+                setGenerated(newlyGenerated);
+
+                // 2. Convert all generated HTML notices into PDF and upload to uploads/notices/{case_id}/
+                const { default: jsPDF } = await import('jspdf');
+                const { default: html2canvas } = await import('html2canvas');
+
+                let completedCount = 0;
+                const totalCount = newlyGenerated.length;
+                
+                // Update modal with actual counts
+                setGenModal(prev => ({
+                    ...prev,
+                    total: totalCount,
+                    remaining: totalCount,
+                    currentBank: newlyGenerated[0]?.bank_name || 'Initializing PDF Engine...'
+                }));
+
+                for (const g of newlyGenerated) {
+                    // Update current bank processing state
+                    setGenModal(prev => ({ ...prev, currentBank: g.bank_name }));
+
+                    // V.V. IMP: Yield the main thread for 150ms so React can actually render the overlay 
+                    // and browser can run Garbage Collection before the heavy canvas operation!
+                    await new Promise(r => setTimeout(r, 150));
+
+                    const element = document.createElement('div');
+                    element.innerHTML = `<div style="box-sizing: border-box; padding: 20mm; width: 210mm; min-height: 297mm; background: white; font-family: sans-serif; color: black; line-height: 1.6; font-size: 14px;">${g.notice_content}</div>`;
+                    element.style.position = 'absolute';
+                    element.style.left = '-9999px';
+                    element.style.top = '-9999px';
+                    document.body.appendChild(element);
+
+                    try {
+                        // Use scale: 1.5 to save massive memory and prevent browser from crashing on 100+ notices
+                        const canvas = await html2canvas(element, { scale: 1.5, logging: false, useCORS: true });
+                        // Use JPEG instead of PNG for 5x smaller memory footprint
+                        const imgData = canvas.toDataURL('image/jpeg', 0.8); 
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pageHeight = pdf.internal.pageSize.getHeight();
+                        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+                        
+                        let heightLeft = imgHeight;
+                        let position = 0;
+
+                        // Add first page
+                        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                        heightLeft -= pageHeight;
+
+                        // Add subsequent pages if the content is longer than one A4 page
+                        while (heightLeft > 0) {
+                            position -= pageHeight;
+                            pdf.addPage();
+                            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                            heightLeft -= pageHeight;
+                        }
+                        
+                        const pdfBlob = pdf.output('blob');
+                        const pdfBase64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(pdfBlob);
+                        });
+                        
+                        await api.post('/cases/save-notice', { 
+                            case_id: caseId, 
+                            bank_name: g.bank_name, 
+                            pdf_base64: pdfBase64,
+                            version_mode: 'increment',
+                            notice_category: selectedCategory
+                        });
+                    } catch (canvasErr) {
+                        console.error('Failed to generate PDF for: ', g.bank_name, canvasErr);
+                    } finally {
+                        // ALWAYS remove element to prevent DOM memory leak
+                        document.body.removeChild(element);
+                    }
+                    
+                    completedCount++;
+                    
+                    setGenModal(prev => ({
+                        ...prev,
+                        generated: completedCount,
+                        remaining: totalCount - completedCount
+                    }));
+                }
+
+                setGenModal(prev => ({ 
+                    ...prev, 
+                    isComplete: true, 
+                    currentBank: 'All Notices Generated Successfully' 
+                }));
+                
                 await fetchDispatch();
                 setStep('done');
             }
         } catch (err) {
-            alert(err.response?.data?.message || 'Generation failed');
+            setGenModal(prev => ({ ...prev, show: false }));
+            setStatusOverlay({ show: true, type: 'error', title: 'Generation Failed', message: err.response?.data?.message || err.message });
+            setTimeout(() => setStatusOverlay({ show: false, type: '', title: '', message: '' }), 3000);
         } finally {
             setGenerating(false);
         }
+    };
+
+    const handleOpenEmailModal = async () => {
+        try {
+            setFetchingRecipients(true);
+            setMissionReport(null);
+            setStatusOverlay({ show: true, type: 'success', title: 'Initializing Mission', message: 'Fetching secure Nodal Officer endpoints...' });
+
+            const res = await api.get(`/cases/${caseId}/nodal-recipients?category=${selectedCategory}`);
+            if (res.data.success) {
+                setEmailRecipients(res.data.data);
+                const valid = res.data.data.filter(r => r.email).map(r => r.bankname);
+                setSelectedRecipients(new Set(valid));
+                setShowEmailModal(true);
+                setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
+            }
+        } catch (error) {
+            console.error('Error fetching nodal endpoints:', error);
+            setStatusOverlay({ show: true, type: 'error', title: 'Network Failure', message: 'Failed to retrieve Nodal Officer registry.' });
+            setTimeout(() => setStatusOverlay({ show: false, type: '', title: '', message: '' }), 3000);
+        } finally {
+            setFetchingRecipients(false);
+        }
+    };
+
+    const handleSendEmails = async () => {
+        const toSend = emailRecipients.filter(r => selectedRecipients.has(r.bankname));
+        if (toSend.length === 0) {
+            alert('Please select at least one recipient');
+            return;
+        }
+
+        setIsSendingEmails(true);
+        const totalCount = toSend.length;
+        let completedCount = 0;
+        let succeeded = [];
+        let failed = [];
+
+        setMailModal({
+            show: true,
+            total: totalCount,
+            sent: 0,
+            remaining: totalCount,
+            currentBank: toSend[0]?.bankname || 'Initializing Dispatch...',
+            isComplete: false
+        });
+
+        try {
+            const now = new Date();
+            const year = now.getFullYear();
+
+            for (const recipient of toSend) {
+                setMailModal(prev => ({ ...prev, currentBank: recipient.bankname }));
+
+                try {
+                    const payload = {
+                        recipients: [recipient],
+                        subject: 'NOTICE UNDER SECTION 94/106 BNSS 2023 - ' + recipient.bankname + ' [CASE ID: ' + caseId + ']',
+                        body: `Respected Nodal Officer,\n\nPlease find attached the legal notice under section 94/106 BNSS 2023 regarding Case ID: ${caseId}.\n\nYou are requested to take immediate action as per the instructions in the attached document.\n\nRegards,\nInvestigation Officer\nCyber Crime Police Station`
+                    };
+
+                    const res = await api.post(`/cases/${caseId}/send-nodal-emails`, payload);
+                    
+                    if (res.data.success && res.data.data[0]?.success) {
+                        const item = res.data.data[0];
+                        succeeded.push(item);
+                        
+                        const g = generated.find(gn => gn.bank_name === item.bankname);
+                        const ref = g ? g.dispatch_no : `CYB/${year}/${caseId}/N/A`;
+                        const individualNote = `[NOTICE DISPATCHED] Bank: ${item.bankname} | Ref: ${ref} | Status: Sent to ${item.email || 'Nodal Registry'}`;
+                        try {
+                            await api.post(`/cases/${caseId}/notes`, { note_text: individualNote });
+                        } catch (e) {}
+                    } else {
+                        const item = res.data.data?.[0] || { bankname: recipient.bankname, success: false, error: 'Dispatch Failed' };
+                        failed.push(item);
+                    }
+                } catch (err) {
+                    failed.push({ bankname: recipient.bankname, success: false, error: err.message });
+                }
+
+                completedCount++;
+                setMailModal(prev => ({
+                    ...prev,
+                    sent: completedCount,
+                    remaining: totalCount - completedCount
+                }));
+            }
+
+            if (failed.length > 0) {
+                const failNote = `[MAIL BLAST FAILURE ALERT] - ${new Date().toLocaleString()}\nFailed Targets: ${failed.map(r => `${r.bankname} (Error: ${r.error || 'Connection Refused'})`).join(', ')}`;
+                try {
+                    await api.post(`/cases/${caseId}/notes`, { note_text: failNote });
+                } catch (e) {}
+            }
+
+            setMissionReport({
+                succeeded: succeeded.length,
+                failed: failed.length,
+                details: [...succeeded, ...failed].map(item => {
+                    const g = generated.find(gn => gn.bank_name === item.bankname);
+                    return {
+                        ...item,
+                        accounts: item.success ? 'Secure Dispatch' : 'Failed Dispatch',
+                        ref: g ? g.dispatch_no : `CYB/${year}/${caseId}/N/A`
+                    };
+                }),
+                timestamp: new Date().toLocaleTimeString()
+            });
+
+            setMailModal(prev => ({
+                ...prev,
+                isComplete: true,
+                currentBank: 'All Dispatches Completed Successfully'
+            }));
+
+        } catch (err) {
+            setMailModal(prev => ({ ...prev, show: false }));
+            setStatusOverlay({ show: true, type: 'error', title: 'Mission Aborted', message: 'Batch mailing failed: ' + err.message });
+        } finally {
+            setIsSendingEmails(false);
+        }
+    };
+
+    const toggleRecipient = (bankName) => {
+        const next = new Set(selectedRecipients);
+        next.has(bankName) ? next.delete(bankName) : next.add(bankName);
+        setSelectedRecipients(next);
+    };
+
+    const toggleSelectAll = () => {
+        const validRecipients = emailRecipients.filter(r => r.email);
+        if (selectedRecipients.size === validRecipients.length) {
+            setSelectedRecipients(new Set());
+        } else {
+            setSelectedRecipients(new Set(validRecipients.map(r => r.bankname)));
+        }
+    };
+
+    const handleCompleteMission = async () => {
+        if (completionRemarks.trim()) {
+            try {
+                await api.post(`/cases/${caseId}/notes`, { note_text: `[OPERATION FINALIZED] ${completionRemarks}` });
+            } catch (err) {}
+        }
+        onClose();
     };
 
     const totalSelected = filteredGroups
@@ -673,66 +945,52 @@ export default function NoticesEngine({ caseId, caseData, onClose }) {
                             )}
 
                             {activeTab === 'wizard' && step === 'done' && (
-                                <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-8 space-y-6">
-                                    <div className="text-center py-8">
-                                        <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100">
-                                            <CheckCircle2 className="text-emerald-600" size={40} />
-                                        </div>
-                                        <h3 className="text-2xl font-black text-slate-900 uppercase mb-2">Notices Generated</h3>
-                                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{generated.length} dispatch record(s) sealed in dossier</p>
+                                <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center py-16 px-8 max-w-xl mx-auto space-y-8">
+                                    <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.2)]">
+                                        <Send className="text-emerald-500 transform translate-x-1 -translate-y-1" size={48} />
                                     </div>
-                                    <div className="space-y-3">
-                                        {generated.map(g => (
-                                            <div key={g.dispatch_no} 
-                                                 className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-2xl cursor-pointer hover:bg-emerald-100 transition-colors"
-                                                 onClick={() => setSelectedNoticeHtml(g.notice_content)}>
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase">Dispatch No.</p>
-                                                    <p className="font-mono font-black text-blue-700 text-sm">{g.dispatch_no}</p>
-                                                </div>
-                                                <div className="text-right flex items-center gap-4">
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-slate-400 uppercase">Bank</p>
-                                                        <p className="text-sm font-bold text-slate-900">{g.bank_name}</p>
-                                                    </div>
-                                                    <Button variant="ghost" className="h-10 w-10 p-0 rounded-full bg-white border border-emerald-200" onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const printWindow = window.open('', '_blank');
-                                                        printWindow.document.write(`<html><head><title>${g.dispatch_no}</title></head><body style="margin:0;padding:20mm;">` + g.notice_content + '</body></html>');
-                                                        printWindow.document.close();
-                                                        setTimeout(() => { printWindow.print(); }, 500);
-                                                    }}>
-                                                        <Printer size={16} className="text-emerald-600" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                    <div className="text-center space-y-4">
+                                        <h2 className="text-4xl font-black italic tracking-tighter">
+                                            <span className="text-slate-900">OPERATION </span>
+                                            <span className="text-emerald-500">FINALIZED</span>
+                                        </h2>
+                                        <p className="text-sm font-bold text-slate-500 italic leading-relaxed">
+                                            All forensic warrants have been verified and sealed in the evidence repository. The dossier is ready for digital dispatch or physical printing.
+                                        </p>
                                     </div>
-                                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex gap-4">
-                                        <AlertTriangle className="text-blue-500 flex-shrink-0 mt-0.5" size={18} />
-                                        <div>
-                                            <p className="text-xs font-black text-blue-700 uppercase mb-1">Check Dispatch Register</p>
-                                            <p className="text-[11px] text-slate-600">The notices have been successfully generated and saved to the Dispatch Register. You can view or print them from there.</p>
-                                        </div>
+                                    
+                                    <div className="w-full space-y-2 text-left">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Completion Remarks / Origin Log</label>
+                                        <textarea
+                                            value={completionRemarks}
+                                            onChange={e => setCompletionRemarks(e.target.value)}
+                                            placeholder="Enter operational log remarks here..."
+                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all min-h-[120px] resize-none"
+                                        />
                                     </div>
-                                    <div className="flex gap-3 justify-end">
-                                        <Button variant="outline" className="border-slate-200 text-slate-700" onClick={() => {
-                                            const printWindow = window.open('', '_blank');
-                                            printWindow.document.write('<html><head><title>Bulk Print Notices</title></head><body style="margin:0;padding:0;">');
-                                            generated.forEach((g, index) => {
-                                                printWindow.document.write(`<div style="padding:20mm; page-break-after: always;">${g.notice_content}</div>`);
-                                            });
-                                            printWindow.document.write('</body></html>');
-                                            printWindow.document.close();
-                                            setTimeout(() => { printWindow.print(); }, 500);
-                                        }}>
-                                            <Printer size={16} className="mr-2" /> Bulk Print {generated.length} Notices
+
+                                    <div className="flex items-center gap-4 w-full">
+                                        <Button 
+                                            variant="outline" 
+                                            icon={Mail} 
+                                            className="flex-1 py-4 border-slate-200 text-slate-700 hover:bg-slate-50 tracking-widest text-[11px] font-black h-auto"
+                                            onClick={handleOpenEmailModal}
+                                        >
+                                            NODAL EMAIL BLAST
                                         </Button>
-                                        <Button variant="outline" className="border-blue-200 text-blue-700 bg-blue-50" icon={FileText}
-                                            onClick={() => setActiveTab('register')}>
-                                            View Dispatch Register
+                                        <Button 
+                                            variant="primary" 
+                                            icon={CheckCircle2} 
+                                            className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-600/20 tracking-widest text-[11px] font-black border-none h-auto"
+                                            onClick={handleCompleteMission}
+                                        >
+                                            COMPLETE MISSION
                                         </Button>
                                     </div>
+
+                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] italic pt-8">
+                                        V2.4 SECURE_NODE ENCRYPTED SIGNAL
+                                    </p>
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -789,6 +1047,384 @@ export default function NoticesEngine({ caseId, caseData, onClose }) {
                     </motion.div>
                 )}
             </AnimatePresence>
+            {/* Email Blast Modal */}
+            <AnimatePresence>
+                {showEmailModal && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            onClick={() => setShowEmailModal(false)} 
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+                        />
+                        <motion.div 
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+                            animate={{ scale: 1, opacity: 1, y: 0 }} 
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }} 
+                            className="bg-white/95 backdrop-blur-xl w-full max-w-3xl max-h-[85vh] rounded-[32px] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] relative z-10 flex flex-col overflow-hidden border border-white" 
+                        >
+                            {/* Tactical Header */}
+                            <div className="p-8 bg-gradient-to-r from-slate-900 to-slate-800 flex justify-between items-center flex-shrink-0 relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-10 pointer-events-none">
+                                    <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+                                </div>
+                                <div className="flex items-center gap-5 relative z-10">
+                                    <div className="p-4 bg-blue-500 rounded-2xl text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]">
+                                        <Send size={28} className="animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black text-white uppercase tracking-tight italic">Nodal <span className="text-blue-400">Blast Protocol</span></h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Target Identification & Verification Active</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowEmailModal(false)} className="p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-2xl transition-all relative z-10">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                            <div className="p-10 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30">
+                                {missionReport ? (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
+                                        <div className="bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-xl shadow-slate-200/50 text-center relative overflow-hidden">
+                                            <div className={`absolute top-0 left-0 w-full h-2 ${missionReport.failed === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                                            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 ${missionReport.failed === 0 ? 'bg-emerald-50 text-emerald-500' : 'bg-amber-50 text-amber-500'}`}>
+                                                {missionReport.failed === 0 ? <CheckCircle2 size={56} /> : <AlertTriangle size={56} />}
+                                            </div>
+                                            <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter">Forensic Mission <span className={missionReport.failed === 0 ? 'text-emerald-600' : 'text-amber-600'}>Completed</span></h3>
+                                            <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.3em] mt-2">Dossier Intelligence Dispatch Log // {missionReport.timestamp}</p>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                                <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Succeeded</p>
+                                                    <p className="text-4xl font-black text-emerald-600 mt-1">{missionReport.succeeded}</p>
+                                                </div>
+                                                <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Failures</p>
+                                                    <p className={`text-4xl font-black mt-1 ${missionReport.failed > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{missionReport.failed}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-4">Detailed Dispatch Dossier</h4>
+                                            {missionReport.details.map((item, i) => (
+                                                <div key={i} className="bg-white p-6 rounded-[32px] border border-slate-100 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+                                                    <div className="flex items-center gap-5">
+                                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg ${item.success ? 'bg-emerald-500 shadow-emerald-100' : 'bg-rose-500 shadow-rose-100'}`}>
+                                                            {item.bankname[0]}
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-3">
+                                                                <p className="text-base font-black text-slate-900">{item.bankname}</p>
+                                                                <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${item.success ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                    {item.success ? 'SECURE_SENT' : 'DISPATCH_ERROR'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">{item.ref}</p>
+                                                            <p className="text-[11px] text-blue-600 font-black uppercase mt-0.5">{item.email || 'Nodal Endpoint'}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Status</p>
+                                                        <p className="text-sm font-black text-slate-900 mt-1">{item.accounts}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : emailRecipients.length === 0 ? (
+                                    <div className="text-center py-20 bg-white rounded-[32px] border-2 border-dashed border-slate-200">
+                                        <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                            <AlertTriangle className="text-amber-500" size={40} />
+                                        </div>
+                                        <h4 className="text-lg font-black text-slate-900 uppercase italic">No Field Artifacts Detected</h4>
+                                        <p className="text-sm text-slate-500 mt-2 max-w-xs mx-auto">Please ensure notices were successfully generated before dispatch.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center justify-between p-1 bg-white border border-slate-200 rounded-3xl shadow-sm sticky top-0 z-10">
+                                            <div className="flex items-center gap-4 px-6 py-4 cursor-pointer group flex-1" onClick={toggleSelectAll}>
+                                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedRecipients.size === emailRecipients.filter(r => r.email).length ? 'bg-blue-600 border-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                                                    {selectedRecipients.size === emailRecipients.filter(r => r.email).length && <Check size={14} className="text-white" strokeWidth={4} />}
+                                                </div>
+                                                <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Select All Combatants</span>
+                                            </div>
+                                            <div className="px-6 py-4 bg-slate-50 rounded-2xl flex items-center gap-3">
+                                                <div className="text-right">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Selected</p>
+                                                    <p className="text-xl font-black text-blue-600 leading-none mt-1">{selectedRecipients.size}</p>
+                                                </div>
+                                                <Users size={24} className="text-blue-600 opacity-20" />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {emailRecipients.map((rec, idx) => {
+                                                const isSelected = selectedRecipients.has(rec.bankname);
+                                                const hasEmail = !!rec.email;
+                                                return (
+                                                    <motion.div 
+                                                        whileHover={{ x: 5 }}
+                                                        key={idx} 
+                                                        className={`p-6 border-2 rounded-[32px] flex items-center justify-between transition-all duration-300 group ${isSelected ? 'border-blue-500 bg-blue-50/30 shadow-lg shadow-blue-50' : 'border-white bg-white shadow-sm hover:border-slate-200'}`} 
+                                                        onClick={() => toggleRecipient(rec.bankname)}
+                                                    >
+                                                        <div className="flex items-center gap-6">
+                                                            <div className={`w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 shadow-md shadow-blue-200' : 'border-slate-200'}`}>
+                                                                {isSelected && <Check size={16} className="text-white" strokeWidth={4} />}
+                                                            </div>
+                                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl transition-all shadow-sm ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                                {rec.bankname[0]}
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-base font-black text-slate-900 tracking-tight">{rec.bankname}</h4>
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <div className={`w-2 h-2 rounded-full ${hasEmail ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-rose-500'}`}></div>
+                                                                    <p className={`text-[11px] font-bold tracking-tight uppercase ${hasEmail ? 'text-blue-600' : 'text-rose-500'}`}>{rec.email || 'Registry Link Broken'}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-2">
+                                                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                                                {rec.files.length} Notice{rec.files.length !== 1 ? 's' : ''}
+                                                            </span>
+                                                            <FileText size={16} className={isSelected ? 'text-blue-600 opacity-40' : 'text-slate-300'} />
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            <div className="p-8 bg-white border-t border-slate-100 flex gap-5 flex-shrink-0">
+                                {missionReport ? (
+                                    <button 
+                                        onClick={() => setShowEmailModal(false)}
+                                        className="flex-1 py-6 rounded-[32px] bg-slate-900 text-white flex items-center justify-center gap-4 text-sm font-black uppercase tracking-[0.4em] hover:bg-black transition-all shadow-2xl shadow-slate-300 hover:scale-[1.02] active:scale-95"
+                                    >
+                                        <XCircle size={20} />
+                                        DISMISS MISSION REPORT
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button 
+                                            onClick={() => setShowEmailModal(false)}
+                                            className="px-8 py-5 rounded-[24px] text-sm font-black text-slate-500 uppercase tracking-widest hover:bg-slate-100 transition-all border-2 border-transparent"
+                                        >
+                                            Cancel Mission
+                                        </button>
+                                        <button 
+                                            onClick={handleSendEmails}
+                                            disabled={isSendingEmails || selectedRecipients.size === 0}
+                                            className={`flex-1 py-5 rounded-[24px] flex items-center justify-center gap-3 text-sm font-black uppercase tracking-[0.2em] transition-all shadow-2xl ${isSendingEmails || selectedRecipients.size === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white shadow-blue-200 hover:scale-[1.02] active:scale-95'}`}
+                                        >
+                                            {isSendingEmails ? (
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                    <span>Infiltrating Networks...</span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Send size={18} />
+                                                    <span>Execute Blast Mission</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Generation Progress Modal */}
+            <AnimatePresence>
+                {genModal.show && (
+                    <div className="fixed inset-0 z-[400] flex items-center justify-center p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            className="absolute inset-0 bg-slate-900/90 backdrop-blur-md" 
+                        />
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                            animate={{ scale: 1, opacity: 1, y: 0 }} 
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                            className="bg-white w-full max-w-lg rounded-[40px] p-10 relative z-10 shadow-2xl overflow-hidden border-4 border-slate-100"
+                        >
+                            <div className="text-center mb-8">
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl transition-all duration-500 ${genModal.isComplete ? 'bg-emerald-500 shadow-emerald-200 text-white' : 'bg-blue-600 shadow-blue-200 text-white'}`}>
+                                    {genModal.isComplete ? <CheckCircle2 size={40} /> : <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>}
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">
+                                    {genModal.isComplete ? 'Generation Complete' : 'Archiving Artifacts'}
+                                </h3>
+                                <p className="text-slate-400 font-bold mt-2 text-xs uppercase tracking-widest truncate px-4">
+                                    {genModal.currentBank}
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100 flex items-center justify-between">
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Notices</span>
+                                    <span className="text-xl font-black text-slate-900">{genModal.total}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-blue-50 p-6 rounded-[24px] border border-blue-100 text-center">
+                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-1">Generated</span>
+                                        <span className="text-3xl font-black text-blue-600">{genModal.generated}</span>
+                                    </div>
+                                    <div className="bg-amber-50 p-6 rounded-[24px] border border-amber-100 text-center">
+                                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block mb-1">Remaining</span>
+                                        <span className="text-3xl font-black text-amber-600">{genModal.remaining}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8">
+                                <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-8">
+                                    <div 
+                                        className={`h-full transition-all duration-300 ease-out ${genModal.isComplete ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                        style={{ width: `${(genModal.generated / Math.max(1, genModal.total)) * 100}%` }}
+                                    ></div>
+                                </div>
+
+                                {genModal.isComplete ? (
+                                    <button 
+                                        onClick={() => setGenModal({ ...genModal, show: false })}
+                                        className="w-full py-5 bg-emerald-500 text-white rounded-[24px] text-sm font-black uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200"
+                                    >
+                                        Complete
+                                    </button>
+                                ) : (
+                                    <button 
+                                        disabled
+                                        className="w-full py-5 bg-slate-100 text-slate-400 rounded-[24px] text-sm font-black uppercase tracking-[0.2em] cursor-not-allowed flex items-center justify-center gap-3"
+                                    >
+                                        <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin"></div>
+                                        Please Wait...
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Email Dispatch Progress Modal */}
+            <AnimatePresence>
+                {mailModal.show && (
+                    <div className="fixed inset-0 z-[500] flex items-center justify-center p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            className="absolute inset-0 bg-slate-900/90 backdrop-blur-md" 
+                        />
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                            animate={{ scale: 1, opacity: 1, y: 0 }} 
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                            className="bg-white w-full max-w-lg rounded-[40px] p-10 relative z-10 shadow-2xl overflow-hidden border-4 border-slate-100"
+                        >
+                            <div className="text-center mb-8">
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl transition-all duration-500 ${mailModal.isComplete ? 'bg-emerald-500 shadow-emerald-200 text-white' : 'bg-blue-600 shadow-blue-200 text-white'}`}>
+                                    {mailModal.isComplete ? <CheckCircle2 size={40} /> : <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>}
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">
+                                    {mailModal.isComplete ? 'Blast Complete' : 'Dispatching Notices'}
+                                </h3>
+                                <p className="text-slate-400 font-bold mt-2 text-xs uppercase tracking-widest truncate px-4">
+                                    {mailModal.currentBank}
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100 flex items-center justify-between">
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Notices</span>
+                                    <span className="text-xl font-black text-slate-900">{mailModal.total}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-blue-50 p-6 rounded-[24px] border border-blue-100 text-center">
+                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-1">Send Mail</span>
+                                        <span className="text-3xl font-black text-blue-600">{mailModal.sent}</span>
+                                    </div>
+                                    <div className="bg-amber-50 p-6 rounded-[24px] border border-amber-100 text-center">
+                                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block mb-1">Remaining</span>
+                                        <span className="text-3xl font-black text-amber-600">{mailModal.remaining}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8">
+                                <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-8">
+                                    <div 
+                                        className={`h-full transition-all duration-300 ease-out ${mailModal.isComplete ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                        style={{ width: `${(mailModal.sent / Math.max(1, mailModal.total)) * 100}%` }}
+                                    ></div>
+                                </div>
+
+                                {mailModal.isComplete ? (
+                                    <button 
+                                        onClick={() => { setMailModal({ ...mailModal, show: false }); setShowEmailModal(false); }}
+                                        className="w-full py-5 bg-emerald-500 text-white rounded-[24px] text-sm font-black uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200"
+                                    >
+                                        Complete
+                                    </button>
+                                ) : (
+                                    <button 
+                                        disabled
+                                        className="w-full py-5 bg-slate-100 text-slate-400 rounded-[24px] text-sm font-black uppercase tracking-[0.2em] cursor-not-allowed flex items-center justify-center gap-3"
+                                    >
+                                        <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin"></div>
+                                        Please Wait...
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Status Overlay */}
+            <AnimatePresence>
+                {statusOverlay.show && (
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            onClick={() => setStatusOverlay({ ...statusOverlay, show: false })} 
+                            className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" 
+                        />
+                        <motion.div 
+                            initial={{ scale: 0.8, opacity: 0, rotate: -5 }} 
+                            animate={{ scale: 1, opacity: 1, rotate: 0 }} 
+                            exit={{ scale: 0.8, opacity: 0 }} 
+                            className="bg-white w-full max-w-sm rounded-[40px] p-10 text-center relative z-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.4)] overflow-hidden"
+                        >
+                            <div className={`w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-2xl ${statusOverlay.type === 'success' ? 'bg-emerald-500 shadow-emerald-200 text-white' : statusOverlay.type === 'error' ? 'bg-rose-500 shadow-rose-200 text-white' : 'bg-amber-500 shadow-amber-200 text-white'}`}>
+                                {statusOverlay.type === 'success' ? <CheckCircle2 size={48} /> : statusOverlay.type === 'error' ? <XCircle size={48} /> : <AlertTriangle size={48} />}
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">{statusOverlay.title}</h3>
+                            <p className="text-slate-500 font-bold mt-4 text-sm leading-relaxed">{statusOverlay.message}</p>
+                            <button 
+                                onClick={() => setStatusOverlay({ ...statusOverlay, show: false })}
+                                className="w-full mt-10 py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-xl"
+                            >
+                                Dismiss Intel
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 }

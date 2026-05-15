@@ -21,6 +21,13 @@ const ACCOUNT_COLS = [
     'Account No./ (Wallet/PG/PA) Id', 'Account No./(Wallet /PG/PA) Id',
     'Account No./(Wallet/PG/PA) Id', 'Wallet ID', 'Target Account', 'Beneficiary Account',
     'Dest Account', 'ACCOUNT NO', 'Account No./ (Wallet /PG/PA)  Id',
+    'Payee Account', 'Credit Account', 'receiver_account', 'account_number_2',
+];
+
+const SENDER_COLS = [
+    'Account', 'Sender Account', 'Source Account', 'From Account', 'Sender Acc', 'From Acc',
+    'Debit Account', 'Sender Account No', 'sender_account', 'SENDER ACCOUNT',
+    'SENDER ACC', 'Payer Account', 'Payer Acc', 'account_number',
 ];
 
 const UTR_COLS = [
@@ -33,6 +40,7 @@ const UTR_COLS = [
 const AMOUNT_COLS = ['Transaction Amount', 'Disputed Amount', 'Amount Rs.', 'Amount', 'TRANSACTION AMOUNT'];
 const DATE_COLS = ['Transaction Date', 'Date', 'TRANSACTION DATE', 'Date of Action'];
 const BANK_COLS = ['Bank/FIs', 'Bank/Bc', 'Bank/ Bc', 'Bank Name', 'Bank / FIs', 'Target Bank', 'Beneficiary Bank', 'Bank', 'BANK NAME'];
+const LAYER_COLS = ['Layer', 'layer', 'LAYER', 'Layer No', 'Layer Number'];
 
 const getCol = (row, cols) => {
     for (const c of cols) { if (row[c] !== undefined) return row[c]; }
@@ -51,6 +59,21 @@ const TransactionsService = {
         if (!file) throw new AppError('No file uploaded', 400);
         if (!caseId) throw new AppError('case_id is required', 400);
 
+        // ── Auto-Migration: ensure layer & ifsc_code columns exist ──────────
+        try {
+            const pool = await TransactionsRepository.getPool();
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('case_transactions') AND name = 'layer')
+                    ALTER TABLE case_transactions ADD layer NVARCHAR(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('case_transactions') AND name = 'ifsc_code')
+                    ALTER TABLE case_transactions ADD ifsc_code NVARCHAR(20) NULL;
+            `);
+            logger.info('[EXCEL] Auto-migration: layer & ifsc_code columns ensured');
+        } catch (migErr) {
+            logger.warn('[EXCEL] Auto-migration skipped:', migErr.message);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // 1. Setup target directory
         const caseExcelDir = path.join('uploads', 'excels', caseId.toString());
         if (!fs.existsSync(caseExcelDir)) fs.mkdirSync(caseExcelDir, { recursive: true });
@@ -58,19 +81,34 @@ const TransactionsService = {
         const targetPath = path.join(caseExcelDir, file.filename);
         const dbFilePath = targetPath.replace(/\\/g, '/');
 
-        // 2. Parse workbook
-        const workbook = xlsx.readFile(file.path);
-        const targetSheetNames = ['Money Transfer to', 'Money Transfer To', 'money transfer to', 'Sheet1'];
+        // 2. Parse workbook — use buffer to avoid file lock issues on Windows
+        const fileBuffer = fs.readFileSync(file.path);
+        const workbook = xlsx.read(fileBuffer, { type: 'buffer', cellDates: true });
+
+        // Smart sheet detection: preferred names first, then pick sheet with most data
+        const preferredNames = ['money transfer to', 'sheet1', 'transactions', 'data', 'report'];
         let sheetName = workbook.SheetNames[0];
-        for (const target of targetSheetNames) {
+        // Try preferred name match
+        for (const target of preferredNames) {
             const found = workbook.SheetNames.find((s) => s.trim().toLowerCase() === target.toLowerCase());
             if (found) { sheetName = found; break; }
         }
-        logger.debug(`[EXCEL] Sheets: [${workbook.SheetNames.join(', ')}] → Using: "${sheetName}"`);
+        // If still default (first sheet), pick sheet with most rows
+        if (sheetName === workbook.SheetNames[0] && workbook.SheetNames.length > 1) {
+            let maxRows = 0;
+            for (const sn of workbook.SheetNames) {
+                const ref = workbook.Sheets[sn]['!ref'];
+                if (ref) {
+                    const range = xlsx.utils.decode_range(ref);
+                    if (range.e.r > maxRows) { maxRows = range.e.r; sheetName = sn; }
+                }
+            }
+        }
+        logger.info(`[EXCEL] Sheets: [${workbook.SheetNames.join(', ')}] → Using: "${sheetName}"`);
 
-        const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        if (rawData.length === 0) throw new AppError('Excel sheet is empty', 400);
-        logger.debug(`[EXCEL] Headers: ${Object.keys(rawData[0]).join(', ')}`);
+        const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+        if (rawData.length === 0) throw new AppError(`Excel sheet "${sheetName}" is empty. Available sheets: ${workbook.SheetNames.join(', ')}`, 400);
+        logger.info(`[EXCEL] Headers: ${Object.keys(rawData[0]).join(', ')}`);
 
         const pool = await TransactionsRepository.getPool();
         if (!pool) throw new AppError('Database not connected', 503);
@@ -91,10 +129,11 @@ const TransactionsService = {
         //     logger.warn('[EXCEL] Clear old transactions failed:', delErr.message);
         // }
 
-        // 5. Parse rows
+        // 5. Parse rows — with Layer-aware sender inference
         const bankGroups = {};
         const parsedRows = [];
         let skippedRows = 0;
+        const lastAccAtLayer = {}; // layerNum -> last receiver_acc seen at that layer
 
         for (const row of rawData) {
             try {
@@ -106,33 +145,75 @@ const TransactionsService = {
                 const finalReceiverAcc = (receiver_acc || 'N/A').toString().trim().substring(0, 50);
                 const finalUtrNo = (utr_no || 'N/A').toString().trim().substring(0, 100);
 
+                // ── Layer detection ──────────────────────────────────────────
+                let layerRaw = getCol(row, LAYER_COLS);
+                let numericLayer = null;
+                if (layerRaw !== undefined && layerRaw !== null && layerRaw !== '') {
+                    const match = layerRaw.toString().trim().match(/\d+/);
+                    if (match) numericLayer = parseInt(match[0], 10);
+                }
+
+                // ── Sender account inference ─────────────────────────────────
+                let sender_acc = getCol(row, SENDER_COLS);
+                if (sender_acc) {
+                    sender_acc = sender_acc.toString().trim().substring(0, 50);
+                } else if (numericLayer !== null) {
+                    // Layer-based: infer sender from previous layer
+                    if (numericLayer === 1) {
+                        sender_acc = 'Case Root';
+                    } else if (lastAccAtLayer[numericLayer - 1]) {
+                        sender_acc = lastAccAtLayer[numericLayer - 1];
+                    } else {
+                        sender_acc = 'Case Root';
+                    }
+                } else {
+                    sender_acc = 'Case Root';
+                }
+
+                // Update layer tracking
+                if (numericLayer !== null) {
+                    lastAccAtLayer[numericLayer] = finalReceiverAcc;
+                }
+
+                // ── Amount ───────────────────────────────────────────────────
                 let rawAmount = getCol(row, AMOUNT_COLS) || 0;
                 const amount = typeof rawAmount === 'string'
                     ? parseFloat(rawAmount.replace(/,/g, '').trim())
                     : parseFloat(rawAmount);
 
-                let rawDate = getCol(row, DATE_COLS) || new Date();
-                const trans_date = typeof rawDate === 'number'
-                    ? new Date((rawDate - 25569) * 86400 * 1000)
-                    : new Date(rawDate);
+                // ── Date ─────────────────────────────────────────────────────
+                let rawDate = getCol(row, DATE_COLS);
+                let trans_date;
+                if (!rawDate || rawDate === '') {
+                    trans_date = new Date();
+                } else if (rawDate instanceof Date) {
+                    trans_date = rawDate; // xlsx cellDates:true returns real Date objects
+                } else if (typeof rawDate === 'number') {
+                    trans_date = new Date((rawDate - 25569) * 86400 * 1000);
+                } else {
+                    trans_date = new Date(rawDate);
+                }
+                if (isNaN(trans_date.getTime())) trans_date = new Date();
 
+                // ── Bank ─────────────────────────────────────────────────────
                 let rawBank = getCol(row, BANK_COLS) || 'Unknown Bank';
                 let bankName = (rawBank ? rawBank.toString() : 'Unknown Bank')
                     .replace(/<[^>]*>/g, ' ').replace(/Reassign Back To/gi, '').replace(/Back To/gi, '')
                     .trim().split(' ').filter((w) => w.length > 0).join(' ') || 'Unknown Bank';
 
-                const layer = row['Layer'] || 'Layer 1';
+                const layer = numericLayer ? `Layer ${numericLayer}` : (row['Layer'] || row['layer'] || 'Layer 1');
                 const ifsc = row['Ifsc Code'] || row['IFSC Code'] || row['IFSC'] || 'N/A';
 
                 parsedRows.push({
                     case_id: parseInt(caseId),
-                    sender_acc: 'Case Root',
+                    sender_acc,
                     receiver_acc: finalReceiverAcc,
                     amount: isNaN(amount) ? 0 : amount,
                     utr_no: finalUtrNo,
-                    trans_date: isNaN(trans_date.getTime()) ? new Date() : trans_date,
+                    trans_date,
                     platform: bankName.substring(0, 50),
-                    layer: layer.toString(),
+                    layer: layer || null,
+                    ifsc_code: ifsc !== 'N/A' ? ifsc.toString().trim().substring(0, 20) : null,
                     source_file: file.originalname ? file.originalname.substring(0, 255) : 'Unknown Source',
                 });
 

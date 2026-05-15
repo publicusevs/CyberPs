@@ -270,24 +270,31 @@ const CaseForm = () => {
             if (formData.occurrence_date_from > today) newErrors.occurrence_date_from = "Date cannot be in the future";
             if (formData.occurrence_date_to > today) newErrors.occurrence_date_to = "Date cannot be in the future";
         } else if (currentStep === 3) {
+            const cleanCompMobile = formData.complainant_mobile ? formData.complainant_mobile.replace(/\D/g, '').slice(-10) : '';
+            const cleanPan = formData.complainant_pan ? formData.complainant_pan.replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase() : '';
+            const cleanAadhaar = formData.complainant_aadhaar ? formData.complainant_aadhaar.replace(/\D/g, '').trim() : '';
+
             if (!formData.complainant_name) newErrors.complainant_name = "Complainant Name is required";
             if (!formData.complainant_mobile) {
                 newErrors.complainant_mobile = "Complainant Mobile is required";
-            } else if (!mobileRegex.test(formData.complainant_mobile)) {
+            } else if (!mobileRegex.test(cleanCompMobile)) {
                 newErrors.complainant_mobile = "Invalid 10-digit mobile number";
             }
 
-            if (formData.complainant_pan && !panRegex.test(formData.complainant_pan.toUpperCase())) {
+            if (formData.complainant_pan && !panRegex.test(cleanPan)) {
                 newErrors.complainant_pan = "Invalid PAN format (e.g. ABCDE1234F)";
             }
 
-            if (formData.complainant_aadhaar && !aadhaarRegex.test(formData.complainant_aadhaar)) {
+            if (formData.complainant_aadhaar && !aadhaarRegex.test(cleanAadhaar)) {
                 newErrors.complainant_aadhaar = "Invalid 12-digit Aadhaar number";
             }
 
             if (!formData.is_victim_same && !formData.victim_name) newErrors.victim_name = "Victim Name is required";
-            if (!formData.is_victim_same && formData.victim_mobile && !mobileRegex.test(formData.victim_mobile)) {
-                newErrors.victim_mobile = "Invalid 10-digit mobile number";
+            if (!formData.is_victim_same && formData.victim_mobile) {
+                const cleanVictimMobile = formData.victim_mobile.replace(/\D/g, '').slice(-10);
+                if (!mobileRegex.test(cleanVictimMobile)) {
+                    newErrors.victim_mobile = "Invalid 10-digit mobile number";
+                }
             }
         } else if (currentStep === 4) {
             if (!formData.fraud_amount) newErrors.fraud_amount = "Fraud Amount is required";
@@ -401,7 +408,7 @@ const CaseForm = () => {
                             >
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <Shield className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">1. FIR Core Details</h2>
+                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">1. FIR Core Details</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <SelectField 
@@ -414,6 +421,8 @@ const CaseForm = () => {
                                         icon={MapPin} 
                                         options={districts.map(d => ({ value: d.district_id, label: d.district_name }))}
                                         placeholder="Select District" 
+                                        className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
+                                        labelClassName="!text-black !font-black !opacity-100"
                                     />
                                     <SelectField 
                                         label="Police Station" 
@@ -428,19 +437,21 @@ const CaseForm = () => {
                                             .map(s => ({ value: s.police_station_id, label: s.station_name }))
                                         }
                                         placeholder="Select Police Station" 
+                                        className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
+                                        labelClassName="!text-black !font-black !opacity-100"
                                     />
                                     
-                                    <InputField label="FIR Number" name="fir_no" required value={formData.fir_no} onChange={handleInputChange} error={errors.fir_no} icon={Fingerprint} placeholder="EX: 0451" />
-                                    <InputField label="FIR Year" name="fir_year" required value={formData.fir_year} onChange={handleInputChange} error={errors.fir_year} icon={Calendar} placeholder="YYYY" />
+                                    <InputField label="FIR Number" name="fir_no" required value={formData.fir_no} onChange={handleInputChange} error={errors.fir_no} icon={Fingerprint} placeholder="EX: 0451" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="FIR Year" name="fir_year" required value={formData.fir_year} onChange={handleInputChange} error={errors.fir_year} icon={Calendar} placeholder="YYYY" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
-                                    <InputField type="date" label="FIR Date" name="fir_date" required value={formData.fir_date} onChange={handleInputChange} error={errors.fir_date} icon={Calendar} />
-                                    <InputField type="time" label="FIR Time" name="fir_time" value={formData.fir_time} onChange={handleInputChange} error={errors.fir_time} icon={Clock} />
+                                    <InputField type="date" label="FIR Date" name="fir_date" required value={formData.fir_date} onChange={handleInputChange} error={errors.fir_date} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField type="time" label="FIR Time" name="fir_time" value={formData.fir_time} onChange={handleInputChange} error={errors.fir_time} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
-                                    <InputField type="date" label="Info Received Date" name="info_received_date" value={formData.info_received_date} onChange={handleInputChange} error={errors.info_received_date} icon={Calendar} />
-                                    <InputField type="time" label="Info Received Time" name="info_received_time" value={formData.info_received_time} onChange={handleInputChange} error={errors.info_received_time} icon={Clock} />
+                                    <InputField type="date" label="Info Received Date" name="info_received_date" value={formData.info_received_date} onChange={handleInputChange} error={errors.info_received_date} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField type="time" label="Info Received Time" name="info_received_time" value={formData.info_received_time} onChange={handleInputChange} error={errors.info_received_time} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
-                                    <InputField label="General Diary (GD) / Entry No" name="gd_no" value={formData.gd_no} onChange={handleInputChange} error={errors.gd_no} icon={Bookmark} placeholder="GD Number" />
-                                    <InputField label="Sections / Acts" name="sections" value={formData.sections} onChange={handleInputChange} error={errors.sections} icon={AlertTriangle} placeholder="e.g. 420 IPC, 66D IT Act" />
+                                    <InputField label="General Diary (GD) / Entry No" name="gd_no" value={formData.gd_no} onChange={handleInputChange} error={errors.gd_no} icon={Bookmark} placeholder="GD Number" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Sections / Acts" name="sections" value={formData.sections} onChange={handleInputChange} error={errors.sections} icon={AlertTriangle} placeholder="e.g. 420 IPC, 66D IT Act" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
                             </motion.div>
                         )}
@@ -455,22 +466,22 @@ const CaseForm = () => {
                             >
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <Crosshair className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">2. Occurrence / Incident Details</h2>
+                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">2. Occurrence / Incident Details</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField type="date" label="Occurrence Date (From)" name="occurrence_date_from" value={formData.occurrence_date_from} onChange={handleInputChange} icon={Calendar} />
-                                    <InputField type="date" label="Occurrence Date (To)" name="occurrence_date_to" value={formData.occurrence_date_to} onChange={handleInputChange} icon={Calendar} />
+                                    <InputField type="date" label="Occurrence Date (From)" name="occurrence_date_from" value={formData.occurrence_date_from} onChange={handleInputChange} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField type="date" label="Occurrence Date (To)" name="occurrence_date_to" value={formData.occurrence_date_to} onChange={handleInputChange} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
-                                    <InputField type="time" label="Occurrence Time (From)" name="occurrence_time_from" value={formData.occurrence_time_from} onChange={handleInputChange} icon={Clock} />
-                                    <InputField type="time" label="Occurrence Time (To)" name="occurrence_time_to" value={formData.occurrence_time_to} onChange={handleInputChange} icon={Clock} />
+                                    <InputField type="time" label="Occurrence Time (From)" name="occurrence_time_from" value={formData.occurrence_time_from} onChange={handleInputChange} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField type="time" label="Occurrence Time (To)" name="occurrence_time_to" value={formData.occurrence_time_to} onChange={handleInputChange} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
-                                    <InputField label="Place of Incident" name="place_of_incident" value={formData.place_of_incident} onChange={handleInputChange} icon={MapPin} placeholder="e.g. Internet, WhatsApp" />
-                                    <InputField label="Distance from PS" name="distance_from_ps" value={formData.distance_from_ps} onChange={handleInputChange} icon={MapPin} placeholder="e.g. 5 KM East" />
+                                    <InputField label="Place of Incident" name="place_of_incident" value={formData.place_of_incident} onChange={handleInputChange} icon={MapPin} placeholder="e.g. Internet, WhatsApp" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Distance from PS" name="distance_from_ps" value={formData.distance_from_ps} onChange={handleInputChange} icon={MapPin} placeholder="e.g. 5 KM East" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     
                                     <div className="md:col-span-2">
-                                        <InputField label="Incident Address" name="incident_address" value={formData.incident_address} onChange={handleInputChange} icon={MapPin} placeholder="Full address if applicable" />
+                                        <InputField label="Incident Address" name="incident_address" value={formData.incident_address} onChange={handleInputChange} icon={MapPin} placeholder="Full address if applicable" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     </div>
-                                    <InputField label="Beat Number" name="beat_number" value={formData.beat_number} onChange={handleInputChange} icon={Bookmark} placeholder="Enter Beat Number" />
+                                    <InputField label="Beat Number" name="beat_number" value={formData.beat_number} onChange={handleInputChange} icon={Bookmark} placeholder="Enter Beat Number" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
                             </motion.div>
                         )}
@@ -485,37 +496,37 @@ const CaseForm = () => {
                             >
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <User className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">3. Complainant / Victim Details</h2>
+                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">3. Complainant / Victim Details</h2>
                                 </div>
                                 
-                                <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase">Complainant Profile</h3>
+                                <h3 className="text-sm font-black text-black opacity-100 tracking-widest uppercase">Complainant Profile</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField label="Complainant Name" name="complainant_name" required value={formData.complainant_name} onChange={handleInputChange} error={errors.complainant_name} icon={User} placeholder="Full Name" />
-                                    <InputField label="Mobile Number" name="complainant_mobile" required value={formData.complainant_mobile} onChange={handleInputChange} error={errors.complainant_mobile} icon={Activity} placeholder="+91..." />
-                                    <InputField label="Email Address" name="complainant_email" value={formData.complainant_email} onChange={handleInputChange} icon={Mail} placeholder="email@example.com" />
-                                    <InputField label="Aadhaar Number" name="complainant_aadhaar" value={formData.complainant_aadhaar} onChange={handleInputChange} icon={Fingerprint} placeholder="XXXX XXXX XXXX" />
-                                    <InputField label="PAN Number" name="complainant_pan" value={formData.complainant_pan} onChange={handleInputChange} icon={FilePlus} placeholder="ABCDE1234F" />
+                                    <InputField label="Complainant Name" name="complainant_name" required value={formData.complainant_name} onChange={handleInputChange} error={errors.complainant_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Mobile Number" name="complainant_mobile" required value={formData.complainant_mobile} onChange={handleInputChange} error={errors.complainant_mobile} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Email Address" name="complainant_email" value={formData.complainant_email} onChange={handleInputChange} error={errors.complainant_email} icon={Mail} placeholder="email@example.com" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Aadhaar Number" name="complainant_aadhaar" value={formData.complainant_aadhaar} onChange={handleInputChange} error={errors.complainant_aadhaar} icon={Fingerprint} placeholder="XXXX XXXX XXXX" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="PAN Number" name="complainant_pan" value={formData.complainant_pan} onChange={handleInputChange} error={errors.complainant_pan} icon={FilePlus} placeholder="ABCDE1234F" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <div className="md:col-span-2">
-                                        <InputField label="Residential Address" name="complainant_address" value={formData.complainant_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" />
+                                        <InputField label="Residential Address" name="complainant_address" value={formData.complainant_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     </div>
                                 </div>
 
                                 <div className="pt-6 border-t border-slate-100">
                                     <label className="flex items-center gap-3 cursor-pointer group">
-                                        <input type="checkbox" name="is_victim_same" checked={formData.is_victim_same} onChange={handleInputChange} className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" />
-                                        <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Victim is same as Complainant</span>
+                                        <input type="checkbox" name="is_victim_same" checked={formData.is_victim_same} onChange={handleInputChange} className="w-5 h-5 text-blue-600 rounded border-black focus:ring-blue-500" />
+                                        <span className="text-sm font-black text-black group-hover:text-blue-600 transition-colors">Victim is same as Complainant</span>
                                     </label>
                                 </div>
 
                                 {!formData.is_victim_same && (
                                     <div className="space-y-8 pt-4">
-                                        <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase">Victim Profile</h3>
+                                        <h3 className="text-sm font-black text-black opacity-100 tracking-widest uppercase">Victim Profile</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <InputField label="Victim Name" name="victim_name" required value={formData.victim_name} onChange={handleInputChange} error={errors.victim_name} icon={User} placeholder="Full Name" />
-                                            <InputField label="Mobile Number" name="victim_mobile" value={formData.victim_mobile} onChange={handleInputChange} icon={Activity} placeholder="+91..." />
-                                            <InputField label="Email Address" name="victim_email" value={formData.victim_email} onChange={handleInputChange} icon={Mail} placeholder="email@example.com" />
+                                            <InputField label="Victim Name" name="victim_name" required value={formData.victim_name} onChange={handleInputChange} error={errors.victim_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                            <InputField label="Mobile Number" name="victim_mobile" value={formData.victim_mobile} onChange={handleInputChange} error={errors.victim_mobile} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                            <InputField label="Email Address" name="victim_email" value={formData.victim_email} onChange={handleInputChange} error={errors.victim_email} icon={Mail} placeholder="email@example.com" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             <div className="md:col-span-2">
-                                                <InputField label="Residential Address" name="victim_address" value={formData.victim_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" />
+                                                <InputField label="Residential Address" name="victim_address" value={formData.victim_address} onChange={handleInputChange} icon={MapPin} placeholder="Full Address" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             </div>
                                         </div>
                                     </div>
@@ -533,21 +544,21 @@ const CaseForm = () => {
                             >
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <Banknote className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">4. Fraud / Cyber Crime Details</h2>
+                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">4. Fraud / Cyber Crime Details</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField label="Fraud Asset Value (₹)" name="fraud_amount" type="number" required value={formData.fraud_amount} onChange={handleInputChange} error={errors.fraud_amount} icon={Banknote} placeholder="Numerical value only" />
-                                    <InputField label="Target Financial Institute" name="bank_name" value={formData.bank_name} onChange={handleInputChange} icon={Banknote} placeholder="Bank/Wallet Name" />
-                                    <InputField label="Account ID / Number" name="account_no" value={formData.account_no} onChange={handleInputChange} icon={Shield} placeholder="Target Account" />
-                                    <InputField label="Portal Reference (ACKN)" name="ackn_no" value={formData.ackn_no} onChange={handleInputChange} icon={Shield} placeholder="REF://CYBER/..." />
+                                    <InputField label="Fraud Asset Value (₹)" name="fraud_amount" type="number" required value={formData.fraud_amount} onChange={handleInputChange} error={errors.fraud_amount} icon={Banknote} placeholder="Numerical value only" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Target Financial Institute" name="bank_name" value={formData.bank_name} onChange={handleInputChange} icon={Banknote} placeholder="Bank/Wallet Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Account ID / Number" name="account_no" value={formData.account_no} onChange={handleInputChange} icon={Shield} placeholder="Target Account" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Portal Reference (ACKN)" name="ackn_no" value={formData.ackn_no} onChange={handleInputChange} icon={Shield} placeholder="REF://CYBER/..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
                                 <div className="space-y-1.5 mt-6">
-                                    <label className="text-[10px] font-black text-slate-400 tracking-widest uppercase ml-1">FIR Narrative / Event Log</label>
+                                    <label className="text-[10px] font-black text-black opacity-100 tracking-widest uppercase ml-1">FIR Narrative / Event Log</label>
                                     <textarea
                                         name="description"
                                         rows="6"
                                         required
-                                        className={`w-full bg-slate-50 border ${errors.description ? 'border-rose-500' : 'border-slate-200'} rounded-2xl p-4 text-sm outline-none focus:border-blue-600 focus:bg-white transition-all resize-none text-slate-800`}
+                                        className={`w-full bg-slate-50 border ${errors.description ? 'border-rose-500' : '!border-black'} rounded-2xl p-4 text-sm outline-none focus:border-blue-600 focus:bg-white transition-all resize-none !text-black !font-black placeholder:text-black placeholder:opacity-100`}
                                         placeholder="Detailed event log..."
                                         value={formData.description}
                                         onChange={handleInputChange}
@@ -568,7 +579,7 @@ const CaseForm = () => {
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                                     <div className="flex items-center gap-3">
                                         <Globe className="text-blue-600" size={24} />
-                                        <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">5. Accused / Social Footprint Details</h2>
+                                        <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">5. Accused / Social Footprint Details</h2>
                                     </div>
                                     <Button variant="outline" type="button" onClick={addAccusedProfile} className="text-[10px] uppercase font-bold tracking-widest text-blue-600 bg-blue-50 border-blue-100 shadow-sm py-2 h-auto" icon={FilePlus}>
                                         Add Accused
@@ -579,24 +590,24 @@ const CaseForm = () => {
                                         <div key={idx} className="bg-slate-50 border border-slate-100 p-6 rounded-[24px]">
                                             <div className="flex items-center gap-2 mb-4">
                                                 <div className="bg-rose-500 text-white font-black text-[10px] w-6 h-6 flex items-center justify-center rounded-full leading-none">{idx + 1}</div>
-                                                <h4 className="text-[11px] font-black uppercase text-slate-900 tracking-widest">Accused Profile</h4>
+                                                <h4 className="text-[11px] font-black uppercase text-black opacity-100 tracking-widest">Accused Profile</h4>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                                <InputField label="Accused Name" name="name" value={accused.name} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="John Doe" />
-                                                <InputField label="Alias / Nickname" name="alias" value={accused.alias} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="Phantom..." />
-                                                <InputField label="Suspect Mobile" name="mobile" value={accused.mobile} onChange={(e) => handleAccusedChange(idx, e)} icon={Activity} placeholder="+91..." />
+                                                <InputField label="Accused Name" name="name" value={accused.name} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="John Doe" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Alias / Nickname" name="alias" value={accused.alias} onChange={(e) => handleAccusedChange(idx, e)} icon={User} placeholder="Phantom..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Suspect Mobile" name="mobile" value={accused.mobile} onChange={(e) => handleAccusedChange(idx, e)} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             </div>
-                                            <h4 className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-4 border-b border-slate-200 pb-2">Acquired Footprints</h4>
+                                            <h4 className="text-[10px] font-black uppercase text-black opacity-100 tracking-widest mb-4 border-b border-black pb-2">Acquired Footprints</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                <InputField label="WhatsApp Number" name="whatsapp_no" value={accused.whatsapp_no} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="+91..." />
-                                                <InputField label="Gmail / Email Link" name="gmail_id" value={accused.gmail_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Mail} placeholder="fraud@gmail.com" />
-                                                <InputField label="Telegram ID" name="telegram_id" value={accused.telegram_id} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="@username" />
-                                                <InputField label="Facebook Profile" name="facebook_id" value={accused.facebook_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="fb.com/..." />
-                                                <InputField label="Instagram Handle" name="insta_id" value={accused.insta_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Hash} placeholder="@username" />
-                                                <InputField label="Twitter / X ID" name="twitter_id" value={accused.twitter_id} onChange={(e) => handleAccusedChange(idx, e)} icon={AtSign} placeholder="@username" />
-                                                <InputField label="LinkedIn Profile" name="linkedin_id" value={accused.linkedin_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="linkedin.com/in/..." />
-                                                <InputField label="Associated Website" name="website_url" value={accused.website_url} onChange={(e) => handleAccusedChange(idx, e)} icon={Link} placeholder="https://..." />
-                                                <InputField label="Other Social Footprint" name="other_social" value={accused.other_social} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="Snapchat, Discord, etc." />
+                                                <InputField label="WhatsApp Number" name="whatsapp_no" value={accused.whatsapp_no} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Gmail / Email Link" name="gmail_id" value={accused.gmail_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Mail} placeholder="fraud@gmail.com" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Telegram ID" name="telegram_id" value={accused.telegram_id} onChange={(e) => handleAccusedChange(idx, e)} icon={MessageCircle} placeholder="@username" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Facebook Profile" name="facebook_id" value={accused.facebook_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="fb.com/..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Instagram Handle" name="insta_id" value={accused.insta_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Hash} placeholder="@username" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Twitter / X ID" name="twitter_id" value={accused.twitter_id} onChange={(e) => handleAccusedChange(idx, e)} icon={AtSign} placeholder="@username" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="LinkedIn Profile" name="linkedin_id" value={accused.linkedin_id} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="linkedin.com/in/..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Associated Website" name="website_url" value={accused.website_url} onChange={(e) => handleAccusedChange(idx, e)} icon={Link} placeholder="https://..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                                <InputField label="Other Social Footprint" name="other_social" value={accused.other_social} onChange={(e) => handleAccusedChange(idx, e)} icon={Globe} placeholder="Snapchat, Discord, etc." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             </div>
                                         </div>
                                     ))}
@@ -614,7 +625,7 @@ const CaseForm = () => {
                             >
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <CheckCircle2 className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-bold text-slate-900 tracking-tight uppercase">6. Officer Assignment & Review</h2>
+                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">6. Officer Assignment & Review</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <SelectField
@@ -627,8 +638,10 @@ const CaseForm = () => {
                                         error={errors.assigned_to}
                                         options={investigators.map(i => ({ value: i.user_id, label: `${i.name} (${i.role})` }))}
                                         placeholder="Select Assignee"
+                                        className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
+                                        labelClassName="!text-black !font-black !opacity-100"
                                     />
-                                    <InputField label="SHO Details" name="sho_details" value={formData.sho_details} onChange={handleInputChange} icon={Shield} placeholder="Enter SHO Info" />
+                                    <InputField label="SHO Details" name="sho_details" value={formData.sho_details} onChange={handleInputChange} icon={Shield} placeholder="Enter SHO Info" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -644,6 +657,8 @@ const CaseForm = () => {
                                             { value: '3', label: 'High' },
                                             { value: '4', label: 'Critical' }
                                         ]}
+                                        className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
+                                        labelClassName="!text-black !font-black !opacity-100"
                                     />
                                     <SelectField
                                         label="Initial Case Status"
@@ -656,33 +671,35 @@ const CaseForm = () => {
                                             { value: '2', label: 'Pending' },
                                             { value: '3', label: 'Under Investigation' }
                                         ]}
+                                        className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
+                                        labelClassName="!text-black !font-black !opacity-100"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-black text-slate-500 tracking-widest uppercase ml-1">Investigation Remarks / Notes</label>
+                                    <label className="text-xs font-black text-black opacity-100 tracking-widest uppercase ml-1">Investigation Remarks / Notes</label>
                                     <textarea
                                         name="remarks"
                                         value={formData.remarks}
                                         onChange={handleInputChange}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-3xl py-6 px-8 text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all min-h-[120px] font-medium"
+                                        className="w-full bg-slate-50 border !border-black rounded-3xl py-6 px-8 !text-black !font-black placeholder:text-black placeholder:opacity-100 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all min-h-[120px]"
                                         placeholder="Enter any initial investigative remarks or administrative notes..."
                                     />
                                 </div>
 
                                 <div className="mt-8">
-                                    <h3 className="text-sm font-black text-slate-500 tracking-widest uppercase mb-4">Secure Artifact Upload</h3>
-                                    <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-16 text-center hover:border-blue-600 hover:bg-blue-50 transition-all cursor-pointer group">
+                                    <h3 className="text-sm font-black text-black opacity-100 tracking-widest uppercase mb-4">Secure Artifact Upload</h3>
+                                    <label className="block border-2 border-dashed !border-black rounded-3xl p-16 text-center hover:border-blue-600 hover:bg-blue-50 transition-all cursor-pointer group">
                                         <input type="file" onChange={handleFileChange} className="hidden" />
-                                        <div className="w-20 h-20 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                                        <div className="w-20 h-20 bg-slate-50 border border-black rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-sm">
                                             {preview ? (
                                                 <img src={preview} alt="Upload Preview" className="w-full h-full object-cover rounded-full" />
                                             ) : (
                                                 <Upload className="text-blue-600" size={32} />
                                             )}
                                         </div>
-                                        <p className="text-lg font-bold text-slate-900 mb-2">{firFile ? firFile.name : 'Drop signed FIR artifact here'}</p>
-                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">Verifiable PDF, JPG or PNG formats only // Limit: 10MB</p>
+                                        <p className="text-lg font-black text-black mb-2">{firFile ? firFile.name : 'Drop signed FIR artifact here'}</p>
+                                        <p className="text-black text-[10px] font-black uppercase tracking-widest leading-relaxed">Verifiable PDF, JPG or PNG formats only // Limit: 10MB</p>
                                     </label>
                                 </div>
 
