@@ -3,7 +3,11 @@ from typing import Optional
 import os
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"), 
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
 
     # AI & LLM Settings
     OPENAI_API_KEY: Optional[str] = None
@@ -22,7 +26,7 @@ class Settings(BaseSettings):
     FETCH_COUNT: int = 20
     
     # App Paths
-    BASE_DIR: str = os.getcwd()
+    BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ATTACH_DIR: str = os.path.join(BASE_DIR, "attachments")
     SENSITIVE_DIR: str = os.path.join(ATTACH_DIR, "sensitive")
     NORMAL_DIR: str = os.path.join(ATTACH_DIR, "normal")

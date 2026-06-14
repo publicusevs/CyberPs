@@ -30,7 +30,7 @@ exports.getAllCases = asyncHandler(async (req, res) => {
 });
 
 exports.getCaseById = asyncHandler(async (req, res) => {
-    const result = await CasesService.getCaseById(req.params.id, req.user.police_station_id);
+    const result = await CasesService.getCaseById(req.params.id, req.user.police_station_id, req.user.role === 'Admin');
     res.json({ success: true, ...result }); // Preserve exact original response shape
 });
 

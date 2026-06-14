@@ -36,7 +36,8 @@ import {
     Activity,
     AlertTriangle,
     Network,
-    Inbox
+    Inbox,
+    Loader2
 } from 'lucide-react';
 
 import { Card } from '../components/ui/Card';
@@ -45,18 +46,31 @@ import { Badge } from '../components/ui/Table';
 import { InputField } from '../components/ui/InputField';
 import { motion, AnimatePresence } from 'framer-motion';
 import NoticesEngine from './NoticesEngine';
+import { useToast } from '../context/ToastContext';
 
 const CaseDetails = () => {
     const { id } = useParams();
+    const { toast } = useToast();
     const navigate = useNavigate();
     const [caseData, setCaseData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [newNote, setNewNote] = useState('');
     const [showEvidModal, setShowEvidModal] = useState(false);
     const [showExcelModal, setShowExcelModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showNoticesEngine, setShowNoticesEngine] = useState(false);
     const [noticesTab, setNoticesTab] = useState('wizard');
+    const [selectedKeys, setSelectedKeys] = useState({});
+    const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, type: null, id: null, isBulk: false });
+    const [deleteProgress, setDeleteProgress] = useState({
+        isProcessing: false,
+        total: 0,
+        current: 0,
+        successCount: 0,
+        failCount: 0,
+        currentItem: ''
+    });
 
     // Excel Upload State
     const [excelFile, setExcelFile] = useState(null);
@@ -77,30 +91,155 @@ const CaseDetails = () => {
     }, [id]);
 
     const fetchCaseDetails = async () => {
+        setLoading(true);
+        setError(null);
         try {
             const res = await api.get(`/cases/${id}`);
             if (res.data.success) {
                 setCaseData(res.data);
                 setEditableVictim(res.data.victim);
                 setEditableAccusedList(res.data.accusedList || []);
+            } else {
+                setError(res.data.message || 'Failed to retrieve case details.');
             }
         } catch (err) {
-            console.error('Core breach detected');
+            console.error('Core breach detected:', err);
+            setError(err.response?.data?.message || err.message || 'Failed to connect to security server.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDeleteFile = async (type, fileId) => {
-        if (!window.confirm('IRREVERSIBLE: Are you sure? Deleting forensic excel will wipe all transactions!')) return;
+    const handleToggleSelect = (type, id) => {
+        const key = `${type}-${id}`;
+        setSelectedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const executeDelete = async () => {
         try {
-            const res = await api.post('/cases/delete-file', { type, id: fileId });
-            if (res.data.success) {
-                fetchCaseDetails();
+            if (confirmDelete.isBulk) {
+                const selectedList = Object.entries(selectedKeys)
+                    .filter(([_, isSelected]) => isSelected)
+                    .map(([key]) => {
+                        const [type, idStr] = key.split('-');
+                        return { type, idStr, id: parseInt(idStr, 10) };
+                    });
+                
+                if (selectedList.length === 0) return;
+
+                setDeleteProgress({
+                    isProcessing: true,
+                    total: selectedList.length,
+                    current: 0,
+                    successCount: 0,
+                    failCount: 0,
+                    currentItem: ''
+                });
+
+                let successCount = 0;
+                let failCount = 0;
+                for (let i = 0; i < selectedList.length; i++) {
+                    const item = selectedList[i];
+                    setDeleteProgress(prev => ({
+                        ...prev,
+                        current: i + 1,
+                        currentItem: `${item.type.toUpperCase()} ID: ${item.id}`
+                    }));
+                    try {
+                        const res = await api.post('/cases/delete-file', { type: item.type, id: item.id });
+                        if (res.data.success) {
+                            successCount++;
+                            setDeleteProgress(prev => ({ ...prev, successCount: prev.successCount + 1 }));
+                        } else {
+                            failCount++;
+                            setDeleteProgress(prev => ({ ...prev, failCount: prev.failCount + 1 }));
+                        }
+                    } catch (err) {
+                        failCount++;
+                        setDeleteProgress(prev => ({ ...prev, failCount: prev.failCount + 1 }));
+                    }
+                }
+
+                setDeleteProgress(prev => ({ ...prev, isProcessing: false }));
+
+                if (successCount > 0) {
+                    fetchCaseDetails();
+                    setSelectedKeys({});
+                    toast.success(`Successfully deleted ${successCount} file(s).`, "Bulk Delete Successful");
+                }
+                if (failCount > 0) {
+                    toast.error(`Failed to delete ${failCount} file(s).`, "Bulk Delete Error");
+                }
+            } else {
+                setDeleteProgress({
+                    isProcessing: true,
+                    total: 1,
+                    current: 1,
+                    successCount: 0,
+                    failCount: 0,
+                    currentItem: `${confirmDelete.type?.toUpperCase()} ID: ${confirmDelete.id}`
+                });
+                try {
+                    const res = await api.post('/cases/delete-file', { type: confirmDelete.type, id: confirmDelete.id });
+                    if (res.data.success) {
+                        setDeleteProgress(prev => ({ ...prev, successCount: 1 }));
+                        fetchCaseDetails();
+                        toast.success("File deleted successfully", "Delete Successful");
+                    } else {
+                        setDeleteProgress(prev => ({ ...prev, failCount: 1 }));
+                    }
+                } catch (err) {
+                    setDeleteProgress(prev => ({ ...prev, failCount: 1 }));
+                    toast.error('Delete failed: ' + (err.response?.data?.message || err.message), "Protocol Error");
+                }
+                setDeleteProgress(prev => ({ ...prev, isProcessing: false }));
+                setConfirmDelete({ isOpen: false, type: null, id: null, isBulk: false });
             }
         } catch (err) {
-            alert('Delete failed: ' + (err.response?.data?.message || err.message));
+            toast.error('Delete failed: ' + (err.response?.data?.message || err.message), "Protocol Error");
         }
+        
+        if (!confirmDelete.isBulk) {
+            setConfirmDelete({ isOpen: false, type: null, id: null, isBulk: false });
+        }
+    };
+
+    const handleDeleteFile = (type, fileId) => {
+        setConfirmDelete({ isOpen: true, type, id: fileId, isBulk: false });
+    };
+
+    const handleBulkDelete = () => {
+        const selectedCount = Object.values(selectedKeys).filter(Boolean).length;
+        if (selectedCount === 0) return;
+        setConfirmDelete({ isOpen: true, type: null, id: null, isBulk: true });
+    };
+
+    const handleBulkDownload = () => {
+        const { fir, evidence } = caseData || {};
+        const forensicExcel = evidence?.find(e => e.description === 'Forensic Money Trail Excel Artifact');
+        const otherEvidence = evidence?.filter(ev => ev.description !== 'Forensic Money Trail Excel Artifact');
+
+        const selectedList = Object.entries(selectedKeys)
+            .filter(([_, isSelected]) => isSelected)
+            .map(([key]) => {
+                const [type, idStr] = key.split('-');
+                const id = parseInt(idStr, 10);
+                let filePath = '';
+                if (type === 'fir' && fir && fir.doc_id === id) filePath = fir.file_path;
+                if (type === 'evidence') {
+                    if (forensicExcel && forensicExcel.evidence_id === id) filePath = forensicExcel.file_path;
+                    else {
+                        const ev = otherEvidence?.find(e => e.evidence_id === id);
+                        if (ev) filePath = ev.file_path;
+                    }
+                }
+                return filePath;
+            })
+            .filter(Boolean);
+
+        selectedList.forEach(filePath => {
+            window.open(`http://localhost:${__BACKEND_PORT__}/${filePath.replace(/^\//, '')}`, '_blank');
+        });
     };
 
     const handleAddNote = async (e) => {
@@ -110,8 +249,9 @@ const CaseDetails = () => {
             await api.post('/cases/notes', { case_id: id, note_text: newNote });
             setNewNote('');
             fetchCaseDetails();
+            toast.success("Memo successfully added to timeline", "Memo Posted");
         } catch (err) {
-            alert('Note uplink failed');
+            toast.error('Note uplink failed', "Protocol Error");
         }
     };
 
@@ -125,10 +265,11 @@ const CaseDetails = () => {
         try {
             const res = await api.post('/transactions/import', formData);
             if (res.data.success) {
+                toast.success("Excel Transactions imported successfully", "Import Complete");
                 navigate(`/cases/${id}/process`);
             }
         } catch (err) {
-            alert('Excel import failed: ' + (err.response?.data?.message || err.message));
+            toast.error('Excel import failed: ' + (err.response?.data?.message || err.message), "Protocol Error");
         } finally {
             setImporting(false);
         }
@@ -147,15 +288,37 @@ const CaseDetails = () => {
             setEvidenceFiles([]);
             setEvidDesc('');
             fetchCaseDetails();
+            toast.success("Evidence artifact sealed in vault", "Artifact Uploaded");
         } catch (err) {
-            alert('Artifact upload failed');
+            toast.error('Artifact upload failed', "Protocol Error");
         }
     };
 
 
 
-    if (loading) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Loading case dossier...</div>;
-    if (!caseData) return <div className="p-20 text-center text-rose-500 font-black uppercase tracking-widest">Entry prohibited or missing</div>;
+    if (loading) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs animate-pulse">Loading case dossier...</div>;
+    
+    if (error) {
+        return (
+            <div className="max-w-2xl mx-auto mt-20 p-10 bg-white border border-rose-100 rounded-3xl shadow-xl text-center space-y-6 animate-in fade-in zoom-in duration-300">
+                <div className="w-16 h-16 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                    <AlertTriangle size={32} />
+                </div>
+                <div>
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight italic">Case Dossier Offline</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Error code: CASE_ACCESS_DENIED</p>
+                </div>
+                <div className="p-4 bg-rose-50 text-rose-700 text-sm font-bold rounded-2xl border border-rose-100/50">
+                    {error}
+                </div>
+                <Button variant="primary" onClick={() => navigate('/cases')} className="mx-auto" icon={ArrowLeft}>
+                    Return to Evidence Vault
+                </Button>
+            </div>
+        );
+    }
+
+    if (!caseData) return <div className="p-20 text-center text-rose-500 font-black uppercase tracking-widest">Please Wait we are processing and configuring FIR</div>;
 
     const { case: details, victim, transactions, notes, fir, evidence, accusedList } = caseData;
     const forensicExcel = evidence?.find(e => e.description === 'Forensic Money Trail Excel Artifact');
@@ -308,6 +471,23 @@ const CaseDetails = () => {
                                             SELECT TARGET FILE
                                         </Button>
                                     </div>
+
+                                    {importing && (
+                                        <div className="mb-2">
+                                            <div className="flex justify-between items-center text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-2">
+                                                <span>Processing Data & Artifacts...</span>
+                                                <span className="animate-pulse">Please wait</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                <motion.div 
+                                                    className="h-full bg-blue-500 rounded-full"
+                                                    initial={{ width: "30%", x: "-100%" }}
+                                                    animate={{ width: "30%", x: "400%" }}
+                                                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="flex gap-4">
                                         <Button
@@ -498,6 +678,16 @@ const CaseDetails = () => {
                                 <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Secured Artifacts</h2>
                             </div>
                             <div className="flex gap-2">
+                                {Object.values(selectedKeys).filter(Boolean).length > 0 && (
+                                    <>
+                                        <Button variant="ghost" className="p-2 h-auto text-blue-600 hover:bg-blue-50 text-[10px] uppercase font-black tracking-widest flex gap-2" onClick={handleBulkDownload}>
+                                            <Download size={16} /> Download
+                                        </Button>
+                                        <Button variant="ghost" className="p-2 h-auto text-rose-600 hover:bg-rose-50 text-[10px] uppercase font-black tracking-widest flex gap-2" onClick={handleBulkDelete}>
+                                            <Trash2 size={16} /> Delete
+                                        </Button>
+                                    </>
+                                )}
                                 <Button variant="ghost" className="p-1 h-auto text-blue-500 hover:bg-blue-50" onClick={() => navigate(`/cases/${id}/files`)}><Eye size={20} /></Button>
                                 <Button variant="ghost" className="p-1 h-auto text-rose-600 hover:bg-rose-50" onClick={() => navigate(`/cases/${id}/files`)}><Trash2 size={20} /></Button>
                                 <Button variant="ghost" className="p-1 h-auto text-blue-600" onClick={() => setShowEvidModal(true)}><Plus size={20} /></Button>
@@ -508,6 +698,12 @@ const CaseDetails = () => {
                             {fir && (
                                 <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between group hover:bg-blue-50 transition-all">
                                     <div className="flex items-center gap-4">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={Boolean(selectedKeys[`fir-${fir.doc_id}`])}
+                                            onChange={() => handleToggleSelect('fir', fir.doc_id)}
+                                            className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                                        />
                                         <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><FileText size={18} /></div>
                                         <div>
                                             <p className="text-[11px] font-black text-slate-900 truncate max-w-[120px] uppercase">FIR_ROOT_DOSS</p>
@@ -525,6 +721,12 @@ const CaseDetails = () => {
                             {forensicExcel && (
                                 <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between group">
                                     <div className="flex items-center gap-4">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={Boolean(selectedKeys[`evidence-${forensicExcel.evidence_id}`])}
+                                            onChange={() => handleToggleSelect('evidence', forensicExcel.evidence_id)}
+                                            className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                                        />
                                         <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><FileSpreadsheet size={18} /></div>
                                         <div>
                                             <p className="text-[11px] font-black text-slate-900 truncate max-w-[120px] uppercase">{forensicExcel.file_name}</p>
@@ -565,6 +767,12 @@ const CaseDetails = () => {
                                 return (
                                     <div key={ev.evidence_id} className={`p-4 ${bgColor} rounded-2xl border border-slate-100 flex items-center justify-between group hover:bg-white hover:border-blue-100 transition-all`}>
                                         <div className="flex items-center gap-4">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={Boolean(selectedKeys[`evidence-${ev.evidence_id}`])}
+                                                onChange={() => handleToggleSelect('evidence', ev.evidence_id)}
+                                                className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                                            />
                                             <div className={`p-2 bg-white rounded-lg ${iconColor} border border-slate-100`}><IconComp size={18} /></div>
                                             <div>
                                                 <p className="text-[11px] font-black text-slate-900 truncate max-w-[200px] uppercase tracking-tight">{ev.file_name}</p>
@@ -658,17 +866,109 @@ const CaseDetails = () => {
                 </div>
             </div>
 
-        {/* Notices Engine Modal */}
-        <AnimatePresence>
-            {showNoticesEngine && (
-                <NoticesEngine
-                    caseId={id}
-                    caseData={caseData}
-                    onClose={() => setShowNoticesEngine(false)}
-                    initialTab={noticesTab}
-                />
-            )}
-        </AnimatePresence>
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+                {confirmDelete.isOpen && (
+                    <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-900/80">
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 30 }}
+                            className="bg-white w-full max-w-md rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col border border-rose-100"
+                        >
+                            <div className="p-8 text-center space-y-6">
+                                <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <AlertTriangle size={40} />
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Are you sure?</h3>
+                                <p className="text-sm font-bold text-slate-500 tracking-wide uppercase">
+                                    {confirmDelete.isBulk 
+                                        ? `You are about to delete ${Object.values(selectedKeys).filter(Boolean).length} selected file(s).` 
+                                        : 'You are about to delete this file.'} 
+                                    This action cannot be undone.
+                                </p>
+                                
+                                {deleteProgress.total > 0 && (
+                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                                        <p className="text-xs font-black text-slate-600 tracking-widest uppercase">
+                                            {deleteProgress.isProcessing ? 'Processing Deletion...' : 'Deletion Complete'}
+                                        </p>
+                                        
+                                        <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                            <div 
+                                                className="bg-rose-500 h-2.5 transition-all duration-300" 
+                                                style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                        
+                                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                            <span>Progress: {deleteProgress.current} / {deleteProgress.total}</span>
+                                            <span>Remaining: {deleteProgress.total - deleteProgress.current}</span>
+                                        </div>
+                                        
+                                        {(deleteProgress.successCount > 0 || deleteProgress.failCount > 0) && (
+                                            <div className="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest pt-2 border-t border-slate-200">
+                                                <span className="text-emerald-600">Success: {deleteProgress.successCount}</span>
+                                                <span className="text-rose-600">Failed: {deleteProgress.failCount}</span>
+                                            </div>
+                                        )}
+                                        {deleteProgress.isProcessing && (
+                                            <p className="text-[9px] text-slate-400 italic">Deleting: {deleteProgress.currentItem}</p>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                <div className="flex gap-4 pt-4">
+                                    {(!deleteProgress.isProcessing && deleteProgress.total > 0 && confirmDelete.isBulk) ? (
+                                        <button 
+                                            onClick={() => {
+                                                setConfirmDelete({ isOpen: false, type: null, id: null, isBulk: false });
+                                                setTimeout(() => setDeleteProgress({ isProcessing: false, total: 0, current: 0, successCount: 0, failCount: 0, currentItem: '' }), 300);
+                                            }}
+                                            className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg"
+                                        >
+                                            Done
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <button 
+                                                onClick={() => {
+                                                    if (deleteProgress.isProcessing) return;
+                                                    setConfirmDelete({ isOpen: false, type: null, id: null, isBulk: false });
+                                                    setTimeout(() => setDeleteProgress({ isProcessing: false, total: 0, current: 0, successCount: 0, failCount: 0, currentItem: '' }), 300);
+                                                }}
+                                                disabled={deleteProgress.isProcessing}
+                                                className="flex-1 py-4 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl font-black uppercase tracking-widest text-xs transition-all disabled:opacity-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button 
+                                                onClick={executeDelete}
+                                                disabled={deleteProgress.isProcessing || deleteProgress.total > 0}
+                                                className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-rose-200 disabled:opacity-50"
+                                            >
+                                                {deleteProgress.isProcessing ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Confirm Delete'}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Notices Engine Modal */}
+            <AnimatePresence>
+                {showNoticesEngine && (
+                    <NoticesEngine
+                        caseId={id}
+                        caseData={caseData}
+                        onClose={() => setShowNoticesEngine(false)}
+                        initialTab={noticesTab}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 };

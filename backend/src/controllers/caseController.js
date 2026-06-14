@@ -258,7 +258,8 @@ exports.getCaseById = async (req, res) => {
             success: true,
             case: caseResult.recordset[0],
             victim: victimResult.recordset[0],
-            fir: firResult.recordset[0],
+            fir: firResult.recordset.length > 0 ? firResult.recordset[0] : null,
+            fir_docs: firResult.recordset,
             evidence: evidenceResult.recordset,
             transactions: transactionsResult.recordset,
             notes: notesResult.recordset,
@@ -341,6 +342,22 @@ exports.addNote = async (req, res) => {
         res.json({ success: true, message: 'Note added' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error adding note' });
+    }
+};
+
+exports.getBankMailList = async (req, res) => {
+    try {
+        const rootPath = path.resolve(__dirname, '..', '..', '..');
+        const bankListPath = path.join(rootPath, 'bankmaillist.json');
+        const fs = require('fs');
+        let bankEmails = [];
+        if (fs.existsSync(bankListPath)) {
+            bankEmails = JSON.parse(fs.readFileSync(bankListPath, 'utf8'));
+        }
+        res.json({ success: true, data: bankEmails });
+    } catch (err) {
+        console.error('[ERROR] fetching bankmaillist:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 
@@ -540,7 +557,7 @@ exports.saveNotice = async (req, res) => {
             .input('type', mssql.NVarChar, 'Legal Notice')
             .input('path', mssql.NVarChar, filePath)
             .input('file_name', mssql.NVarChar, fileName)
-            .query('INSERT INTO fir_documents (case_id, document_type, file_path, file_name) VALUES (@case_id, @type, @path, @file_name)');
+            .query('INSERT INTO fir_documents (case_id, file_type, file_path, file_name) VALUES (@case_id, @type, @path, @file_name)');
 
         res.json({ success: true, message: 'Notice saved to dossier', filePath, fileName });
     } catch (err) {

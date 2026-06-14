@@ -125,6 +125,14 @@ const CasesService = {
             throw new AppError(errMsg, 400);
         }
 
+        if (result.case_id) {
+            try {
+                await CasesRepository.updateShoAndRemarks(null, result.case_id, params.sho_name, data.remarks);
+            } catch (shoRemarksErr) {
+                logger.warn('[CASES] Failed to save sho_name/remarks during SP registration:', shoRemarksErr.message);
+            }
+        }
+
         // Handle Accused List
         if (data.accusedList) {
             let accusedList = [];
@@ -217,6 +225,15 @@ const CasesService = {
 
         try {
             await CasesRepository.updateCase(transaction, caseId, data);
+            await CasesRepository.updateComplainant(transaction, {
+                caseId,
+                name: data.complainant_name,
+                mobile: data.complainant_mobile,
+                email: data.complainant_email,
+                aadhar_no: data.complainant_aadhaar || data.complainant_aadhar,
+                pan_no: data.complainant_pan,
+                address: data.complainant_address,
+            });
             await CasesRepository.updateVictim(transaction, {
                 caseId,
                 name: data.victim_name,
@@ -264,11 +281,11 @@ const CasesService = {
         });
     },
 
-    async getCaseById(id, policeStationId) {
+    async getCaseById(id, policeStationId, isAdmin) {
         const pool = await poolPromise;
         if (!pool) throw new AppError('Database connection unavailable', 503);
 
-        const result = await CasesRepository.getById(id, policeStationId);
+        const result = await CasesRepository.getById(id, isAdmin ? null : policeStationId);
         if (!result) throw new AppError('Case not found', 404);
         return result;
     },

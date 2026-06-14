@@ -32,9 +32,11 @@ import { Card } from '../components/ui/Card';
 import { InputField, SelectField } from '../components/ui/InputField';
 import { Button } from '../components/ui/Button';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../context/ToastContext';
 
 const CaseForm = () => {
     const navigate = useNavigate();
+    const { toast } = useToast();
     const { id } = useParams();
     const isEditMode = Boolean(id);
     const [step, setStep] = useState(1);
@@ -150,21 +152,80 @@ const CaseForm = () => {
         try {
             const res = await api.get(`/cases/${id}`);
             if (res.data.success) {
-                const { case: details, victim, accusedList: loadedAccused } = res.data;
-                setFormData(prev => ({
-                    ...prev,
+                const { case: details, victim, complainant, transactions, accusedList: loadedAccused } = res.data;
+                
+                const formatDate = (dt) => dt ? dt.split('T')[0] : '';
+                const formatTime = (dt) => {
+                    if (!dt) return '';
+                    const parts = dt.split('T');
+                    return parts[1] ? parts[1].substring(0, 5) : '';
+                };
+
+                const comp = complainant || {};
+                const trans = transactions || [];
+                const firstTrans = trans[0] || {};
+
+                setFormData({
+                    // Step 1: FIR Core Details
+                    district: details.district_id || '',
+                    police_station: details.police_station_id || '',
                     fir_no: details.fir_no || '',
-                    ackn_no: details.ackn_no || '',
-                    fraud_amount: details.fraud_amount || '',
-                    description: details.description || '',
-                    assigned_to: details.assigned_to || '',
+                    fir_year: (details.fir_year || '').toString(),
+                    fir_date: formatDate(details.fir_datetime),
+                    fir_time: formatTime(details.fir_datetime),
+                    info_received_date: formatDate(details.info_received_datetime),
+                    info_received_time: formatTime(details.info_received_datetime),
+                    gd_no: details.gd_entry_no || '',
+                    sections: details.sections || '',
+
+                    // Step 2: Occurrence / Incident Details
+                    occurrence_date_from: formatDate(details.occurrence_from_datetime),
+                    occurrence_date_to: formatDate(details.occurrence_to_datetime),
+                    occurrence_time_from: formatTime(details.occurrence_from_datetime),
+                    occurrence_time_to: formatTime(details.occurrence_to_datetime),
+                    place_of_incident: details.place_of_occurrence || '',
+                    incident_address: details.incident_address || '',
+                    distance_from_ps: details.distance_from_ps || '',
+                    beat_number: details.beat_number || '',
+
+                    // Step 3: Complainant / Victim Details
+                    complainant_name: comp.name || '',
+                    complainant_mobile: comp.mobile || '',
+                    complainant_email: comp.email || '',
+                    complainant_address: comp.address || '',
+                    complainant_aadhaar: comp.aadhar_no || '',
+                    complainant_pan: comp.pan_no || '',
+                    is_victim_same: Boolean(details.is_victim_same_as_complainant),
                     victim_name: victim?.name || '',
                     victim_mobile: victim?.mobile || '',
                     victim_email: victim?.email || '',
                     victim_address: victim?.address || '',
-                    bank_name: victim?.bank_name || '',
-                    account_no: victim?.account_no || '',
-                }));
+
+                    // Step 4: Fraud / Cyber Crime Details
+                    fraud_amount: details.fraud_amount || '',
+                    bank_name: victim?.bank_name || firstTrans.receiver_bank || details.target_financial_institute || '',
+                    account_no: victim?.account_no || firstTrans.receiver_acc || details.account_number || '',
+                    ackn_no: details.ackn_no || '',
+                    description: details.fir_narrative || details.description || '',
+
+                    // Step 5: Accused Social Footprint (legacy single-accused fields)
+                    whatsapp_no: details.whatsapp_no || '',
+                    gmail_id: details.gmail_id || '',
+                    facebook_id: details.facebook_id || '',
+                    twitter_id: details.twitter_id || '',
+                    linkedin_id: details.linkedin_id || '',
+                    insta_id: details.insta_id || '',
+                    telegram_id: details.telegram_id || '',
+                    website_url: details.website_url || '',
+                    other_social: details.other_social || '',
+
+                    // Step 6: Officer Assignment & Review
+                    assigned_to: details.assigned_to || '',
+                    sho_details: details.sho_name || '',
+                    priority_id: (details.priority_id || '3').toString(),
+                    remarks: details.remarks || '',
+                });
+
                 if (loadedAccused && loadedAccused.length > 0) {
                     setAccusedList(loadedAccused);
                 }
@@ -174,11 +235,7 @@ const CaseForm = () => {
         }
     };
 
-    useEffect(() => {
-        if (formData.district) {
-            setFormData(prev => ({ ...prev, police_station: '' }));
-        }
-    }, [formData.district]);
+
 
     const fetchInvestigators = async () => {
         try {
@@ -216,7 +273,13 @@ const CaseForm = () => {
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
         const val = type === 'checkbox' ? checked : value;
-        setFormData(prev => ({ ...prev, [name]: val }));
+        setFormData(prev => {
+            const updated = { ...prev, [name]: val };
+            if (name === 'district') {
+                updated.police_station = '';
+            }
+            return updated;
+        });
         // Clear error on typing
         if (errors[name]) {
             setErrors(prev => ({ ...prev, [name]: null }));
@@ -246,12 +309,12 @@ const CaseForm = () => {
 
     const saveDraft = () => {
         localStorage.setItem('caseFormDraft', JSON.stringify({ formData, accusedList, step }));
-        alert("Draft securely saved to local storage.");
+        toast.success("Draft securely saved to local storage.", "Draft Saved");
     };
 
     const validateStep = (currentStep) => {
         const newErrors = {};
-        
+
         // Regex Patterns
         const mobileRegex = /^[6-9]\d{9}$/;
         const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -259,25 +322,17 @@ const CaseForm = () => {
         const today = new Date().toISOString().split('T')[0];
 
         if (currentStep === 1) {
-            if (!formData.district) newErrors.district = "District is required";
-            if (!formData.police_station) newErrors.police_station = "Police Station is required";
-            if (!formData.fir_no) newErrors.fir_no = "FIR No is required";
-            if (!formData.fir_year) newErrors.fir_year = "FIR Year is required";
-            if (!formData.fir_date) newErrors.fir_date = "FIR Date is required";
-            if (formData.fir_date > today) newErrors.fir_date = "FIR Date cannot be in the future";
-            if (formData.info_received_date > today) newErrors.info_received_date = "Date cannot be in the future";
+            if (formData.fir_date && formData.fir_date > today) newErrors.fir_date = "FIR Date cannot be in the future";
+            if (formData.info_received_date && formData.info_received_date > today) newErrors.info_received_date = "Date cannot be in the future";
         } else if (currentStep === 2) {
-            if (formData.occurrence_date_from > today) newErrors.occurrence_date_from = "Date cannot be in the future";
-            if (formData.occurrence_date_to > today) newErrors.occurrence_date_to = "Date cannot be in the future";
+            if (formData.occurrence_date_from && formData.occurrence_date_from > today) newErrors.occurrence_date_from = "Date cannot be in the future";
+            if (formData.occurrence_date_to && formData.occurrence_date_to > today) newErrors.occurrence_date_to = "Date cannot be in the future";
         } else if (currentStep === 3) {
             const cleanCompMobile = formData.complainant_mobile ? formData.complainant_mobile.replace(/\D/g, '').slice(-10) : '';
             const cleanPan = formData.complainant_pan ? formData.complainant_pan.replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase() : '';
             const cleanAadhaar = formData.complainant_aadhaar ? formData.complainant_aadhaar.replace(/\D/g, '').trim() : '';
 
-            if (!formData.complainant_name) newErrors.complainant_name = "Complainant Name is required";
-            if (!formData.complainant_mobile) {
-                newErrors.complainant_mobile = "Complainant Mobile is required";
-            } else if (!mobileRegex.test(cleanCompMobile)) {
+            if (formData.complainant_mobile && !mobileRegex.test(cleanCompMobile)) {
                 newErrors.complainant_mobile = "Invalid 10-digit mobile number";
             }
 
@@ -289,20 +344,12 @@ const CaseForm = () => {
                 newErrors.complainant_aadhaar = "Invalid 12-digit Aadhaar number";
             }
 
-            if (!formData.is_victim_same && !formData.victim_name) newErrors.victim_name = "Victim Name is required";
             if (!formData.is_victim_same && formData.victim_mobile) {
                 const cleanVictimMobile = formData.victim_mobile.replace(/\D/g, '').slice(-10);
                 if (!mobileRegex.test(cleanVictimMobile)) {
                     newErrors.victim_mobile = "Invalid 10-digit mobile number";
                 }
             }
-        } else if (currentStep === 4) {
-            if (!formData.fraud_amount) newErrors.fraud_amount = "Fraud Amount is required";
-            if (!formData.description) newErrors.description = "FIR Narrative is required";
-            if (!formData.bank_name) newErrors.bank_name = "Target Financial Institute is required";
-            if (!formData.account_no) newErrors.account_no = "Account Number is required";
-        } else if (currentStep === 6) {
-            if (!formData.assigned_to) newErrors.assigned_to = "Investigating Officer is required";
         }
 
         setErrors(newErrors);
@@ -315,15 +362,23 @@ const CaseForm = () => {
         }
     };
 
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit' && e.target.tagName !== 'BUTTON') {
+            e.preventDefault();
+        }
+    };
+
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        
+        if (e && e.preventDefault) {
+            e.preventDefault();
+        }
+
         if (!validateStep(6)) return;
 
         setLoading(true);
 
         const data = new FormData();
-        
+
         // Append all form fields
         Object.keys(formData).forEach(key => {
             if (formData[key] !== null && formData[key] !== undefined) {
@@ -340,7 +395,9 @@ const CaseForm = () => {
         data.append('accusedList', JSON.stringify(accusedList));
 
         try {
-            const res = await api.post('/cases/register', data, {
+            const url = isEditMode ? `/cases/${id}/full` : '/cases/register';
+            const method = isEditMode ? 'put' : 'post';
+            const res = await api[method](url, data, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }
@@ -348,16 +405,16 @@ const CaseForm = () => {
 
             if (res.data.success) {
                 localStorage.removeItem('caseFormDraft');
-                alert(res.data.message || "Case Registered Successfully");
+                toast.success(res.data.message || (isEditMode ? "Case updated successfully" : "Case Registered Successfully"), "Sync Successful");
                 navigate('/cases');
             } else {
-                alert(res.data.message || "Case Registration Failed");
+                toast.error(res.data.message || (isEditMode ? "Case Update Failed" : "Case Registration Failed"), "Protocol Error");
             }
-            
+
         } catch (err) {
             const errorMsg = err.response?.data?.message || err.response?.data?.error_message || 'Enterprise Data Sync Failed';
-            alert(errorMsg);
-            
+            toast.error(errorMsg, "Protocol Error");
+
             // If duplicate FIR error (check message content)
             if (errorMsg.toLowerCase().includes('duplicate') || errorMsg.toLowerCase().includes('exists')) {
                 setStep(1); // Take user back to Phase 1 to check FIR No
@@ -386,7 +443,11 @@ const CaseForm = () => {
                 <div className="flex flex-col items-end gap-2">
                     <div className="flex gap-1.5 w-64">
                         {[1, 2, 3, 4, 5, 6].map(i => (
-                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-500 bg-slate-200 relative`}>
+                            <div
+                                key={i}
+                                onClick={() => setStep(i)}
+                                className={`h-1.5 flex-1 rounded-full transition-all duration-500 bg-slate-200 relative cursor-pointer`}
+                            >
                                 {step >= i && <motion.div layoutId="progress" className="absolute inset-0 bg-blue-600 shadow-md shadow-blue-200 rounded-full"></motion.div>}
                             </div>
                         ))}
@@ -396,7 +457,7 @@ const CaseForm = () => {
             </div>
 
             <Card className="p-0 overflow-hidden relative shadow-xl shadow-slate-200/50">
-                <form onSubmit={handleSubmit} className="relative z-10 p-10 bg-white">
+                <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleKeyDown} className="relative z-10 p-10 bg-white">
                     <AnimatePresence mode="wait">
                         {step === 1 && (
                             <motion.div
@@ -411,45 +472,43 @@ const CaseForm = () => {
                                     <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">1. FIR Core Details</h2>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <SelectField 
-                                        label="District / Commissionerate" 
-                                        name="district" 
-                                        required 
-                                        value={formData.district} 
-                                        onChange={handleInputChange} 
-                                        error={errors.district} 
-                                        icon={MapPin} 
+                                    <SelectField
+                                        label="District / Commissionerate"
+                                        name="district"
+                                        value={formData.district}
+                                        onChange={handleInputChange}
+                                        error={errors.district}
+                                        icon={MapPin}
                                         options={districts.map(d => ({ value: d.district_id, label: d.district_name }))}
-                                        placeholder="Select District" 
+                                        placeholder="Select District"
                                         className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
                                         labelClassName="!text-black !font-black !opacity-100"
                                     />
-                                    <SelectField 
-                                        label="Police Station" 
-                                        name="police_station" 
-                                        required 
-                                        value={formData.police_station} 
-                                        onChange={handleInputChange} 
-                                        error={errors.police_station} 
-                                        icon={Shield} 
+                                    <SelectField
+                                        label="Police Station"
+                                        name="police_station"
+                                        value={formData.police_station}
+                                        onChange={handleInputChange}
+                                        error={errors.police_station}
+                                        icon={Shield}
                                         options={allStations
                                             .filter(s => !formData.district || s.district_id === parseInt(formData.district))
                                             .map(s => ({ value: s.police_station_id, label: s.station_name }))
                                         }
-                                        placeholder="Select Police Station" 
+                                        placeholder="Select Police Station"
                                         className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black"
                                         labelClassName="!text-black !font-black !opacity-100"
                                     />
-                                    
-                                    <InputField label="FIR Number" name="fir_no" required value={formData.fir_no} onChange={handleInputChange} error={errors.fir_no} icon={Fingerprint} placeholder="EX: 0451" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField label="FIR Year" name="fir_year" required value={formData.fir_year} onChange={handleInputChange} error={errors.fir_year} icon={Calendar} placeholder="YYYY" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
-                                    <InputField type="date" label="FIR Date" name="fir_date" required value={formData.fir_date} onChange={handleInputChange} error={errors.fir_date} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+
+                                    <InputField label="FIR Number" name="fir_no" value={formData.fir_no} onChange={handleInputChange} error={errors.fir_no} icon={Fingerprint} placeholder="EX: 0451" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="FIR Year" name="fir_year" value={formData.fir_year} onChange={handleInputChange} error={errors.fir_year} icon={Calendar} placeholder="YYYY" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+
+                                    <InputField type="date" label="FIR Date" name="fir_date" value={formData.fir_date} onChange={handleInputChange} error={errors.fir_date} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField type="time" label="FIR Time" name="fir_time" value={formData.fir_time} onChange={handleInputChange} error={errors.fir_time} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
+
                                     <InputField type="date" label="Info Received Date" name="info_received_date" value={formData.info_received_date} onChange={handleInputChange} error={errors.info_received_date} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField type="time" label="Info Received Time" name="info_received_time" value={formData.info_received_time} onChange={handleInputChange} error={errors.info_received_time} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
+
                                     <InputField label="General Diary (GD) / Entry No" name="gd_no" value={formData.gd_no} onChange={handleInputChange} error={errors.gd_no} icon={Bookmark} placeholder="GD Number" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField label="Sections / Acts" name="sections" value={formData.sections} onChange={handleInputChange} error={errors.sections} icon={AlertTriangle} placeholder="e.g. 420 IPC, 66D IT Act" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
@@ -468,16 +527,16 @@ const CaseForm = () => {
                                     <Crosshair className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">2. Occurrence / Incident Details</h2>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField type="date" label="Occurrence Date (From)" name="occurrence_date_from" value={formData.occurrence_date_from} onChange={handleInputChange} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField type="date" label="Occurrence Date (To)" name="occurrence_date_to" value={formData.occurrence_date_to} onChange={handleInputChange} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <InputField type="date" label="Occurrence Date (From)" name="occurrence_date_from" value={formData.occurrence_date_from} onChange={handleInputChange} error={errors.occurrence_date_from} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField type="date" label="Occurrence Date (To)" name="occurrence_date_to" value={formData.occurrence_date_to} onChange={handleInputChange} error={errors.occurrence_date_to} icon={Calendar} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+
                                     <InputField type="time" label="Occurrence Time (From)" name="occurrence_time_from" value={formData.occurrence_time_from} onChange={handleInputChange} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField type="time" label="Occurrence Time (To)" name="occurrence_time_to" value={formData.occurrence_time_to} onChange={handleInputChange} icon={Clock} className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
+
                                     <InputField label="Place of Incident" name="place_of_incident" value={formData.place_of_incident} onChange={handleInputChange} icon={MapPin} placeholder="e.g. Internet, WhatsApp" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField label="Distance from PS" name="distance_from_ps" value={formData.distance_from_ps} onChange={handleInputChange} icon={MapPin} placeholder="e.g. 5 KM East" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    
+
                                     <div className="md:col-span-2">
                                         <InputField label="Incident Address" name="incident_address" value={formData.incident_address} onChange={handleInputChange} icon={MapPin} placeholder="Full address if applicable" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     </div>
@@ -498,11 +557,11 @@ const CaseForm = () => {
                                     <User className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">3. Complainant / Victim Details</h2>
                                 </div>
-                                
+
                                 <h3 className="text-sm font-black text-black opacity-100 tracking-widest uppercase">Complainant Profile</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField label="Complainant Name" name="complainant_name" required value={formData.complainant_name} onChange={handleInputChange} error={errors.complainant_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField label="Mobile Number" name="complainant_mobile" required value={formData.complainant_mobile} onChange={handleInputChange} error={errors.complainant_mobile} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Complainant Name" name="complainant_name" value={formData.complainant_name} onChange={handleInputChange} error={errors.complainant_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Mobile Number" name="complainant_mobile" value={formData.complainant_mobile} onChange={handleInputChange} error={errors.complainant_mobile} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField label="Email Address" name="complainant_email" value={formData.complainant_email} onChange={handleInputChange} error={errors.complainant_email} icon={Mail} placeholder="email@example.com" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField label="Aadhaar Number" name="complainant_aadhaar" value={formData.complainant_aadhaar} onChange={handleInputChange} error={errors.complainant_aadhaar} icon={Fingerprint} placeholder="XXXX XXXX XXXX" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                     <InputField label="PAN Number" name="complainant_pan" value={formData.complainant_pan} onChange={handleInputChange} error={errors.complainant_pan} icon={FilePlus} placeholder="ABCDE1234F" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
@@ -522,7 +581,7 @@ const CaseForm = () => {
                                     <div className="space-y-8 pt-4">
                                         <h3 className="text-sm font-black text-black opacity-100 tracking-widest uppercase">Victim Profile</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <InputField label="Victim Name" name="victim_name" required value={formData.victim_name} onChange={handleInputChange} error={errors.victim_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                            <InputField label="Victim Name" name="victim_name" value={formData.victim_name} onChange={handleInputChange} error={errors.victim_name} icon={User} placeholder="Full Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             <InputField label="Mobile Number" name="victim_mobile" value={formData.victim_mobile} onChange={handleInputChange} error={errors.victim_mobile} icon={Activity} placeholder="+91..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             <InputField label="Email Address" name="victim_email" value={formData.victim_email} onChange={handleInputChange} error={errors.victim_email} icon={Mail} placeholder="email@example.com" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                             <div className="md:col-span-2">
@@ -546,18 +605,17 @@ const CaseForm = () => {
                                     <Banknote className="text-blue-600" size={24} />
                                     <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">4. Fraud / Cyber Crime Details</h2>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <InputField label="Fraud Asset Value (₹)" name="fraud_amount" type="number" required value={formData.fraud_amount} onChange={handleInputChange} error={errors.fraud_amount} icon={Banknote} placeholder="Numerical value only" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField label="Target Financial Institute" name="bank_name" value={formData.bank_name} onChange={handleInputChange} icon={Banknote} placeholder="Bank/Wallet Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField label="Account ID / Number" name="account_no" value={formData.account_no} onChange={handleInputChange} icon={Shield} placeholder="Target Account" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
-                                    <InputField label="Portal Reference (ACKN)" name="ackn_no" value={formData.ackn_no} onChange={handleInputChange} icon={Shield} placeholder="REF://CYBER/..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <InputField label="Fraud Asset Value (₹)" name="fraud_amount" type="number" value={formData.fraud_amount} onChange={handleInputChange} error={errors.fraud_amount} icon={Banknote} placeholder="Numerical value only" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Target Financial Institute" name="bank_name" value={formData.bank_name} onChange={handleInputChange} error={errors.bank_name} icon={Banknote} placeholder="Bank/Wallet Name" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Account ID / Number" name="account_no" value={formData.account_no} onChange={handleInputChange} error={errors.account_no} icon={Shield} placeholder="Target Account" className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
+                                    <InputField label="Portal Reference (ACKN)" name="ackn_no" value={formData.ackn_no} onChange={handleInputChange} error={errors.ackn_no} icon={Shield} placeholder="REF://CYBER/..." className="!border-black !placeholder:text-black !placeholder:opacity-100 !text-black !font-black" labelClassName="!text-black !font-black !opacity-100" />
                                 </div>
                                 <div className="space-y-1.5 mt-6">
                                     <label className="text-[10px] font-black text-black opacity-100 tracking-widest uppercase ml-1">FIR Narrative / Event Log</label>
                                     <textarea
                                         name="description"
                                         rows="6"
-                                        required
                                         className={`w-full bg-slate-50 border ${errors.description ? 'border-rose-500' : '!border-black'} rounded-2xl p-4 text-sm outline-none focus:border-blue-600 focus:bg-white transition-all resize-none !text-black !font-black placeholder:text-black placeholder:opacity-100`}
                                         placeholder="Detailed event log..."
                                         value={formData.description}
@@ -631,7 +689,6 @@ const CaseForm = () => {
                                     <SelectField
                                         label="Investigating Officer (IO)"
                                         name="assigned_to"
-                                        required
                                         icon={ShieldAlert}
                                         value={formData.assigned_to}
                                         onChange={handleInputChange}
@@ -723,11 +780,11 @@ const CaseForm = () => {
                                     Previous Phase
                                 </Button>
                             ) : <div></div>}
-                            
-                            <Button 
-                                variant="outline" 
-                                type="button" 
-                                onClick={saveDraft} 
+
+                            <Button
+                                variant="outline"
+                                type="button"
+                                onClick={saveDraft}
                                 className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
                             >
                                 <Save size={16} className="mr-2 inline" /> Save as Draft
@@ -739,7 +796,7 @@ const CaseForm = () => {
                                 Proceed <ChevronRight size={18} />
                             </Button>
                         ) : (
-                            <Button variant="secondary" type="submit" loading={loading} className="px-12">
+                            <Button variant="secondary" type="button" onClick={handleSubmit} loading={loading} className="px-12">
                                 <CheckCircle2 size={18} /> Seal Case Record
                             </Button>
                         )}

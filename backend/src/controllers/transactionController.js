@@ -130,7 +130,9 @@ exports.importExcel = async (req, res) => {
                     amount: isNaN(amount) ? 0 : amount,
                     utr_no: finalUtrNo.toString().trim().substring(0, 100),
                     trans_date: isNaN(trans_date.getTime()) ? new Date() : trans_date,
-                    platform: bankName.substring(0, 50)
+                    platform: bankName.substring(0, 50),
+                    ifsc_code: ifsc.toString().trim().substring(0, 50),
+                    layer: layer.toString().trim().substring(0, 50)
                 });
 
                 const bKey = bankName;
@@ -153,27 +155,34 @@ exports.importExcel = async (req, res) => {
             return res.status(400).json({ success: false, message: `No valid rows found. Skipped: ${skippedRows}. Headers: ${Object.keys(rawData[0]).join(', ')}` });
         }
 
-        // 🚀 STEP 4: Insert transactions — try BULK first, fallback to row-by-row
-        let insertMethod = 'bulk';
+        // 🚀 STEP 4: Insert transactions — use CHUNKED insert to fix slow processing
+        let insertMethod = 'chunked';
         try {
-            const table = new mssql.Table('case_transactions');
-            table.create = false;
-            table.columns.add('case_id', mssql.Int, { nullable: false });
-            table.columns.add('sender_acc', mssql.NVarChar(50), { nullable: true });
-            table.columns.add('receiver_acc', mssql.NVarChar(50), { nullable: true });
-            table.columns.add('amount', mssql.Decimal(18, 2), { nullable: true });
-            table.columns.add('utr_no', mssql.NVarChar(100), { nullable: true });
-            table.columns.add('trans_date', mssql.DateTime, { nullable: true });
-            table.columns.add('platform', mssql.NVarChar(50), { nullable: true });
-
-            for (const r of parsedRows) {
-                table.rows.add(r.case_id, r.sender_acc, r.receiver_acc, r.amount, r.utr_no, r.trans_date, r.platform);
+            const CHUNK_SIZE = 200;
+            for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
+                const chunk = parsedRows.slice(i, i + CHUNK_SIZE);
+                const request = pool.request();
+                let queryValues = [];
+                
+                chunk.forEach((r, idx) => {
+                    request.input(`case_id_${idx}`, mssql.Int, r.case_id);
+                    request.input(`sender_acc_${idx}`, mssql.NVarChar, r.sender_acc);
+                    request.input(`receiver_acc_${idx}`, mssql.NVarChar, r.receiver_acc);
+                    request.input(`amount_${idx}`, mssql.Decimal(18, 2), r.amount);
+                    request.input(`utr_no_${idx}`, mssql.NVarChar, r.utr_no);
+                    request.input(`trans_date_${idx}`, mssql.DateTime, r.trans_date);
+                    request.input(`platform_${idx}`, mssql.NVarChar, r.platform);
+                    request.input(`ifsc_code_${idx}`, mssql.NVarChar, r.ifsc_code);
+                    request.input(`layer_${idx}`, mssql.NVarChar, r.layer);
+                    
+                    queryValues.push(`(@case_id_${idx}, @sender_acc_${idx}, @receiver_acc_${idx}, @amount_${idx}, @utr_no_${idx}, @trans_date_${idx}, @platform_${idx}, @ifsc_code_${idx}, @layer_${idx})`);
+                });
+                
+                await request.query(`INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, ifsc_code, layer) VALUES ${queryValues.join(', ')}`);
             }
-
-            await pool.request().bulk(table);
-            console.log(`[EXCEL] Bulk inserted ${parsedRows.length} rows`);
-        } catch (bulkErr) {
-            console.warn('[EXCEL] Bulk failed, falling back to row-by-row:', bulkErr.message);
+            console.log(`[EXCEL] Chunked inserted ${parsedRows.length} rows`);
+        } catch (chunkErr) {
+            console.warn('[EXCEL] Chunked failed, falling back to row-by-row:', chunkErr.message);
             insertMethod = 'row-by-row';
             
             // Fallback: row-by-row INSERT
@@ -187,7 +196,9 @@ exports.importExcel = async (req, res) => {
                         .input('utr_no', mssql.NVarChar, r.utr_no)
                         .input('trans_date', mssql.DateTime, r.trans_date)
                         .input('platform', mssql.NVarChar, r.platform)
-                        .query('INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform) VALUES (@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform)');
+                        .input('ifsc_code', mssql.NVarChar, r.ifsc_code)
+                        .input('layer', mssql.NVarChar, r.layer)
+                        .query('INSERT INTO case_transactions (case_id, sender_acc, receiver_acc, amount, utr_no, trans_date, platform, ifsc_code, layer) VALUES (@case_id, @sender_acc, @receiver_acc, @amount, @utr_no, @trans_date, @platform, @ifsc_code, @layer)');
                 } catch (rowInsertErr) {
                     console.warn('[ROW_INSERT_FAIL]', rowInsertErr.message);
                 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { generateLetterHtml, downloadPdf } from '../services/letterGenerator';
@@ -34,7 +34,8 @@ import {
     FileDown,
     ZoomIn,
     ZoomOut,
-    Minus
+    Minus,
+    Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -69,6 +70,24 @@ const LetterPreview = () => {
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [pendingNotice, setPendingNotice] = useState(null);
     const [conflictQueue, setConflictQueue] = useState([]);
+
+    // Template state
+    const [templates, setTemplates] = useState([]);
+    const [selectedTemplate, setSelectedTemplate] = useState(null);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
+    const [margins, setMargins] = useState({ top: 50, left: 50, right: 50, bottom: 50 });
+
+    const activeEditorRef = useRef(null);
+    const lastSelectionRef = useRef(null);
+    const bankListRef = useRef([]);
+
+    const saveSelection = (e) => {
+        activeEditorRef.current = e.currentTarget;
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+            lastSelectionRef.current = sel.getRangeAt(0);
+        }
+    };
 
     // Layer filter + sort state
     const [layerFilter, setLayerFilter] = useState('ALL');
@@ -170,9 +189,37 @@ const LetterPreview = () => {
         return finalResult;
     };
 
+    const initProcess = async () => {
+        try {
+            setLoading(true);
+            const listRes = await api.get('/cases/bankmaillist').catch(() => null);
+            if (listRes?.data?.success) {
+                bankListRef.current = listRes.data.data;
+            }
+            fetchProcessData();
+            fetchTemplates();
+        } catch (err) {
+            console.error('Failed to init:', err);
+        }
+    };
+
     useEffect(() => {
-        fetchProcessData();
+        initProcess();
     }, [id]);
+
+    const fetchTemplates = async () => {
+        try {
+            setLoadingTemplates(true);
+            const res = await api.get('/templates');
+            if (res.data.success) {
+                setTemplates(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to load templates:', err);
+        } finally {
+            setLoadingTemplates(false);
+        }
+    };
 
     useEffect(() => {
         if (bankGroups.length > 0 && processStep === 3) {
@@ -197,7 +244,6 @@ const LetterPreview = () => {
                 transactions.forEach(t => {
                     const bank = (t.platform || 'Unknown Bank').trim();
                     if (!groups[bank]) groups[bank] = { name: bank, records: [] };
-                    // Extract real layer from DB — normalize to numeric for sorting
                     const rawLayer = t.layer || '';
                     const layerMatch = rawLayer.toString().trim().match(/\d+/);
                     const layerNum = layerMatch ? parseInt(layerMatch[0], 10) : 999;
@@ -242,18 +288,22 @@ const LetterPreview = () => {
         });
 
         if (filteredRecords.length === 0) {
-            if (!activeUtrs) setSelectedBank(null); // Only nullify if it was global auto-sync
+            if (!activeUtrs) setSelectedBank(null);
             return;
         }
 
+        const matchedBank = bankListRef.current.find(b => b.bank_name?.toLowerCase().trim() === group.name?.toLowerCase().trim()) || {};
+        
         const letterData = {
             year: new Date().getFullYear(),
             refId: `${id}/782-JP`,
             date: new Date().toLocaleDateString('en-GB'),
             bankName: group.name,
+            bankAddress: matchedBank.bankaddress || '',
             records: filteredRecords.map(r => ({
                 accountNumber: r.account,
                 transactionId: r.utr,
+                ifsc: r.ifsc,
                 amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
             })),
             startDate: '01/01/2024',
@@ -281,7 +331,6 @@ const LetterPreview = () => {
         }
         setSelectedRecordUtrs(newSelected);
 
-        // Refresh preview based on current selection or fallback to first visible
         const currentGroup = bankGroups.find(g => g.name === selectedBank?.bankName);
         if (currentGroup) {
             prepareSelectedBank(currentGroup, newSelected);
@@ -325,14 +374,18 @@ const LetterPreview = () => {
             });
             if (filteredRecords.length === 0) continue;
 
+            const matchedBank = bankListRef.current.find(b => b.bank_name?.toLowerCase().trim() === group.name?.toLowerCase().trim()) || {};
+
             const letterData = {
                 year: new Date().getFullYear(),
                 refId: `${id}/782-JP`,
                 date: new Date().toLocaleDateString('en-GB'),
                 bankName: group.name,
+                bankAddress: matchedBank.bankaddress || '',
                 records: filteredRecords.map(r => ({
                     accountNumber: r.account,
                     transactionId: r.utr,
+                    ifsc: r.ifsc,
                     amount: `₹${parseFloat(r.amount).toLocaleString()}`
                 })),
                 startDate: '01/01/2024',
@@ -340,16 +393,15 @@ const LetterPreview = () => {
             };
 
             const { generateBulkPdf } = await import('../services/letterGenerator');
-            generateBulkPdf(pdf, letterData, isFirst);
+            await generateBulkPdf(pdf, letterData, isFirst, selectedTemplate);
             isFirst = false;
         }
         pdf.save(`BULK_NOTICES_CASE_${id}.pdf`);
     };
 
     const handleStepChange = (newStep) => {
-        if (newStep === 3) {
+        if (newStep === 4) {
             setGenerating(true);
-            // Directly find and prepare the first viable bank group
             const firstViable = bankGroups.find(g => selectedBankIds.has(g.name) && g.records.some(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r)));
             if (firstViable) {
                 prepareSelectedBank(firstViable);
@@ -359,20 +411,78 @@ const LetterPreview = () => {
         setProcessStep(newStep);
     };
 
+    const restoreSelection = () => {
+        if (activeEditorRef.current) activeEditorRef.current.focus();
+        if (lastSelectionRef.current) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(lastSelectionRef.current);
+        }
+    };
+
+    const formatText = (command, value = null) => {
+        restoreSelection();
+        document.execCommand(command, false, value);
+    };
+
+    const applyFontSize = (size) => {
+        restoreSelection();
+        document.execCommand("fontSize", false, "7");
+        
+        const fixFonts = () => {
+            if (!activeEditorRef.current) return;
+            const fontElements = Array.from(activeEditorRef.current.getElementsByTagName('font'));
+            fontElements.forEach(font => {
+                if (font.size === '7' || font.getAttribute('size') === '7') {
+                    const span = document.createElement('span');
+                    span.style.fontSize = `${size}px`;
+                    span.innerHTML = font.innerHTML;
+                    font.parentNode.replaceChild(span, font);
+                }
+            });
+        };
+        fixFonts();
+        fixFonts();
+    };
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                restoreSelection();
+                const img = `<img src="${ev.target.result}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" />`;
+                document.execCommand('insertHTML', false, img);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleSaveToDossier = async () => {
+        let idx = 0;
         const lettersToSave = bankGroups
             .filter(g => selectedBankIds.has(g.name))
             .map(g => {
                 const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
                 if (recs.length === 0) return null;
+                
+                const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+                const elem = document.getElementById(elemId);
+                idx++;
+
+                const matchedBank = bankListRef.current.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
+                
                 return {
                     year: new Date().getFullYear(),
                     refId: `${id}/782-JP`,
                     date: new Date().toLocaleDateString('en-GB'),
                     bankName: g.name,
+                    bankAddress: matchedBank.bankaddress || '',
+                    htmlContent: elem ? elem.innerHTML : selectedTemplate,
                     records: recs.map(r => ({
                         accountNumber: r.account,
                         transactionId: r.utr,
+                        ifsc: r.ifsc,
                         amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
                     })),
                     startDate: '01/01/2024',
@@ -400,7 +510,7 @@ const LetterPreview = () => {
             let savedCount = 0;
             for (const letter of lettersToSave) {
                 const pdf = new jsPDF('p', 'mm', 'a4');
-                generateBulkPdf(pdf, letter, true);
+                await generateBulkPdf(pdf, letter, true, letter.htmlContent);
                 
                 // Use a Promise to get reliable base64 from Blob
                 const pdfBlob = pdf.output('blob');
@@ -426,7 +536,7 @@ const LetterPreview = () => {
             });
             
             setTimeout(() => {
-                setProcessStep(4);
+                setProcessStep(5);
                 setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
             }, 2500);
         } catch (err) {
@@ -443,32 +553,40 @@ const LetterPreview = () => {
     };
 
     const handleOpenEmailModal = async () => {
+        setFetchingRecipients(true);
         try {
-            setFetchingRecipients(true);
             setMissionReport(null);
             
-            // 1. Identify letters to generate
-            const targetBanks = bankGroups.filter(g => selectedBankIds.has(g.name));
-            const letters = targetBanks.map(g => {
-                const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
-                if (recs.length === 0) return null;
-                return {
-                    bankName: g.name,
-                    data: {
-                        year: new Date().getFullYear(),
-                        refId: `${id}/782-JP`,
-                        date: new Date().toLocaleDateString('en-GB'),
+            let idx = 0;
+            const letters = bankGroups
+                .filter(g => selectedBankIds.has(g.name))
+                .map(g => {
+                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
+                    if (recs.length === 0) return null;
+
+                    const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+                    const elem = document.getElementById(elemId);
+                    idx++;
+
+                    return {
                         bankName: g.name,
-                        records: recs.map(r => ({
-                            accountNumber: r.account,
-                            transactionId: r.utr,
-                            amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
-                        })),
-                        startDate: '01/01/2024',
-                        endDate: new Date().toLocaleDateString('en-GB')
-                    }
-                };
-            }).filter(Boolean);
+                        htmlContent: elem ? elem.innerHTML : selectedTemplate,
+                        data: {
+                            year: new Date().getFullYear(),
+                            refId: `${id}/782-JP`,
+                            date: new Date().toLocaleDateString('en-GB'),
+                            bankName: g.name,
+                            records: recs.map(r => ({
+                                accountNumber: r.account,
+                                transactionId: r.utr,
+                                amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
+                            })),
+                            startDate: '01/01/2024',
+                            endDate: new Date().toLocaleDateString('en-GB')
+                        }
+                    };
+                })
+                .filter(Boolean);
 
             if (letters.length === 0) {
                 alert('No notices to process');
@@ -484,7 +602,7 @@ const LetterPreview = () => {
 
             for (const letter of letters) {
                 const pdf = new jsPDF('p', 'mm', 'a4');
-                generateBulkPdf(pdf, letter.data, true);
+                await generateBulkPdf(pdf, letter.data, true, letter.htmlContent);
                 const pdfBlob = pdf.output('blob');
                 const pdfBase64 = await new Promise(resolve => {
                     const reader = new FileReader();
@@ -514,7 +632,7 @@ const LetterPreview = () => {
             } else {
                 // No conflicts, proceed to final modal
                 await new Promise(r => setTimeout(r, 800));
-                setProcessStep(4);
+                setProcessStep(5);
                 const res = await api.get(`/cases/${id}/nodal-recipients`);
                 if (res.data.success) {
                     setEmailRecipients(res.data.data);
@@ -645,7 +763,7 @@ const LetterPreview = () => {
                 setPendingNotice(null);
                 
                 // Finalize: Sync Step 4 and Open Email Modal
-                setProcessStep(4);
+                setProcessStep(5);
                 const res = await api.get(`/cases/${id}/nodal-recipients`);
                 if (res.data.success) {
                     setEmailRecipients(res.data.data);
@@ -706,6 +824,70 @@ const LetterPreview = () => {
                 .flatMap(g => g.records)
                 .filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r)).length;
 
+            // Generate and save PDFs sequentially to related folders
+            let idx = 0;
+            const lettersToSave = bankGroups
+                .filter(g => selectedBankIds.has(g.name))
+                .map(g => {
+                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
+                    if (recs.length === 0) return null;
+                    const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+                    const elem = document.getElementById(elemId);
+                    idx++;
+                    const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
+                    return {
+                        year: new Date().getFullYear(),
+                        refId: `${id}/782-JP`,
+                        date: new Date().toLocaleDateString('en-GB'),
+                        bankName: g.name,
+                        bankAddress: matchedBank.bankaddress || '',
+                        firNo: caseData?.case?.fir_no || '',
+                        ncrpNo: caseData?.case?.ackn_no || '',
+                        htmlContent: elem ? elem.innerHTML : selectedTemplate,
+                        records: recs.map(r => ({
+                            accountNumber: r.account,
+                            transactionId: r.utr,
+                            ifsc: r.ifsc,
+                            amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
+                        })),
+                        startDate: '01/01/2024',
+                        endDate: new Date().toLocaleDateString('en-GB')
+                    };
+                })
+                .filter(Boolean);
+
+            if (lettersToSave.length > 0) {
+                const totalLetters = lettersToSave.length;
+                setStatusOverlay({ show: true, type: 'warning', title: 'Finalizing Mission', message: `Generating and saving dossiers... (0/${totalLetters} completed)` });
+                const { default: jsPDF } = await import('jspdf');
+                const { generateBulkPdf } = await import('../services/letterGenerator');
+
+                let currentLetter = 0;
+                for (const letter of lettersToSave) {
+                    currentLetter++;
+                    const remaining = totalLetters - currentLetter;
+                    setStatusOverlay({ 
+                        show: true, 
+                        type: 'warning', 
+                        title: 'Finalizing Mission', 
+                        message: `Processing: ${letter.bankName}\n\nTotal Notices: ${totalLetters} | Generated: ${currentLetter} | Remaining: ${remaining}`
+                    });
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    await generateBulkPdf(pdf, letter, true, letter.htmlContent);
+                    const pdfBlob = pdf.output('blob');
+                    const pdfBase64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(pdfBlob);
+                    });
+                    await api.post('/cases/save-notice', { 
+                        case_id: id, 
+                        bank_name: letter.bankName, 
+                        pdf_base64: pdfBase64 
+                    });
+                }
+            }
+
             const detailedRemark = `[FORENSIC PROCESS FINALIZED]\nTarget Banks Analyzed: ${selectedBanksCount}\nVerified Transactions Sealed: ${targetRecordsCount}\nOrigin Log Remarks: ${remark || 'System notices generated and deposited to secure dossier.'}`;
 
             // 1. Update status hierarchy
@@ -714,6 +896,7 @@ const LetterPreview = () => {
             // 2. Auto-Broadcast as Internal Memo for Timeline sync
             await api.post(`/cases/${id}/notes`, { note_text: detailedRemark });
 
+            setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
             navigate(`/cases/${id}`);
         } catch (err) {
             console.error('Failed to complete mission:', err);
@@ -801,7 +984,7 @@ const LetterPreview = () => {
                             Report <span className="text-blue-600">Generation</span> Terminal
                         </h1>
                         <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-1">
-                            Case Intelligence Dossier #{id} // Forensic Phase {processStep} of 4
+                            Case Intelligence Dossier #{id} // Forensic Phase {processStep} of 5
                         </p>
                     </div>
                 </div>
@@ -811,8 +994,9 @@ const LetterPreview = () => {
                     {[
                         { id: 1, label: 'UPLOAD', icon: Upload },
                         { id: 2, label: 'REVIEW', icon: FileSearch },
-                        { id: 3, label: 'DRAFT', icon: FileText },
-                        { id: 4, label: 'DISPATCH', icon: Send }
+                        { id: 3, label: 'TEMPLATE', icon: FileText },
+                        { id: 4, label: 'DRAFT', icon: FileText },
+                        { id: 5, label: 'DISPATCH', icon: Send }
                     ].map((step) => (
                         <React.Fragment key={step.id}>
                             <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => handleStepChange(step.id)}>
@@ -821,14 +1005,15 @@ const LetterPreview = () => {
                                 </div>
                                 <span className={`text-[8px] font-black uppercase tracking-widest ${processStep >= step.id ? 'text-blue-600' : 'text-slate-300'}`}>{step.label}</span>
                             </div>
-                            {step.id < 4 && <div className={`w-16 h-0.5 rounded-full ${processStep > step.id ? 'bg-blue-600' : 'bg-slate-200'}`}></div>}
+                            {step.id < 5 && <div className={`w-16 h-0.5 rounded-full ${processStep > step.id ? 'bg-blue-600' : 'bg-slate-200'}`}></div>}
                         </React.Fragment>
                     ))}
                 </div>
 
                 <div className="flex gap-4">
-                    {processStep === 2 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(3)}>Generate Notices</Button>}
-                    {processStep === 3 && <Button variant="primary" className="bg-emerald-600 border-none px-10 py-4" icon={Send} onClick={() => setProcessStep(4)}>Proceed to Final</Button>}
+                    {processStep === 2 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(3)}>Select Template</Button>}
+                    {processStep === 3 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(4)} disabled={!selectedTemplate}>Generate Notices</Button>}
+                    {processStep === 4 && <Button variant="primary" className="bg-emerald-600 border-none px-10 py-4" icon={Send} onClick={() => setProcessStep(5)}>Proceed to Final</Button>}
                 </div>
             </div>
 
@@ -1062,21 +1247,87 @@ const LetterPreview = () => {
                             </motion.div>
                         )}
 
-                        {processStep === 3 && (() => {
+                        {processStep === 3 && (
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} key="step3">
+                                <Card className="p-0 overflow-hidden border-slate-200 shadow-xl bg-white">
+                                    <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100">
+                                                <FileSearch className="text-white" size={24} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase italic">Template <span className="text-blue-600">Selection</span></h3>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 italic">Choose a custom format from Templates Config</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-8">
+                                        {loadingTemplates ? (
+                                            <div className="text-center py-20">
+                                                <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                                                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Loading Templates...</p>
+                                            </div>
+                                        ) : templates.length === 0 ? (
+                                            <div className="text-center py-20 text-slate-400">
+                                                <AlertTriangle size={32} className="mx-auto mb-4 text-slate-300" />
+                                                <p className="text-sm font-black uppercase tracking-widest">No templates found</p>
+                                                <p className="text-xs mt-2">Please create templates in the Templates Config section first.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {templates.map(t => (
+                                                    <div 
+                                                        key={t.template_id} 
+                                                        onClick={() => {
+                                                            setSelectedTemplate(t);
+                                                            let jsonData = t.json_data;
+                                                            if (typeof jsonData === 'string') {
+                                                                try { jsonData = JSON.parse(jsonData); } catch(e) {}
+                                                            }
+                                                            setMargins({ top: 50, left: 50, right: 50, bottom: 50, ...(jsonData?.margins || {}) });
+                                                        }}
+                                                        className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${selectedTemplate?.template_id === t.template_id ? 'border-blue-600 bg-blue-50/50 shadow-md shadow-blue-100' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}
+                                                    >
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <FileText size={24} className={selectedTemplate?.template_id === t.template_id ? 'text-blue-600' : 'text-slate-400'} />
+                                                            {selectedTemplate?.template_id === t.template_id && (
+                                                                <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold uppercase">Selected</span>
+                                                            )}
+                                                        </div>
+                                                        <h4 className={`font-bold ${selectedTemplate?.template_id === t.template_id ? 'text-blue-900' : 'text-slate-700'}`}>{t.template_name}</h4>
+                                                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                                                            Fields: {t.json_data?.fields?.length || 0} | Columns: {t.json_data?.table_columns?.length || 0}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        )}
+
+                        <div className={processStep === 4 ? 'block' : 'hidden'}>
+                            {(() => {
                             // Build all letters for selected banks
                             const allLetters = bankGroups
                                 .filter(g => selectedBankIds.has(g.name))
                                 .map(g => {
                                     const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
                                     if (recs.length === 0) return null;
+                                    const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
                                     return {
                                         year: new Date().getFullYear(),
                                         refId: `${id}/782-JP`,
                                         date: new Date().toLocaleDateString('en-GB'),
                                         bankName: g.name,
+                                        bankAddress: matchedBank.bankaddress || '',
+                                        firNo: caseData?.case?.fir_no || '',
+                                        ncrpNo: caseData?.case?.ackn_no || '',
                                         records: recs.map(r => ({
                                             accountNumber: r.account,
                                             transactionId: r.utr,
+                                            ifsc: r.ifsc,
                                             amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
                                         })),
                                         startDate: '01/01/2024',
@@ -1106,7 +1357,52 @@ const LetterPreview = () => {
                                         <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition-all shadow-sm"><ZoomOut size={16} className="text-slate-600" /></button>
                                         <div className="px-5 py-2 bg-white rounded-xl border border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-widest min-w-[80px] text-center">{Math.round(zoom * 100)}%</div>
                                         <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition-all shadow-sm"><ZoomIn size={16} className="text-slate-600" /></button>
-                                        <button onClick={() => setZoom(0.75)} className="px-4 py-2 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all shadow-sm">Reset</button>
+                                        <button onClick={() => setZoom(1.0)} className="px-4 py-2 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all shadow-sm">Reset</button>
+                                    </div>
+
+                                    {/* Integrated Tactical Toolbar */}
+                                    <div className="bg-slate-900 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-6 sticky top-0 z-[100] shadow-xl rounded-2xl mx-12">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                                <button onClick={() => formatText('bold')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Bold"><Bold size={16} /></button>
+                                                <button onClick={() => formatText('italic')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Italic"><Italic size={16} /></button>
+                                                <button onClick={() => formatText('underline')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Underline"><Underline size={16} /></button>
+                                            </div>
+
+                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                                <button onClick={() => formatText('justifyLeft')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Left"><AlignLeft size={16} /></button>
+                                                <button onClick={() => formatText('justifyCenter')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Center"><AlignCenter size={16} /></button>
+                                                <button onClick={() => formatText('justifyRight')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Right"><AlignRight size={16} /></button>
+                                            </div>
+
+                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                                <button onClick={() => formatText('insertUnorderedList')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="List"><List size={16} /></button>
+                                                <label className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer" title="Insert Image">
+                                                    <ImageIcon size={16} />
+                                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Font Size</span>
+                                                <select 
+                                                    onChange={(e) => applyFontSize(e.target.value)}
+                                                    className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
+                                                    defaultValue="16"
+                                                >
+                                                    {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
+                                                        <option key={size} value={size}>{size}px</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block"></div>
+                                            <div className="hidden sm:flex flex-col items-end">
+                                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Editor Status</p>
+                                                <p className="text-[10px] font-black text-emerald-500 uppercase italic">Active_Encryption_Link</p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* PDF Viewer Frame */}
@@ -1128,8 +1424,73 @@ const LetterPreview = () => {
                                                             <div className="mb-3 flex items-center gap-3">
                                                                 <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]"> Notice {idx + 1} of {allLetters.length} — {letter.bankName} </span>
                                                             </div>
-                                                            {/* Letter Paper */}
-                                                            <div id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`} className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out" style={{ transform: `scale(${zoom})`, width: '210mm', transformOrigin: 'top center' }} dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter) }} />
+                                                            {/* Letter Paper with Margins */}
+                                                            <div className="relative" style={{ zoom: zoom }}>
+                                                                <div 
+                                                                    id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`} 
+                                                                    contentEditable={true} 
+                                                                    suppressContentEditableWarning={true} 
+                                                                    spellCheck={false} 
+                                                                    onMouseUp={saveSelection}
+                                                                    onKeyUp={saveSelection}
+                                                                    className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out outline-none focus:ring-4 focus:ring-blue-500/30 min-h-[297mm] mx-auto prose prose-slate max-w-none text-slate-800" 
+                                                                    style={{ 
+                                                                        width: '210mm',
+                                                                        paddingTop: `${margins.top}px`,
+                                                                        paddingLeft: `${margins.left}px`,
+                                                                        paddingRight: `${margins.right}px`,
+                                                                        paddingBottom: `${margins.bottom}px`
+                                                                    }} 
+                                                                    dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter, selectedTemplate) }} 
+                                                                />
+                                                                
+                                                                {/* Margin Controls */}
+                                                                <>
+                                                                    {/* Top Margin Handle */}
+                                                                    <motion.div 
+                                                                        drag="y"
+                                                                        dragConstraints={{ top: 0, bottom: 200 }}
+                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, top: Math.max(0, prev.top + info.delta.y) }))}
+                                                                        className="absolute left-0 right-0 h-2 bg-blue-500/30 hover:bg-blue-500 cursor-ns-resize z-20 group flex items-center justify-center"
+                                                                        style={{ top: `${margins.top}px` }}
+                                                                    >
+                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Top: {Math.round(margins.top)}px</div>
+                                                                    </motion.div>
+
+                                                                    {/* Left Margin Handle */}
+                                                                    <motion.div 
+                                                                        drag="x"
+                                                                        dragConstraints={{ left: 0, right: 200 }}
+                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left + info.delta.x) }))}
+                                                                        className="absolute top-0 bottom-0 w-2 bg-blue-500/30 hover:bg-blue-500 cursor-ew-resize z-20 group flex items-center justify-center"
+                                                                        style={{ left: `${margins.left}px` }}
+                                                                    >
+                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase -rotate-90">Margin Left: {Math.round(margins.left)}px</div>
+                                                                    </motion.div>
+
+                                                                    {/* Right Margin Handle */}
+                                                                    <motion.div 
+                                                                        drag="x"
+                                                                        dragConstraints={{ left: -200, right: 0 }}
+                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, right: Math.max(0, prev.right - info.delta.x) }))}
+                                                                        className="absolute top-0 bottom-0 w-2 bg-blue-500/30 hover:bg-blue-500 cursor-ew-resize z-20 group flex items-center justify-center"
+                                                                        style={{ right: `${margins.right}px` }}
+                                                                    >
+                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase rotate-90">Margin Right: {Math.round(margins.right)}px</div>
+                                                                    </motion.div>
+
+                                                                    {/* Bottom Margin Handle */}
+                                                                    <motion.div 
+                                                                        drag="y"
+                                                                        dragConstraints={{ top: -200, bottom: 0 }}
+                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, bottom: Math.max(0, prev.bottom - info.delta.y) }))}
+                                                                        className="absolute left-0 right-0 h-2 bg-blue-500/30 hover:bg-blue-500 cursor-ns-resize z-20 group flex items-center justify-center"
+                                                                        style={{ bottom: `${Number(margins.bottom)}px` }}
+                                                                    >
+                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Bottom: {Math.round(margins.bottom)}px</div>
+                                                                    </motion.div>
+                                                                </>
+                                                            </div>
                                                         </motion.div>
                                                     ))}
                                                 </div>
@@ -1145,8 +1506,9 @@ const LetterPreview = () => {
                                 </motion.div>
                             );
                         })()}
+                        </div>
 
-                        {processStep === 4 && (
+                        {processStep === 5 && (
                             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} key="step4" className="flex items-center justify-center min-h-[600px]">
                                 <Card className="max-w-xl w-full p-16 text-center space-y-8 bg-white shadow-2xl rounded-[48px] border-none relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 via-blue-400 to-emerald-500"></div>
@@ -1396,7 +1758,7 @@ const LetterPreview = () => {
                                 {statusOverlay.type === 'success' ? <CheckCircle size={48} /> : statusOverlay.type === 'error' ? <XCircle size={48} /> : <AlertTriangle size={48} />}
                             </div>
                             <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">{statusOverlay.title}</h3>
-                            <p className="text-slate-500 font-bold mt-4 text-sm leading-relaxed">{statusOverlay.message}</p>
+                            <p className="text-slate-500 font-bold mt-4 text-sm leading-relaxed whitespace-pre-line">{statusOverlay.message}</p>
                             <button 
                                 onClick={() => setStatusOverlay({ ...statusOverlay, show: false })}
                                 className="w-full mt-10 py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-xl"

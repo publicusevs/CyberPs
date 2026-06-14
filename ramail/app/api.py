@@ -9,7 +9,8 @@ from .logger import app_logger
 import sys
 import os
 # Add modules to path to support hyphenated module names
-sys.path.append(os.path.join(os.getcwd(), 'modules', 'mail-system'))
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(parent_dir, 'modules', 'mail-system'))
 from controllers.mail_controller import router as enterprise_mail_router
 
 app = FastAPI(title="RajMail Automation API", version="1.0.0")

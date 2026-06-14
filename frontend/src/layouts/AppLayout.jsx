@@ -10,7 +10,8 @@ import { useAuth } from '../context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     LayoutDashboard, Briefcase, Search, ShieldCheck, Settings,
-    Settings2, FileText, Network, Database, X
+    Settings2, FileText, Network, Database,
+    Scan
 } from 'lucide-react';
 import { SidebarLink } from './SidebarLink';
 import Navbar from './Navbar';
@@ -92,6 +93,7 @@ const AppLayout = ({ children }) => {
                     <SidebarLink to="/cases" icon={Briefcase} label="Evidence Vault" active={location.pathname.startsWith('/cases') && !location.pathname.includes('/trail')} collapsed={collapsed && !mobileOpen} />
                     <SidebarLink to="/search" icon={Search} label="Global Intel" active={location.pathname === '/search'} collapsed={collapsed && !mobileOpen} />
                     <SidebarLink to="/trail" icon={Network} label="Trail Analyzer" active={location.pathname === '/trail'} collapsed={collapsed && !mobileOpen} />
+                    <SidebarLink to="/fir-read" icon={Scan} label="FIR Read" active={location.pathname === '/fir-read'} collapsed={collapsed && !mobileOpen} />
 
                     {user?.role === 'Admin' && (
                         <>

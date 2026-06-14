@@ -2,7 +2,8 @@ from app.send_mail import send_email
 from app.logger import app_logger
 import sys
 import os
-sys.path.append(os.path.join(os.getcwd(), 'modules', 'mail-system'))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(current_dir, 'modules', 'mail-system'))
 from config.mail_config import mail_settings
 
 def send_to_self_direct():

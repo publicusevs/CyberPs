@@ -8,6 +8,7 @@ router.post('/', authenticate, upload.single('fir_file'), caseController.createC
 router.get('/', authenticate, caseController.getAllCases);
 router.get('/:id', authenticate, caseController.getCaseById);
 router.get('/search', authenticate, caseController.searchCases);
+router.get('/bankmaillist', authenticate, caseController.getBankMailList);
 router.post('/notes', authenticate, caseController.addNote);
 router.post('/:id/status', authenticate, caseController.updateStatus);
 router.post('/transaction', authenticate, caseController.addTransaction);

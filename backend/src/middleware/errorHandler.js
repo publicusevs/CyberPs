@@ -34,7 +34,7 @@ const errorHandler = (err, req, res, next) => {
     if (err.code === 'EREQUEST' || err.number) {
         return res.status(400).json({
             success: false,
-            message: 'Database query error',
+            message: process.env.NODE_ENV === 'development' ? `Database query error: ${err.message}` : 'Database query error',
             error: process.env.NODE_ENV === 'development' ? err.message : undefined,
         });
     }

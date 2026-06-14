@@ -17,7 +17,7 @@ const DashboardRepository = {
         };
 
         const caseFilter = policeStationId
-            ? ' JOIN case_station_mapping csm ON c.case_id = csm.case_id WHERE csm.police_station_id = @ps_id'
+            ? ' WHERE c.police_station_id = @ps_id'
             : '';
 
         const [totalCases, activeCases, closedCases, totalFraud, recentActivity] = await Promise.all([

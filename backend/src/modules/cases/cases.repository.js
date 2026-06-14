@@ -41,42 +41,118 @@ const CasesRepository = {
             .input('telegram_id', mssql.NVarChar, fields.telegram_id)
             .input('website_url', mssql.NVarChar, fields.website_url)
             .input('other_social', mssql.NVarChar, fields.other_social)
+            .input('sho_name', mssql.NVarChar, fields.sho_details || fields.sho_name || null)
+            .input('remarks', mssql.NVarChar, fields.remarks || null)
             .query(`INSERT INTO cases 
                 (fir_no, ackn_no, fraud_amount, description, assigned_to, created_by, 
                  whatsapp_no, gmail_id, facebook_id, twitter_id, linkedin_id, insta_id, 
-                 telegram_id, website_url, other_social) 
+                 telegram_id, website_url, other_social, sho_name, remarks) 
                 OUTPUT INSERTED.case_id 
                 VALUES 
                 (@fir_no, @ackn_no, @fraud_amount, @description, @assigned_to, @created_by,
                  @whatsapp_no, @gmail_id, @facebook_id, @twitter_id, @linkedin_id, @insta_id,
-                 @telegram_id, @website_url, @other_social)`);
+                 @telegram_id, @website_url, @other_social, @sho_name, @remarks)`);
         return result.recordset[0].case_id;
     },
 
     async updateCase(transaction, caseId, fields) {
+        const toInt = (v) => {
+            const n = parseInt(v, 10);
+            return isNaN(n) ? null : n;
+        };
+
+        const combineDateTime = (dateStr, timeStr) => {
+            if (!dateStr) return null;
+            const clean = dateStr.trim();
+            if (!timeStr) return new Date(clean);
+            return new Date(`${clean}T${timeStr.trim()}`);
+        };
+
+        const fir_datetime = combineDateTime(fields.fir_date, fields.fir_time);
+        const occurrence_from_datetime = combineDateTime(fields.occurrence_date_from, fields.occurrence_time_from);
+        const occurrence_to_datetime = combineDateTime(fields.occurrence_date_to, fields.occurrence_time_to);
+        const info_received_datetime = combineDateTime(fields.info_received_date, fields.info_received_time);
+
         await new mssql.Request(transaction)
             .input('case_id', mssql.Int, caseId)
             .input('fir_no', mssql.NVarChar, fields.fir_no)
-            .input('ackn_no', mssql.NVarChar, fields.ackn_no)
-            .input('fraud_amount', mssql.Decimal(18, 2), fields.fraud_amount)
-            .input('description', mssql.NVarChar, fields.description)
-            .input('assigned_to', mssql.Int, fields.assigned_to)
-            .input('whatsapp_no', mssql.NVarChar, fields.whatsapp_no)
-            .input('gmail_id', mssql.NVarChar, fields.gmail_id)
-            .input('facebook_id', mssql.NVarChar, fields.facebook_id)
-            .input('twitter_id', mssql.NVarChar, fields.twitter_id)
-            .input('linkedin_id', mssql.NVarChar, fields.linkedin_id)
-            .input('insta_id', mssql.NVarChar, fields.insta_id)
-            .input('telegram_id', mssql.NVarChar, fields.telegram_id)
-            .input('website_url', mssql.NVarChar, fields.website_url)
-            .input('other_social', mssql.NVarChar, fields.other_social)
+            .input('ackn_no', mssql.NVarChar, fields.ackn_no || null)
+            .input('fir_year', mssql.Int, toInt(fields.fir_year))
+            .input('district_id', mssql.Int, toInt(fields.district_id || fields.district))
+            .input('police_station_id', mssql.Int, toInt(fields.police_station_id || fields.police_station))
+            .input('fir_datetime', mssql.DateTime, fir_datetime)
+            .input('occurrence_from_datetime', mssql.DateTime, occurrence_from_datetime || null)
+            .input('occurrence_to_datetime', mssql.DateTime, occurrence_to_datetime || null)
+            .input('info_received_datetime', mssql.DateTime, info_received_datetime || null)
+            .input('gd_entry_no', mssql.NVarChar, fields.gd_no || fields.gd_entry_no || null)
+            .input('place_of_occurrence', mssql.NVarChar, fields.place_of_occurrence || fields.place_of_incident || null)
+            .input('fraud_amount', mssql.Decimal(18, 2), fields.fraud_amount ? parseFloat(fields.fraud_amount) : null)
+            .input('description', mssql.NVarChar, fields.description || fields.fir_narrative || null)
+            .input('assigned_to', mssql.Int, toInt(fields.assigned_to))
+            .input('status_id', mssql.Int, fields.status_id ? toInt(fields.status_id) : 1)
+            .input('priority_id', mssql.Int, fields.priority_id ? toInt(fields.priority_id) : null)
+            .input('sho_name', mssql.NVarChar, fields.sho_details || fields.sho_name || null)
+            .input('remarks', mssql.NVarChar, fields.remarks || null)
             .query(`UPDATE cases SET 
-                fir_no=@fir_no, ackn_no=@ackn_no, fraud_amount=@fraud_amount, 
-                description=@description, assigned_to=@assigned_to, whatsapp_no=@whatsapp_no, 
-                gmail_id=@gmail_id, facebook_id=@facebook_id, twitter_id=@twitter_id, 
-                linkedin_id=@linkedin_id, insta_id=@insta_id, telegram_id=@telegram_id, 
-                website_url=@website_url, other_social=@other_social 
+                fir_no=@fir_no, 
+                ackn_no=@ackn_no, 
+                fir_year=@fir_year,
+                district_id=@district_id,
+                police_station_id=@police_station_id,
+                fir_datetime=@fir_datetime,
+                occurrence_from_datetime=@occurrence_from_datetime,
+                occurrence_to_datetime=@occurrence_to_datetime,
+                info_received_datetime=@info_received_datetime,
+                gd_entry_no=@gd_entry_no,
+                place_of_occurrence=@place_of_occurrence,
+                fraud_amount=@fraud_amount, 
+                fir_narrative=@description, 
+                description=@description, 
+                assigned_to=@assigned_to, 
+                status_id=@status_id,
+                priority_id=@priority_id,
+                sho_name=@sho_name,
+                remarks=@remarks
                 WHERE case_id=@case_id`);
+    },
+
+    async updateShoAndRemarks(transaction, caseId, shoName, remarks) {
+        const req = transaction ? new mssql.Request(transaction) : (await poolPromise).request();
+        await req
+            .input('case_id', mssql.Int, caseId)
+            .input('sho_name', mssql.NVarChar, shoName || null)
+            .input('remarks', mssql.NVarChar, remarks || null)
+            .query('UPDATE cases SET sho_name=@sho_name, remarks=@remarks WHERE case_id=@case_id');
+    },
+
+    async updateComplainant(transaction, { caseId, name, mobile, email, aadhar_no, pan_no, address }) {
+        await new mssql.Request(transaction)
+            .input('case_id', mssql.Int, caseId)
+            .input('name', mssql.NVarChar, name || null)
+            .input('mobile', mssql.NVarChar, mobile || null)
+            .input('email', mssql.NVarChar, email || null)
+            .input('aadhar_no', mssql.NVarChar, aadhar_no || null)
+            .input('pan_no', mssql.NVarChar, pan_no || null)
+            .input('address', mssql.NVarChar, address || null)
+            .query(`
+                IF EXISTS (SELECT 1 FROM case_complainants WHERE case_id = @case_id)
+                BEGIN
+                    UPDATE case_complainants SET 
+                        name = @name,
+                        mobile = @mobile,
+                        email = @email,
+                        aadhar_no = @aadhar_no,
+                        pan_no = @pan_no,
+                        address = @address,
+                        updated_at = GETDATE()
+                    WHERE case_id = @case_id
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO case_complainants (case_id, name, mobile, email, aadhar_no, pan_no, address, created_at)
+                    VALUES (@case_id, @name, @mobile, @email, @aadhar_no, @pan_no, @address, GETDATE())
+                END
+            `);
     },
 
     async getAll({ policeStationId, isAdmin }) {
@@ -85,7 +161,7 @@ const CasesRepository = {
         const request = pool.request();
 
         if (policeStationId && !isAdmin) {
-            query += ' JOIN case_station_mapping csm ON c.case_id = csm.case_id WHERE csm.police_station_id = @ps_id';
+            query += ' WHERE c.police_station_id = @ps_id';
             request.input('ps_id', mssql.Int, policeStationId);
         }
         query += ' ORDER BY c.created_at DESC';
@@ -95,19 +171,17 @@ const CasesRepository = {
 
     async getById(caseId, policeStationId) {
         const pool = await poolPromise;
-        let query = 'SELECT * FROM cases WHERE case_id = @case_id';
-        if (policeStationId) {
-            query = `SELECT c.*, ps.station_name, ps.address as station_address, ps.city as station_city 
+        let query = `SELECT c.*, ps.station_name, ps.address as station_address, ps.city as station_city 
                      FROM cases c 
-                     LEFT JOIN case_station_mapping csm ON c.case_id = csm.case_id 
-                     LEFT JOIN police_stations ps ON csm.police_station_id = ps.police_station_id 
-                     WHERE c.case_id = @case_id 
-                     AND (@ps_id IS NULL OR csm.police_station_id = @ps_id OR csm.police_station_id IS NULL)`;
+                     LEFT JOIN police_stations ps ON c.police_station_id = ps.police_station_id 
+                     WHERE c.case_id = @case_id`;
+        if (policeStationId) {
+            query += ` AND (@ps_id IS NULL OR c.police_station_id = @ps_id OR c.police_station_id IS NULL)`;
         }
         const caseReq = pool.request().input('case_id', mssql.Int, caseId);
         if (policeStationId) caseReq.input('ps_id', mssql.Int, policeStationId);
 
-        const [caseR, victimR, firR, evidenceR, transR, notesR, accusedR] = await Promise.all([
+        const [caseR, victimR, firR, evidenceR, transR, notesR, accusedR, complainantR] = await Promise.all([
             caseReq.query(query),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_victims WHERE case_id = @case_id'),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM fir_documents WHERE case_id = @case_id'),
@@ -123,6 +197,7 @@ const CasesRepository = {
                 ORDER BY ct.trans_date ASC`),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT n.*, u.name as author FROM case_notes n JOIN users u ON n.user_id = u.user_id WHERE n.case_id = @case_id ORDER BY n.created_at DESC'),
             pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_accused WHERE case_id = @case_id'),
+            pool.request().input('case_id', mssql.Int, caseId).query('SELECT * FROM case_complainants WHERE case_id = @case_id'),
         ]);
 
         if (caseR.recordset.length === 0) return null;
@@ -154,6 +229,7 @@ const CasesRepository = {
         return {
             case: caseR.recordset[0],
             victim: victimR.recordset[0],
+            complainant: complainantR.recordset[0] || null,
             fir: healedDocs[0],
             fir_docs: healedDocs,
             evidence: evidenceR.recordset,
@@ -268,24 +344,24 @@ const CasesRepository = {
     async insertVictim(transaction, { caseId, name, mobile, email, address, bank_name, account_no }) {
         await new mssql.Request(transaction)
             .input('case_id', mssql.Int, caseId)
-            .input('name', mssql.NVarChar, name)
-            .input('mobile', mssql.NVarChar, mobile)
-            .input('email', mssql.NVarChar, email)
-            .input('address', mssql.NVarChar, address)
-            .input('bank_name', mssql.NVarChar, bank_name)
-            .input('account_no', mssql.NVarChar, account_no)
+            .input('name', mssql.NVarChar, name || null)
+            .input('mobile', mssql.NVarChar, mobile || null)
+            .input('email', mssql.NVarChar, email || null)
+            .input('address', mssql.NVarChar, address || null)
+            .input('bank_name', mssql.NVarChar, bank_name || null)
+            .input('account_no', mssql.NVarChar, account_no || null)
             .query('INSERT INTO case_victims (case_id, name, mobile, email, address, bank_name, account_no) VALUES (@case_id, @name, @mobile, @email, @address, @bank_name, @account_no)');
     },
 
     async updateVictim(transaction, { caseId, name, mobile, email, address, bank_name, account_no }) {
         await new mssql.Request(transaction)
             .input('case_id', mssql.Int, caseId)
-            .input('name', mssql.NVarChar, name)
-            .input('mobile', mssql.NVarChar, mobile)
-            .input('email', mssql.NVarChar, email)
-            .input('address', mssql.NVarChar, address)
-            .input('bank_name', mssql.NVarChar, bank_name)
-            .input('account_no', mssql.NVarChar, account_no)
+            .input('name', mssql.NVarChar, name || null)
+            .input('mobile', mssql.NVarChar, mobile || null)
+            .input('email', mssql.NVarChar, email || null)
+            .input('address', mssql.NVarChar, address || null)
+            .input('bank_name', mssql.NVarChar, bank_name || null)
+            .input('account_no', mssql.NVarChar, account_no || null)
             .query('UPDATE case_victims SET name=@name, mobile=@mobile, email=@email, address=@address, bank_name=@bank_name, account_no=@account_no WHERE case_id=@case_id');
     },
 

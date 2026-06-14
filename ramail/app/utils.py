@@ -3,7 +3,8 @@ from exchangelib.errors import UnauthorizedError, AutoDiscoverFailed
 from .config import settings
 import sys
 import os
-sys.path.append(os.path.join(os.getcwd(), 'modules', 'mail-system'))
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(parent_dir, 'modules', 'mail-system'))
 from config.mail_config import mail_settings
 from .logger import app_logger
 

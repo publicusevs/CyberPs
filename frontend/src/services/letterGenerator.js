@@ -87,42 +87,107 @@ const templateSource = `
 
 Handlebars.registerHelper('add', (index, val) => index + val);
 
-export const generateLetterHtml = (data) => {
-    const template = Handlebars.compile(templateSource);
-    return template(data);
+export const generateLetterHtml = (data, selectedTemplate = null) => {
+    if (!selectedTemplate) {
+        const template = Handlebars.compile(templateSource);
+        return template(data);
+    }
+
+    // Process custom template
+    let html = selectedTemplate.body_text || '';
+    
+    // Replace standard placeholders
+    const replacements = {
+        '{bankName}': data.bankName,
+        '{date}': data.date,
+        '{refId}': data.refId,
+        '{year}': data.year,
+        '{startDate}': data.startDate,
+        '{endDate}': data.endDate,
+        '{BANK_ACCUSEDBANK_NAME}': data.bankName,
+        '{BANK_ACCUSEDBANK_ADDRESS}': data.bankAddress || '',
+        '{BANK_ADDRESS}': data.bankAddress || '',
+        '{BANK_ACCUSEDBANK_ACCOUNT}': data.records && data.records.length > 0 ? data.records.map(r => `${r.accountNumber} (IFSC: ${r.ifsc})`).join(', ') : '',
+        '{BANK_ACCUSEDBANK_IFSCCODE}': data.records && data.records.length > 0 ? [...new Set(data.records.map(r => r.ifsc))].join(', ') : '',
+        '{FIR_NO}': data.firNo || '',
+        '{NCRP_NO}': data.ncrpNo || '',
+    };
+
+    Object.entries(replacements).forEach(([key, value]) => {
+        const regex = new RegExp(key, 'g');
+        html = html.replace(regex, value);
+    });
+
+    // Generate transaction table
+    let tableHtml = `
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 14px; border: 1.5px solid #333;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="border: 1px solid #333; padding: 12px; text-align: left; width: 60px;">S.No.</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Account Number</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Transaction ID / UTR</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: right; width: 120px;">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    data.records.forEach((rec, index) => {
+        tableHtml += `
+            <tr>
+                <td style="border: 1px solid #333; padding: 10px; text-align: center;">${index + 1}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-weight: bold;">${rec.accountNumber}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-family: monospace; font-size: 13px;">${rec.transactionId}</td>
+                <td style="border: 1px solid #333; padding: 10px; text-align: right; font-weight: bold;">${rec.amount}</td>
+            </tr>
+        `;
+    });
+    tableHtml += `</tbody></table>`;
+
+    // Inject table into {TRANSACTION_TABLE} ONLY if the placeholder is explicitly used
+    if (html.includes('{TRANSACTION_TABLE}')) {
+        html = html.replace(/\{TRANSACTION_TABLE\}/g, tableHtml);
+    }
+
+    return `<div style="padding: 60px; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; line-height: 1.6; border: 1px solid #eee; margin: auto;">${html}</div>`;
 };
 
 export const downloadPdf = async (elementId, filename) => {
     const element = document.getElementById(elementId);
     if (!element) return;
 
-    const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    // Multi-page support for single letter preview
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-    heightLeft -= pdfHeight;
-
-    while (heightLeft > 0) {
-        position -= pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-        heightLeft -= pdfHeight;
+    // Open a new window for native browser printing (Perfect text rendering & selectable PDF)
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('Please allow popups to print the letter.');
+        return;
     }
 
-    pdf.save(filename);
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>${filename}</title>
+                <style>
+                    body { margin: 0; padding: 0; }
+                    @media print {
+                        @page { margin: 20mm; }
+                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    }
+                </style>
+            </head>
+            <body>
+                ${element.innerHTML}
+                <script>
+                    window.onload = () => {
+                        setTimeout(() => {
+                            window.print();
+                            window.close();
+                        }, 250);
+                    };
+                </script>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -384,7 +449,51 @@ const renderTableRow = (pdf, y, rowData) => {
  * MAIN: Generate a complete per-bank PDF letter with auto-pagination
  * This handles large tables that span multiple pages gracefully.
  */
-export const generateBulkPdf = (pdf, data, isFirstPage) => {
+export const generateBulkPdf = async (pdf, data, isFirstPage, selectedTemplate = null) => {
+    if (selectedTemplate) {
+        if (!isFirstPage) pdf.addPage();
+        const htmlString = typeof selectedTemplate === 'string' 
+            ? selectedTemplate 
+            : generateLetterHtml(data, selectedTemplate);
+        
+        const container = document.createElement('div');
+        container.innerHTML = htmlString;
+        container.style.position = 'absolute';
+        container.style.top = '-9999px';
+        container.style.left = '-9999px';
+        container.style.width = '794px';
+        document.body.appendChild(container);
+
+        try {
+            const canvas = await html2canvas(container.firstChild, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft > 0) {
+                position -= pdfHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+        } finally {
+            document.body.removeChild(container);
+        }
+        return;
+    }
+
     if (!isFirstPage) pdf.addPage();
 
     // Render the header (only on the first page of this letter)
@@ -493,14 +602,14 @@ export const groupTransactionsByBank = (transactions) => {
  * MASTER FUNCTION: Generate one combined PDF with separate letters for each bank
  * Each bank starts on a fresh page of the PDF.
  */
-export const generateAllBankLettersPdf = (transactions, caseId) => {
+export const generateAllBankLettersPdf = async (transactions, caseId) => {
     const jspdf = new jsPDF('p', 'mm', 'a4');
     const bankGroups = groupTransactionsByBank(transactions);
     
     let refCounter = 782;
     let isFirst = true;
 
-    bankGroups.forEach((group) => {
+    for (const group of bankGroups) {
         const letterData = {
             year: new Date().getFullYear(),
             refId: `${caseId}/${refCounter}-JP`,
@@ -517,10 +626,10 @@ export const generateAllBankLettersPdf = (transactions, caseId) => {
             endDate: new Date().toLocaleDateString('en-GB')
         };
 
-        generateBulkPdf(jspdf, letterData, isFirst);
+        await generateBulkPdf(jspdf, letterData, isFirst);
         isFirst = false;
         refCounter++;
-    });
+    }
 
     return jspdf;
 };

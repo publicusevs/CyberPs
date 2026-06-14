@@ -18,6 +18,7 @@ const TemplatesConfig = () => {
     const [loading, setLoading] = useState(true);
     const [activeTemplate, setActiveTemplate] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [protocolSearchQuery, setProtocolSearchQuery] = useState('');
     const [saving, setSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [printMode, setPrintMode] = useState(false);
@@ -661,7 +662,7 @@ const TemplatesConfig = () => {
                 {!printMode && (
                     <div className="lg:col-span-4 space-y-8 no-print">
                         <Card className="p-8 border-slate-200 shadow-xl bg-slate-900 text-white">
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-emerald-600 rounded-lg"><Database size={18} /></div>
                                 <h3 className="text-xs font-black uppercase tracking-widest italic">Protocol Registry</h3>
@@ -671,11 +672,25 @@ const TemplatesConfig = () => {
                                 <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400 shadow-lg" title="Add New Variable"><Plus size={16} /></button>
                             </div>
                         </div>
+
+                        <div className="mb-6 relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" size={14} />
+                            <input 
+                                type="text"
+                                placeholder="SEARCH_PROTOCOLS..."
+                                className="w-full pl-9 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] text-white placeholder:text-slate-500 font-black tracking-widest outline-none focus:border-emerald-500/50 focus:bg-white/10 transition-all shadow-inner uppercase"
+                                value={protocolSearchQuery}
+                                onChange={(e) => setProtocolSearchQuery(e.target.value)}
+                            />
+                        </div>
                         
                         <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mb-12">
                             {globalVars.length === 0 ? (
                                 <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No protocol variables defined</p>
-                            ) : globalVars.map(v => (
+                            ) : globalVars.filter(v => 
+                                v.variable_name.toLowerCase().includes(protocolSearchQuery.toLowerCase()) || 
+                                (v.variable_value && v.variable_value.toLowerCase().includes(protocolSearchQuery.toLowerCase()))
+                            ).map(v => (
                                 <div key={v.variable_id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-emerald-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(v.variable_name)}>
                                     <div className="flex items-center gap-3">
                                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></div>
