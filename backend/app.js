@@ -1,13 +1,28 @@
 'use strict';
 
 const path = require('path');
+const isPkg = typeof process.pkg !== 'undefined';
+
 // Load local .env first
 require('dotenv').config();
+
 // Load centralized root .env
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const envPath = isPkg
+    ? path.join(path.dirname(process.execPath), '..', '.env')
+    : path.join(__dirname, '../.env');
+
+require('dotenv').config({ path: envPath });
+
 if (process.env.BACKEND_PORT) {
     process.env.PORT = process.env.BACKEND_PORT;
 }
+
+// Intercept 'migrate' command for packaged executable
+if (process.argv.includes('migrate')) {
+    require('./src/scripts/migrate');
+    return;
+}
+
 
 // Validate all required env vars — crashes with a clear message if any are missing
 require('./src/config/env');
@@ -74,7 +89,11 @@ app.use(morgan('dev'));
 app.use(sanitize); // Strip HTML tags and null bytes from all request bodies
 
 // Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const isPkg = typeof process.pkg !== 'undefined';
+const uploadsDir = isPkg
+    ? path.join(path.dirname(process.execPath), '..', 'uploads')
+    : path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter);  // Strict: prevents brute force on login
@@ -196,6 +215,23 @@ app.get('/api/seed-masters', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
+
+// Serve static frontend files in production
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction) {
+    const frontendDist = isPkg
+        ? path.join(path.dirname(process.execPath), '..', 'frontend', 'dist')
+        : path.join(__dirname, '..', 'frontend', 'dist');
+    app.use(express.static(frontendDist));
+    
+    // Wildcard route for SPA routing (React Router)
+    app.get(/.*/, (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/health')) {
+            return next();
+        }
+        res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+}
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {

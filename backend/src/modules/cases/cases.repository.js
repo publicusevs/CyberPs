@@ -205,7 +205,11 @@ const CasesRepository = {
         // --- Self-Healing File Paths ---
         const healedDocs = firR.recordset.map(doc => {
             const relativePath = doc.file_path.replace(/^\//, '');
-            const physicalPath = path.resolve(process.cwd(), relativePath);
+            const isPkg = typeof process.pkg !== 'undefined';
+            const baseDir = isPkg
+                ? path.join(path.dirname(process.execPath), '..')
+                : path.join(__dirname, '..', '..', '..');
+            const physicalPath = path.resolve(baseDir, relativePath);
 
             if (!fs.existsSync(physicalPath)) {
                 // Try removing _1, _2 suffix

@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { Shield, Lock, User, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { getBackendUrl } from '../services/api';
+
 const Login = () => {
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
@@ -20,7 +22,7 @@ const Login = () => {
             const isOnline = navigator.onLine;
             let dbConnected = false;
             try {
-                const res = await fetch(`http://localhost:${__BACKEND_PORT__}/api/auth/status`);
+                const res = await fetch(getBackendUrl('api/auth/status'));
                 const data = await res.json();
                 dbConnected = data.database;
             } catch (e) {

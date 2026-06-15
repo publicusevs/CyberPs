@@ -31,9 +31,13 @@ class FundFlowService {
 
         let dbFilePath = evidenceResult.recordset[0].file_path;
         
-        // Resolve absolute path safely
-        // In db, file_path is something like uploads/excels/6/file.xlsx
-        const absolutePath = path.resolve(process.cwd(), dbFilePath);
+        // Resolve absolute path safely stripping any leading slash
+        const relativePath = dbFilePath.replace(/^\//, '');
+        const isPkg = typeof process.pkg !== 'undefined';
+        const baseDir = isPkg
+            ? path.join(path.dirname(process.execPath), '..')
+            : path.join(__dirname, '..', '..');
+        const absolutePath = path.resolve(baseDir, relativePath);
         
         if (!fs.existsSync(absolutePath)) {
             console.warn(`[FundFlowService] Excel file missing on disk: ${absolutePath}`);

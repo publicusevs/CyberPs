@@ -44,3 +44,12 @@ backend/uploads/excels/*
 backend/uploads/notices/*
 !backend/uploads/excels/.gitkeep
 !backend/uploads/notices/.gitkeep
+
+# Compiled portable build output
+Portable_CyberPS/
+
+# PyInstaller build outputs
+ramail/dist/
+ramail/build/
+*.spec
+

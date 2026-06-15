@@ -1,10 +1,20 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 import os
+import sys
+
+# Detect frozen PyInstaller executable
+is_frozen = getattr(sys, 'frozen', False)
+if is_frozen:
+    _BASE_DIR = os.path.dirname(sys.executable)
+    _ENV_FILE_PATH = os.path.join(_BASE_DIR, "..", ".env")
+else:
+    _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _ENV_FILE_PATH = os.path.join(_BASE_DIR, ".env")
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"), 
+        env_file=_ENV_FILE_PATH, 
         env_file_encoding="utf-8", 
         extra="ignore"
     )
@@ -21,18 +31,18 @@ class Settings(BaseSettings):
     
     # Infrastructure
     REDIS_URL: str = "redis://localhost:6379/0"
-    DB_URL: str = "sqlite:///./database/rajmail_ai.db"
+    DB_URL: str = f"sqlite:///{os.path.join(_BASE_DIR, 'database', 'rajmail_ai.db')}"
     MAX_RETRIES: int = 3
     FETCH_COUNT: int = 20
     
     # App Paths
-    BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ATTACH_DIR: str = os.path.join(BASE_DIR, "attachments")
-    SENSITIVE_DIR: str = os.path.join(ATTACH_DIR, "sensitive")
-    NORMAL_DIR: str = os.path.join(ATTACH_DIR, "normal")
-    SUMMARY_DIR: str = os.path.join(BASE_DIR, "summaries")
-    LOG_DIR: str = os.path.join(BASE_DIR, "logs")
-    DB_DIR: str = os.path.join(BASE_DIR, "database")
+    BASE_DIR: str = _BASE_DIR
+    ATTACH_DIR: str = os.path.join(_BASE_DIR, "attachments")
+    SENSITIVE_DIR: str = os.path.join(_BASE_DIR, "attachments", "sensitive")
+    NORMAL_DIR: str = os.path.join(_BASE_DIR, "attachments", "normal")
+    SUMMARY_DIR: str = os.path.join(_BASE_DIR, "summaries")
+    LOG_DIR: str = os.path.join(_BASE_DIR, "logs")
+    DB_DIR: str = os.path.join(_BASE_DIR, "database")
 
     def create_dirs(self):
         for d in [self.ATTACH_DIR, self.SENSITIVE_DIR, self.NORMAL_DIR, 
@@ -41,3 +51,4 @@ class Settings(BaseSettings):
 
 settings = Settings()
 settings.create_dirs()
+

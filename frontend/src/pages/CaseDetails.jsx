@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { getAssetUrl } from '../services/api';
 import {
     ArrowLeft,
     FileText,
@@ -238,7 +238,7 @@ const CaseDetails = () => {
             .filter(Boolean);
 
         selectedList.forEach(filePath => {
-            window.open(`http://localhost:${__BACKEND_PORT__}/${filePath.replace(/^\//, '')}`, '_blank');
+            window.open(getAssetUrl(filePath), '_blank');
         });
     };
 
@@ -711,8 +711,8 @@ const CaseDetails = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <a href={`http://localhost:${__BACKEND_PORT__}/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
-                                        <a href={`http://localhost:${__BACKEND_PORT__}/${fir.file_path}`} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
+                                        <a href={getAssetUrl(fir.file_path)} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
+                                        <a href={getAssetUrl(fir.file_path)} target="_blank" rel="noreferrer" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
                                         <button onClick={() => handleDeleteFile('fir', fir.doc_id)} className="p-2 text-rose-500 bg-white border border-rose-50 rounded-lg shadow-sm hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                     </div>
                                 </div>
@@ -737,7 +737,7 @@ const CaseDetails = () => {
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={() => navigate(`/cases/${id}/process`)} title="Process Logic" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Play size={14} /></button>
-                                        <a href={`http://localhost:${__BACKEND_PORT__}/${forensicExcel.file_path}`} target="_blank" rel="noreferrer" title="Download Excel" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Download size={14} /></a>
+                                        <a href={getAssetUrl(forensicExcel.file_path)} target="_blank" rel="noreferrer" title="Download Excel" className="p-2 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"><Download size={14} /></a>
                                         <button onClick={() => handleDeleteFile('evidence', forensicExcel.evidence_id)} title="Purge Artifact" className="p-2 bg-white text-rose-500 rounded-lg shadow-sm border border-rose-100 hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                     </div>
                                 </div>
@@ -780,8 +780,8 @@ const CaseDetails = () => {
                                             </div>
                                         </div>
                                         <div className="flex gap-2">
-                                            <a href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path}`} target="_blank" rel="noreferrer" title="Quick View" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
-                                            <a href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path}`} target="_blank" rel="noreferrer" title="Download Source" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
+                                            <a href={getAssetUrl(ev.file_path)} target="_blank" rel="noreferrer" title="Quick View" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Eye size={14} /></a>
+                                            <a href={getAssetUrl(ev.file_path)} target="_blank" rel="noreferrer" title="Download Source" className="p-2 text-blue-600 bg-white border border-blue-50 rounded-lg shadow-sm hover:bg-blue-600 hover:text-white transition-all"><Download size={14} /></a>
                                             <button onClick={() => handleDeleteFile('evidence', ev.evidence_id)} title="Delete Forever" className="p-2 text-rose-500 bg-white border border-rose-50 rounded-lg shadow-sm hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14} /></button>
                                         </div>
                                     </div>

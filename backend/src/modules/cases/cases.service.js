@@ -421,7 +421,11 @@ const CasesService = {
         const safeCategory = notice_category.replace(/[^a-z0-9]/gi, '_');
         
         // Structure: uploads/notices/{case_id}/{notice_category}/
-        const dir = path.join(__dirname, '../../../uploads/notices', String(case_id), safeCategory);
+        const isPkg = typeof process.pkg !== 'undefined';
+        const baseUploadsDir = isPkg
+            ? path.join(path.dirname(process.execPath), '..', 'uploads')
+            : path.join(__dirname, '../../../uploads');
+        const dir = path.join(baseUploadsDir, 'notices', String(case_id), safeCategory);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
         // Clean bank name for filename
@@ -467,9 +471,12 @@ const CasesService = {
     },
 
     async getNodalRecipients(caseId, categoryName = '') {
+        const isPkg = typeof process.pkg !== 'undefined';
+        
         // 1. Read bank emails list
-        const rootPath = path.resolve(__dirname, '..', '..', '..', '..');
-        const bankListPath = path.join(rootPath, 'bankmaillist.json');
+        const bankListPath = isPkg
+            ? path.join(path.dirname(process.execPath), '..', 'bankmaillist.json')
+            : path.join(__dirname, '..', '..', '..', '..', 'bankmaillist.json');
         
         let bankEmails = [];
         if (fs.existsSync(bankListPath)) {
@@ -482,16 +489,20 @@ const CasesService = {
 
         // 2. Scan case category directory with smart fallback
         const safeCategory = categoryName ? categoryName.replace(/[^a-z0-9]/gi, '_') : '';
-        let dir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString(), safeCategory);
+        const baseUploadsDir = isPkg
+            ? path.join(path.dirname(process.execPath), '..', 'uploads')
+            : path.join(__dirname, '../../../uploads');
+            
+        let dir = path.join(baseUploadsDir, 'notices', caseId.toString(), safeCategory);
         
         if (!fs.existsSync(dir) || fs.readdirSync(dir).filter(f => f.endsWith('.pdf')).length === 0) {
             // Fallback 1: Check 'Others' directory
-            const othersDir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString(), 'Others');
+            const othersDir = path.join(baseUploadsDir, 'notices', caseId.toString(), 'Others');
             if (fs.existsSync(othersDir) && fs.readdirSync(othersDir).filter(f => f.endsWith('.pdf')).length > 0) {
                 dir = othersDir;
             } else {
                 // Fallback 2: Check root case directory
-                const rootDir = path.join(process.cwd(), 'uploads', 'notices', caseId.toString());
+                const rootDir = path.join(baseUploadsDir, 'notices', caseId.toString());
                 if (fs.existsSync(rootDir) && fs.readdirSync(rootDir).filter(f => f.endsWith('.pdf')).length > 0) {
                     dir = rootDir;
                 } else {

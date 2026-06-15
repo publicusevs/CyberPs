@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 // Base URL sourced from environment — set VITE_API_URL in frontend/.env
-// Default fallback for safety in case env is not configured
-const BASE_URL = import.meta.env.VITE_API_URL || `http://localhost:${__BACKEND_PORT__}/api`;
+const BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://localhost:${__BACKEND_PORT__}/api` : '/api');
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -53,3 +52,17 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+export const getAssetUrl = (filePath) => {
+    if (!filePath) return '';
+    const cleanPath = filePath.replace(/^\//, '');
+    const base = import.meta.env.DEV ? `http://localhost:${__BACKEND_PORT__}` : window.location.origin;
+    return `${base}/${cleanPath}`;
+};
+
+export const getBackendUrl = (path) => {
+    if (!path) return '';
+    const cleanPath = path.replace(/^\//, '');
+    const base = import.meta.env.DEV ? `http://localhost:${__BACKEND_PORT__}` : window.location.origin;
+    return `${base}/${cleanPath}`;
+};

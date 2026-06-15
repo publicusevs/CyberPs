@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { getAssetUrl } from '../services/api';
 import { 
     Eye,
     X,
@@ -134,7 +134,7 @@ const FileManager = () => {
             .filter(Boolean);
 
         selectedList.forEach(filePath => {
-            window.open(`http://localhost:${__BACKEND_PORT__}/${filePath.replace(/^\//, '')}`, '_blank');
+            window.open(getAssetUrl(filePath), '_blank');
         });
     };
 
@@ -379,13 +379,13 @@ const FileManager = () => {
                             </div>
                             <div className="flex gap-4">
                                 <button 
-                                    onClick={() => setPreviewUrl(`http://localhost:${__BACKEND_PORT__}/${doc.file_path.replace(/^\//, '')}`)}
+                                    onClick={() => setPreviewUrl(getAssetUrl(doc.file_path))}
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
                                 >
                                     <Eye size={20} />
                                 </button>
                                 <a 
-                                    href={`http://localhost:${__BACKEND_PORT__}/${doc.file_path.replace(/^\//, '')}`} 
+                                    href={getAssetUrl(doc.file_path)} 
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-white rounded-2xl transition-all border border-slate-100 shadow-sm"
@@ -447,13 +447,13 @@ const FileManager = () => {
                                                 </div>
                                                 <div className="flex gap-3">
                                                     <button 
-                                                        onClick={() => setPreviewUrl(`http://localhost:${__BACKEND_PORT__}/${ev.file_path.replace(/^\//, '')}#view=FitH`)}
+                                                        onClick={() => setPreviewUrl(getAssetUrl(ev.file_path) + '#view=FitH')}
                                                         className="p-3 bg-white text-slate-400 hover:text-indigo-600 rounded-xl transition-all border border-slate-100 shadow-sm"
                                                     >
                                                         <Eye size={18} />
                                                     </button>
                                                     <a 
-                                                        href={`http://localhost:${__BACKEND_PORT__}/${ev.file_path.replace(/^\//, '')}`} 
+                                                        href={getAssetUrl(ev.file_path)} 
                                                         target="_blank" 
                                                         rel="noreferrer" 
                                                         className="p-3 bg-white text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 shadow-sm"
