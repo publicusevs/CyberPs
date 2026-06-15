@@ -89,7 +89,6 @@ app.use(morgan('dev'));
 app.use(sanitize); // Strip HTML tags and null bytes from all request bodies
 
 // Serve uploaded files statically
-const isPkg = typeof process.pkg !== 'undefined';
 const uploadsDir = isPkg
     ? path.join(path.dirname(process.execPath), '..', 'uploads')
     : path.join(__dirname, 'uploads');
