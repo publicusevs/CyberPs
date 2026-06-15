@@ -23,7 +23,7 @@ if not defined FRONTEND_PORT set FRONTEND_PORT=5173
 if not defined RAMAIL_PORT set RAMAIL_PORT=8000
 
 :: ── Pre-flight checks ───────────────────────────────────────────
-echo  [1/4] Checking Node.js...
+echo  [1/5] Checking Node.js...
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo  [ERROR] Node.js not found. Install from https://nodejs.org
@@ -31,7 +31,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo  [2/4] Checking backend dependencies...
+echo  [2/5] Checking backend dependencies...
 if exist "backend\node_modules\express-rate-limit" goto :backend_ok
 echo         Installing backend packages (this may take a moment)...
 cd backend
@@ -40,7 +40,7 @@ cd ..
 :backend_ok
 echo         Backend packages verified.
 
-echo  [3/4] Checking frontend dependencies...
+echo  [3/5] Checking frontend dependencies...
 if exist "frontend\node_modules" goto :frontend_ok
 echo         Installing frontend packages (this may take a moment)...
 cd frontend
@@ -50,7 +50,7 @@ cd ..
 echo         Frontend packages verified.
 
 :: ── Run DB migration (safe — IF NOT EXISTS only) ─────────────────
-echo  [4/4] Running database migration...
+echo  [4/5] Running database migration...
 cd backend
 call npm run migrate
 if %errorlevel% neq 0 (
@@ -61,6 +61,17 @@ if %errorlevel% neq 0 (
 )
 cd ..
 
+echo  [5/5] Checking Ramail Python dependencies...
+python -c "import fastapi, uvicorn, exchangelib, pdfplumber, pytesseract, openai, sqlalchemy" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo         Installing Ramail Python packages, please wait...
+    cd ramail
+    pip install -r requirements.txt
+    cd ..
+) else (
+    echo         Ramail Python packages verified.
+)
+
 :: ── Start services in separate windows ───────────────────────────
 echo.
 echo  Starting services...
@@ -70,7 +81,7 @@ start "CyberPS Backend  ^| Port !BACKEND_PORT!" cmd /k "cd /d %~dp0backend && co
 timeout /t 2 /nobreak >nul
 start "CyberPS Frontend ^| Port !FRONTEND_PORT!" cmd /k "cd /d %~dp0frontend && color 0B && echo  [FRONTEND] Starting... && npm run dev"
 timeout /t 2 /nobreak >nul
-start "CyberPS Ramail API ^| Port !RAMAIL_PORT!" cmd /k "cd /d %~dp0ramail && color 0C && echo  [RAMAIL] Installing Python packages... && pip install -r requirements.txt && echo  [RAMAIL] Starting API Service... && python main.py api"
+start "CyberPS Ramail API ^| Port !RAMAIL_PORT!" cmd /k "cd /d %~dp0ramail && color 0C && echo  [RAMAIL] Starting API Service... && python main.py api"
 
 :: ── Status output ─────────────────────────────────────────────────
 echo.
