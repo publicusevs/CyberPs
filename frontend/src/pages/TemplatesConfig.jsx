@@ -4,7 +4,7 @@ import {
     ChevronLeft, Save, Shield, Type, Hash, Database,
     Table, Layout, CheckCircle2, AlertCircle,
     Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight,
-    Image as ImageIcon, X
+    Image as ImageIcon, X, Indent, Outdent, WrapText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
@@ -26,6 +26,9 @@ const TemplatesConfig = () => {
     // Modal and Calibration states
     const [modalConfig, setModalConfig] = useState({ show: false, type: 'field', name: '', defaultValue: '' });
     const [margins, setMargins] = useState({ top: 50, left: 50, right: 50 }); // in px
+    const [lineSpacing, setLineSpacing] = useState('1.5');
+    const [paragraphSpacing, setParagraphSpacing] = useState('12');
+    const [wordWrap, setWordWrap] = useState(true);
     const lastSelectionRef = useRef(null);
 
     const editorRef = useRef(null);
@@ -61,6 +64,10 @@ const TemplatesConfig = () => {
     };
 
     const handleCreateNew = () => {
+        setMargins({ top: 50, left: 50, right: 50 });
+        setLineSpacing('1.5');
+        setParagraphSpacing('12');
+        setWordWrap(true);
         setActiveTemplate({
             template_name: '',
             template_type: 'Standard',
@@ -71,7 +78,10 @@ const TemplatesConfig = () => {
                 fields: [],
                 table_columns: [],
                 mapping: {},
-                margins: { top: 50, left: 50, right: 50 }
+                margins: { top: 50, left: 50, right: 50 },
+                lineSpacing: '1.5',
+                paragraphSpacing: '12',
+                wordWrap: true
             }
         });
         setPrintMode(false);
@@ -91,17 +101,23 @@ const TemplatesConfig = () => {
         
         // Ensure standard structure
         if (!jsonData || typeof jsonData !== 'object') {
-            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50 } };
+            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50 }, lineSpacing: '1.5', paragraphSpacing: '12', wordWrap: true };
         } else {
             jsonData = {
                 fields: jsonData.fields || [],
                 table_columns: jsonData.table_columns || [],
                 mapping: jsonData.mapping || {},
-                margins: jsonData.margins || { top: 50, left: 50, right: 50 }
+                margins: jsonData.margins || { top: 50, left: 50, right: 50 },
+                lineSpacing: jsonData.lineSpacing || '1.5',
+                paragraphSpacing: jsonData.paragraphSpacing || '12',
+                wordWrap: jsonData.wordWrap !== undefined ? jsonData.wordWrap : true
             };
         }
         setActiveTemplate({ ...tpl, json_data: jsonData });
         setMargins(jsonData.margins);
+        setLineSpacing(jsonData.lineSpacing || '1.5');
+        setParagraphSpacing(jsonData.paragraphSpacing || '12');
+        setWordWrap(jsonData.wordWrap !== undefined ? jsonData.wordWrap : true);
         setPrintMode(false); // Ensure we start in editor mode
         setView('editor');
     };
@@ -146,7 +162,10 @@ const TemplatesConfig = () => {
                 body_text: editorRef.current.innerHTML,
                 json_data: {
                     ...activeTemplate.json_data,
-                    margins: margins
+                    margins: margins,
+                    lineSpacing: lineSpacing,
+                    paragraphSpacing: paragraphSpacing,
+                    wordWrap: wordWrap
                 }
             };
 
@@ -547,6 +566,12 @@ const TemplatesConfig = () => {
                                             <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                                         </label>
                                     </div>
+
+                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
+                                        <button onClick={() => formatText('outdent')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Decrease Indent"><Outdent size={16} /></button>
+                                        <button onClick={() => formatText('indent')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Increase Indent"><Indent size={16} /></button>
+                                        <button onClick={() => setWordWrap(!wordWrap)} className={`p-2.5 rounded-lg transition-all ${wordWrap ? 'text-emerald-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`} title="Toggle Word Wrap"><WrapText size={16} /></button>
+                                    </div>
                                 </div>
 
                                 <div className="flex items-center gap-4">
@@ -559,6 +584,32 @@ const TemplatesConfig = () => {
                                         >
                                             {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
                                                 <option key={size} value={size}>{size}px</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Line Spacing</span>
+                                        <select 
+                                            value={lineSpacing}
+                                            onChange={(e) => setLineSpacing(e.target.value)}
+                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
+                                        >
+                                            {['1.0', '1.15', '1.25', '1.5', '1.75', '2.0', '2.5'].map(space => (
+                                                <option key={space} value={space}>{space}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Para Spacing</span>
+                                        <select 
+                                            value={paragraphSpacing}
+                                            onChange={(e) => setParagraphSpacing(e.target.value)}
+                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
+                                        >
+                                            {['0', '4', '8', '12', '16', '20', '24', '32'].map(space => (
+                                                <option key={space} value={space}>{space}px</option>
                                             ))}
                                         </select>
                                     </div>
@@ -593,6 +644,12 @@ const TemplatesConfig = () => {
                                 </div>
                                 
                                 <div className={`relative ${printMode ? 'bg-white p-0' : 'bg-slate-100/30 p-10 rounded-[40px] border-2 border-dashed border-slate-200 shadow-inner'}`}>
+                                    <style>{`
+                                        .custom-editor-style p {
+                                            margin-bottom: ${paragraphSpacing}px !important;
+                                            margin-top: 0px !important;
+                                        }
+                                    `}</style>
                                     {!printMode && (
                                         <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
                                             <Shield size={400} />
@@ -610,8 +667,11 @@ const TemplatesConfig = () => {
                                             paddingTop: `${margins.top}px`,
                                             paddingLeft: `${margins.left}px`,
                                             paddingRight: `${margins.right}px`,
+                                            lineHeight: lineSpacing,
+                                            whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                            overflowX: wordWrap ? 'visible' : 'auto'
                                         }}
-                                        className={`${printMode ? 'min-h-[1100px] shadow-2xl border border-slate-100' : 'min-h-[800px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto`}
+                                        className={`${printMode ? 'min-h-[1100px] shadow-2xl border border-slate-100' : 'min-h-[800px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style`}
                                         dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
                                     />
 
