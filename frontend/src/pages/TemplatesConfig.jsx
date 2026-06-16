@@ -29,6 +29,7 @@ const TemplatesConfig = () => {
     const [lineSpacing, setLineSpacing] = useState('1.5');
     const [paragraphSpacing, setParagraphSpacing] = useState('12');
     const [wordWrap, setWordWrap] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
     const lastSelectionRef = useRef(null);
 
     const editorRef = useRef(null);
@@ -507,6 +508,15 @@ const TemplatesConfig = () => {
                 <div className="flex items-center gap-3">
                     {!printMode && (
                         <button 
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            className="flex items-center gap-3 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition-all shadow-sm active:scale-95"
+                            title={sidebarOpen ? "Minimize Registry Column" : "Show Registry Column"}
+                        >
+                            <Layout size={18} /> {sidebarOpen ? 'Hide Registry' : 'Show Registry'}
+                        </button>
+                    )}
+                    {!printMode && (
+                        <button 
                             onClick={handleEnterPrintMode}
                             className="flex items-center gap-3 px-8 py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95"
                         >
@@ -541,7 +551,7 @@ const TemplatesConfig = () => {
 
             <div className={`grid grid-cols-1 ${printMode ? 'lg:grid-cols-1' : 'lg:grid-cols-12'} gap-10`}>
                 {/* Left Side: Editor Core */}
-                <div className={`${printMode ? 'lg:col-span-1 max-w-4xl mx-auto w-full' : 'lg:col-span-8'} space-y-8 no-print`}>
+                <div className={`${printMode ? 'lg:col-span-1 max-w-4xl mx-auto w-full' : (sidebarOpen ? 'lg:col-span-8' : 'lg:col-span-12')} space-y-8 no-print`}>
                     <Card className={`overflow-hidden border-slate-200 shadow-2xl transition-all duration-500 ${printMode ? 'bg-slate-50 border-none shadow-none p-0' : 'bg-white p-0'}`}>
                         {/* Integrated Tactical Toolbar */}
                         {!printMode && (
@@ -643,37 +653,44 @@ const TemplatesConfig = () => {
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">{printMode ? 'Final Document Stream' : 'Document Content Matrix'}</label>
                                 </div>
                                 
-                                <div className={`relative ${printMode ? 'bg-white p-0' : 'bg-slate-100/30 p-10 rounded-[40px] border-2 border-dashed border-slate-200 shadow-inner'}`}>
-                                    <style>{`
-                                        .custom-editor-style p {
-                                            margin-bottom: ${paragraphSpacing}px !important;
-                                            margin-top: 0px !important;
-                                        }
-                                    `}</style>
-                                    {!printMode && (
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-                                            <Shield size={400} />
-                                        </div>
-                                    )}
+                                <div className="w-full overflow-x-auto custom-scrollbar pb-4">
                                     <div 
-                                        key={(activeTemplate?.template_id || 'new') + (printMode ? '_print' : '_edit')}
-                                        ref={editorRef}
-                                        contentEditable="true"
-                                        suppressContentEditableWarning
-                                        onPaste={handlePaste}
-                                        onMouseUp={saveSelection}
-                                        onKeyUp={saveSelection}
-                                        style={{
-                                            paddingTop: `${margins.top}px`,
-                                            paddingLeft: `${margins.left}px`,
-                                            paddingRight: `${margins.right}px`,
-                                            lineHeight: lineSpacing,
-                                            whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-                                            overflowX: wordWrap ? 'visible' : 'auto'
-                                        }}
-                                        className={`${printMode ? 'min-h-[1100px] shadow-2xl border border-slate-100' : 'min-h-[800px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style`}
-                                        dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
-                                    />
+                                        className={`relative ${printMode ? 'bg-white p-0' : 'bg-slate-100/30 p-10 rounded-[40px] border-2 border-dashed border-slate-200 shadow-inner'}`}
+                                        style={printMode ? {} : { width: '874px', minWidth: '874px', maxWidth: '874px', marginLeft: 'auto', marginRight: 'auto' }}
+                                    >
+                                        <style>{`
+                                            .custom-editor-style p {
+                                                margin-bottom: ${paragraphSpacing}px !important;
+                                                margin-top: 0px !important;
+                                            }
+                                        `}</style>
+                                        {!printMode && (
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+                                                <Shield size={400} />
+                                            </div>
+                                        )}
+                                        <div 
+                                            key={(activeTemplate?.template_id || 'new') + (printMode ? '_print' : '_edit')}
+                                            ref={editorRef}
+                                            contentEditable="true"
+                                            suppressContentEditableWarning
+                                            onPaste={handlePaste}
+                                            onMouseUp={saveSelection}
+                                            onKeyUp={saveSelection}
+                                            style={{
+                                                paddingTop: `${margins.top}px`,
+                                                paddingLeft: `${margins.left}px`,
+                                                paddingRight: `${margins.right}px`,
+                                                lineHeight: lineSpacing,
+                                                whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                                overflowX: wordWrap ? 'visible' : 'auto',
+                                                width: printMode ? 'auto' : '794px',
+                                                minWidth: printMode ? 'auto' : '794px',
+                                                maxWidth: printMode ? 'auto' : '794px'
+                                            }}
+                                            className={`${printMode ? 'min-h-[1123px] shadow-2xl border border-slate-100' : 'min-h-[1123px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style`}
+                                            dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
+                                        />
 
                                     {/* Margin Controls */}
                                     {!printMode && (
@@ -712,6 +729,7 @@ const TemplatesConfig = () => {
                                             </motion.div>
                                         </>
                                     )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -719,7 +737,7 @@ const TemplatesConfig = () => {
                 </div>
 
                 {/* Right Side: Field & Column Manager */}
-                {!printMode && (
+                {!printMode && sidebarOpen && (
                     <div className="lg:col-span-4 space-y-8 no-print">
                         <Card className="p-8 border-slate-200 shadow-xl bg-slate-900 text-white">
                         <div className="flex items-center justify-between mb-4">
@@ -730,6 +748,7 @@ const TemplatesConfig = () => {
                             <div className="flex items-center gap-2">
                                 <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-emerald-400 shadow-lg" title="View All Variables"><Eye size={16} /></button>
                                 <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400 shadow-lg" title="Add New Variable"><Plus size={16} /></button>
+                                <button onClick={() => setSidebarOpen(false)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-rose-400 shadow-lg" title="Minimize Registry"><X size={16} /></button>
                             </div>
                         </div>
 
