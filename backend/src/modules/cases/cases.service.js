@@ -308,15 +308,55 @@ const CasesService = {
                 });
             }
 
+            const updatedList = [];
             if (accusedList && Array.isArray(accusedList)) {
-                for (const acc of accusedList) {
+                // Query existing accused for the case
+                const existingReq = new mssql.Request(transaction);
+                const existingRes = await existingReq
+                    .input('case_id', mssql.Int, id)
+                    .query('SELECT accused_id FROM case_accused WHERE case_id = @case_id');
+                const existingRecords = existingRes.recordset;
+
+                for (let i = 0; i < accusedList.length; i++) {
+                    const acc = accusedList[i];
                     if (acc.accused_id) {
                         await CasesRepository.updateAccused(transaction, acc);
+                        updatedList.push(acc);
+                    } else if (existingRecords[i]) {
+                        const accWithId = { ...acc, accused_id: existingRecords[i].accused_id };
+                        await CasesRepository.updateAccused(transaction, accWithId);
+                        updatedList.push(accWithId);
+                    } else {
+                        const req = new mssql.Request(transaction);
+                        const insertRes = await req
+                            .input('case_id', mssql.Int, id)
+                            .input('name', mssql.NVarChar, acc.name || '')
+                            .input('alias', mssql.NVarChar, acc.alias || '')
+                            .input('mobile', mssql.NVarChar, acc.mobile || '')
+                            .input('whatsapp_no', mssql.NVarChar, acc.whatsapp_no || '')
+                            .input('gmail_id', mssql.NVarChar, acc.gmail_id || '')
+                            .input('facebook_id', mssql.NVarChar, acc.facebook_id || '')
+                            .input('twitter_id', mssql.NVarChar, acc.twitter_id || '')
+                            .input('linkedin_id', mssql.NVarChar, acc.linkedin_id || '')
+                            .input('insta_id', mssql.NVarChar, acc.insta_id || '')
+                            .input('telegram_id', mssql.NVarChar, acc.telegram_id || '')
+                            .input('website_url', mssql.NVarChar, acc.website_url || '')
+                            .input('other_social', mssql.NVarChar, acc.other_social || '')
+                            .query(`INSERT INTO case_accused 
+                                (case_id, name, alias, mobile, whatsapp_no, gmail_id, facebook_id, 
+                                 twitter_id, linkedin_id, insta_id, telegram_id, website_url, other_social)
+                                OUTPUT INSERTED.accused_id
+                                VALUES 
+                                (@case_id, @name, @alias, @mobile, @whatsapp_no, @gmail_id, @facebook_id,
+                                 @twitter_id, @linkedin_id, @insta_id, @telegram_id, @website_url, @other_social)`);
+                        const newId = insertRes.recordset[0].accused_id;
+                        updatedList.push({ ...acc, accused_id: newId });
                     }
                 }
             }
 
             await transaction.commit();
+            return updatedList;
 
         } catch (err) {
             await transaction.rollback();

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { generateLetterHtml, downloadPdf } from '../services/letterGenerator';
+import { generateLetterHtml, downloadPdf, wrapHtmlInContainer, SOCIAL_ADDRESSES } from '../services/letterGenerator';
+import RichTextEditor from '../components/ui/RichTextEditor';
 import {
     FileText,
     CheckCircle2,
@@ -15,6 +16,7 @@ import {
     FileSearch,
     Building,
     ExternalLink,
+    Globe,
     Mail,
     ChevronLeft,
     CheckSquare,
@@ -41,6 +43,119 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Table';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Notice category options for template selection
+const NOTICE_CATEGORIES = [
+    { id: 'Bank Notice', label: 'Bank Notices' },
+    { id: 'Telecom Notice', label: 'Telecom Notices' },
+    { id: 'Social Media', label: 'Social Media' },
+    { id: 'Court Notice', label: 'Court Notices' },
+    { id: 'Govt Notice', label: 'Govt/Letters' },
+    { id: 'Others', label: 'Others' },
+];
+const TELECOM_OPTIONS = ['Jio', 'Airtel', 'Vi (Vodafone)', 'BSNL', 'MTNL', 'ACT Fibernet', 'Hathway', 'ISP (General)'];
+const SOCIAL_OPTIONS = ['Meta (Facebook)', 'Instagram', 'WhatsApp', 'Google / YouTube', 'Telegram', 'Signal', 'Twitter / X', 'Snapchat'];
+
+const getPlatformAddress = (platform) => {
+    if (!platform) return '';
+    const norm = platform.toLowerCase();
+    if (norm.includes('facebook') || norm.includes('meta')) {
+        return SOCIAL_ADDRESSES.facebook_address;
+    }
+    if (norm.includes('instagram') || norm.includes('insta')) {
+        return SOCIAL_ADDRESSES.insta_address;
+    }
+    if (norm.includes('whatsapp')) {
+        return SOCIAL_ADDRESSES.whatsapp_address;
+    }
+    if (norm.includes('google') || norm.includes('youtube') || norm.includes('gmail')) {
+        return SOCIAL_ADDRESSES.gmail_address;
+    }
+    if (norm.includes('telegram')) {
+        return SOCIAL_ADDRESSES.telegram_address;
+    }
+    if (norm.includes('twitter') || norm.includes('x')) {
+        return SOCIAL_ADDRESSES.twitter_address;
+    }
+    if (norm.includes('linkedin')) {
+        return SOCIAL_ADDRESSES.linkedin_address;
+    }
+    if (norm.includes('snapchat')) {
+        return SOCIAL_ADDRESSES.snapchat_address;
+    }
+    if (norm.includes('signal')) {
+        return 'Signal Messenger, LLC, 650 Castro St, Suite 120-223, Mountain View, CA 94041';
+    }
+    
+    // Telecom mapping
+    if (norm.includes('jio')) {
+        return 'Reliance Jio Infocomm Ltd., 9th Floor, Maker Chambers IV, 222 Nariman Point, Mumbai - 400021, India';
+    }
+    if (norm.includes('airtel')) {
+        return 'Bharti Airtel Ltd., Unitech World Cyber Park, Tower-A, Sector-39, Gurgaon, Haryana-122001, India';
+    }
+    if (norm.includes('vodafone') || norm.includes('vi ')) {
+        return 'Vodafone Idea Ltd., Birla Centurion, Plot No. 793, Pandurang Budhkar Marg, Worli, Mumbai - 400030, India';
+    }
+    if (norm.includes('bsnl')) {
+        return 'Bharat Sanchar Nigam Ltd., Bharat Sanchar Bhawan, Harish Chandra Mathur Lane, Janpath, New Delhi - 110001, India';
+    }
+    if (norm.includes('mtnl')) {
+        return 'Mahanagar Telephone Nigam Ltd., Mahanagar Doorsanchar Sadan, 9 CGO Complex, Lodhi Road, New Delhi - 110003, India';
+    }
+    if (norm.includes('act fibernet')) {
+        return 'Atria Convergence Technologies Ltd., No. 1, 2nd Floor, Indian Express Building, Queens Road, Bangalore - 560001, India';
+    }
+    if (norm.includes('hathway')) {
+        return 'Hathway Cable & Datacom Ltd., 802, 8th Floor, Great Eastern Galleria, Sector 15, CBD Belapur, Navi Mumbai - 400614, India';
+    }
+    
+    return '';
+};
+
+const adaptTemplateForPlatform = (template, platform) => {
+    if (!template) return template;
+    let bodyText = template.body_text || '';
+    const normPlatform = platform.toLowerCase();
+    
+    const platforms = [
+        { key: 'whatsapp', title: 'WhatsApp', upper: 'WHATSAPP' },
+        { key: 'instagram', title: 'Instagram', upper: 'INSTAGRAM' },
+        { key: 'facebook', title: 'Meta (Facebook)', upper: 'META (FACEBOOK)' },
+        { key: 'meta', title: 'Meta', upper: 'META' },
+        { key: 'telegram', title: 'Telegram', upper: 'TELEGRAM' },
+        { key: 'twitter', title: 'Twitter / X', upper: 'TWITTER / X' },
+        { key: 'google', title: 'Google', upper: 'GOOGLE' },
+        { key: 'youtube', title: 'YouTube', upper: 'YOUTUBE' },
+        { key: 'snapchat', title: 'Snapchat', upper: 'SNAPCHAT' },
+        { key: 'signal', title: 'Signal', upper: 'SIGNAL' }
+    ];
+
+    const active = platforms.find(p => normPlatform.includes(p.key)) || { title: platform, upper: platform.toUpperCase(), key: platform.toLowerCase() };
+    
+    platforms.forEach(p => {
+        if (p.key !== active.key) {
+            bodyText = bodyText.replace(new RegExp(p.title, 'g'), active.title);
+            bodyText = bodyText.replace(new RegExp(p.key, 'g'), active.key);
+            bodyText = bodyText.replace(new RegExp(p.upper, 'g'), active.upper);
+            
+            if (p.key === 'facebook') {
+                bodyText = bodyText.replace(new RegExp('Facebook', 'g'), active.title);
+            }
+            if (p.key === 'google') {
+                bodyText = bodyText.replace(new RegExp('Gmail', 'g'), active.title);
+                bodyText = bodyText.replace(new RegExp('gmail', 'g'), active.key);
+            }
+        }
+    });
+
+    return {
+        ...template,
+        body_text: bodyText
+    };
+};
+
+
 
 const LetterPreview = () => {
     const { id } = useParams();
@@ -70,16 +185,46 @@ const LetterPreview = () => {
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [pendingNotice, setPendingNotice] = useState(null);
     const [conflictQueue, setConflictQueue] = useState([]);
+    const [socialInputState, setSocialInputState] = useState({
+        show: false,
+        title: '',
+        label: '',
+        value: '',
+        resolve: null
+    });
+
+    const promptSocialInput = (title, label) => {
+        return new Promise((resolve) => {
+            setSocialInputState({
+                show: true,
+                title,
+                label,
+                value: '',
+                resolve
+            });
+        });
+    };
 
     // Template state
     const [templates, setTemplates] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [margins, setMargins] = useState({ top: 50, left: 50, right: 50, bottom: 50 });
+    const [lineSpacing, setLineSpacing] = useState('1.6');
+    const [paragraphSpacing, setParagraphSpacing] = useState('12');
+    const [wordWrap, setWordWrap] = useState(true);
 
     const activeEditorRef = useRef(null);
     const lastSelectionRef = useRef(null);
     const bankListRef = useRef([]);
+
+    // Notice category selection state
+    const [selectedCategory, setSelectedCategory] = useState('Bank Notice');
+    const [selectedSubItems, setSelectedSubItems] = useState(new Set());
+
+    // Quill state and refs
+    const quillInstancesRef = useRef({});
+    const [activeQuillId, setActiveQuillId] = useState('letter-preview');
 
     const saveSelection = (e) => {
         activeEditorRef.current = e.currentTarget;
@@ -232,6 +377,35 @@ const LetterPreview = () => {
         }
     }, [filters, selectedRecordUtrs]);
 
+    useEffect(() => {
+        if (selectedCategory === 'Social Media' && caseData) {
+            const acc = caseData.accusedList?.[0] || {};
+            const newSubItems = new Set(selectedSubItems);
+            const mapping = {
+                'Meta (Facebook)': acc.facebook_id,
+                'Instagram': acc.insta_id,
+                'WhatsApp': acc.whatsapp_no,
+                'Google / YouTube': acc.gmail_id,
+                'Telegram': acc.telegram_id,
+                'Twitter / X': acc.twitter_id
+            };
+            Object.entries(mapping).forEach(([opt, val]) => {
+                if (val && String(val).trim() !== '') {
+                    newSubItems.add(opt);
+                }
+            });
+            setSelectedSubItems(newSubItems);
+        }
+    }, [selectedCategory, caseData]);
+
+
+
+    useEffect(() => {
+        return () => {
+            quillInstancesRef.current = {};
+        };
+    }, []);
+
     const fetchProcessData = async () => {
         try {
             const res = await api.get(`/cases/${id}`);
@@ -307,9 +481,306 @@ const LetterPreview = () => {
                 amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
             })),
             startDate: '01/01/2024',
-            endDate: new Date().toLocaleDateString('en-GB')
+            endDate: new Date().toLocaleDateString('en-GB'),
+            ...getSocialFields()
         };
         setSelectedBank(letterData);
+    };
+
+    const getSocialFields = () => {
+        const acc = caseData?.accusedList?.[0] || {};
+        return {
+            whatsapp_no: acc.whatsapp_no || '',
+            gmail_id: acc.gmail_id || '',
+            facebook_id: acc.facebook_id || '',
+            twitter_id: acc.twitter_id || '',
+            linkedin_id: acc.linkedin_id || '',
+            insta_id: acc.insta_id || '',
+            telegram_id: acc.telegram_id || '',
+            website_url: acc.website_url || '',
+            other_social: acc.other_social || ''
+        };
+    };
+
+    const getActivePlatformFields = (platform) => {
+        const acc = caseData?.accusedList?.[0] || {};
+        const address = getPlatformAddress(platform);
+        
+        let activeHandle = '';
+        const norm = platform.toLowerCase();
+        if (norm.includes('facebook') || norm.includes('meta')) {
+            activeHandle = acc.facebook_id || '';
+        } else if (norm.includes('instagram') || norm.includes('insta')) {
+            activeHandle = acc.insta_id || '';
+        } else if (norm.includes('whatsapp')) {
+            activeHandle = acc.whatsapp_no || '';
+        } else if (norm.includes('google') || norm.includes('youtube') || norm.includes('gmail')) {
+            activeHandle = acc.gmail_id || '';
+        } else if (norm.includes('telegram')) {
+            activeHandle = acc.telegram_id || '';
+        } else if (norm.includes('twitter') || norm.includes('x')) {
+            activeHandle = acc.twitter_id || '';
+        } else if (norm.includes('linkedin')) {
+            activeHandle = acc.linkedin_id || '';
+        } else if (norm.includes('snapchat')) {
+            activeHandle = acc.snapchat_id || '';
+        } else if (norm.includes('signal')) {
+            activeHandle = acc.whatsapp_no || acc.other_social || '';
+        } else {
+            activeHandle = acc.other_social || '';
+        }
+
+        return {
+            whatsapp_no: activeHandle,
+            gmail_id: activeHandle,
+            facebook_id: activeHandle,
+            twitter_id: activeHandle,
+            linkedin_id: activeHandle,
+            insta_id: activeHandle,
+            telegram_id: activeHandle,
+            website_url: activeHandle,
+            other_social: activeHandle,
+            
+            facebook_address: address,
+            insta_address: address,
+            whatsapp_address: address,
+            gmail_address: address,
+            telegram_address: address,
+            twitter_address: address,
+            linkedin_address: address,
+            snapchat_address: address
+        };
+    };
+
+    const getGeneratedLetters = (isHtmlContent = false) => {
+        let idx = 0;
+        if (selectedCategory === 'Bank Notice') {
+            return bankGroups
+                .filter(g => selectedBankIds.has(g.name))
+                .map(g => {
+                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
+                    if (recs.length === 0) return null;
+                    const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+                    const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
+                    
+                    let htmlContent = undefined;
+                    if (isHtmlContent) {
+                        const quill = quillInstancesRef.current[elemId];
+                        if (quill) {
+                            htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                        } else {
+                            htmlContent = generateLetterHtml({
+                                year: new Date().getFullYear(),
+                                refId: `${id}/782-JP`,
+                                date: new Date().toLocaleDateString('en-GB'),
+                                bankName: g.name,
+                                bankAddress: matchedBank.bankaddress || '',
+                                firNo: caseData?.case?.fir_no || '',
+                                ncrpNo: caseData?.case?.ackn_no || '',
+                                records: recs.map(r => ({
+                                    accountNumber: r.account,
+                                    transactionId: r.utr,
+                                    ifsc: r.ifsc,
+                                    amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
+                                })),
+                                startDate: '01/01/2024',
+                                endDate: new Date().toLocaleDateString('en-GB'),
+                                ...getSocialFields(),
+                                margins: margins
+                            }, selectedTemplate);
+                        }
+                    }
+                    idx++;
+                    return {
+                        year: new Date().getFullYear(),
+                        refId: `${id}/782-JP`,
+                        date: new Date().toLocaleDateString('en-GB'),
+                        bankName: g.name,
+                        bankAddress: matchedBank.bankaddress || '',
+                        firNo: caseData?.case?.fir_no || '',
+                        ncrpNo: caseData?.case?.ackn_no || '',
+                        htmlContent: htmlContent,
+                        records: recs.map(r => ({
+                            accountNumber: r.account,
+                            transactionId: r.utr,
+                            ifsc: r.ifsc,
+                            amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
+                        })),
+                        startDate: '01/01/2024',
+                        endDate: new Date().toLocaleDateString('en-GB'),
+                        ...getSocialFields(),
+                        margins: margins
+                    };
+                })
+                .filter(Boolean);
+        } else if (['Telecom Notice', 'Social Media'].includes(selectedCategory)) {
+            return Array.from(selectedSubItems).map(opt => {
+                const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+                const platformAddr = getPlatformAddress(opt);
+                const activeSocialFields = getActivePlatformFields(opt);
+
+                let htmlContent = undefined;
+                if (isHtmlContent) {
+                    const quill = quillInstancesRef.current[elemId];
+                    if (quill) {
+                        htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                    } else {
+                        const adaptedTemplate = adaptTemplateForPlatform(selectedTemplate, opt);
+                        htmlContent = generateLetterHtml({
+                            year: new Date().getFullYear(),
+                            refId: `${id}/782-JP`,
+                            date: new Date().toLocaleDateString('en-GB'),
+                            bankName: opt,
+                            bankAddress: platformAddr,
+                            firNo: caseData?.case?.fir_no || '',
+                            ncrpNo: caseData?.case?.ackn_no || '',
+                            records: [],
+                            startDate: '01/01/2024',
+                            endDate: new Date().toLocaleDateString('en-GB'),
+                            ...activeSocialFields,
+                            margins: margins
+                        }, adaptedTemplate);
+                    }
+                }
+                idx++;
+                return {
+                    year: new Date().getFullYear(),
+                    refId: `${id}/782-JP`,
+                    date: new Date().toLocaleDateString('en-GB'),
+                    bankName: opt,
+                    bankAddress: platformAddr,
+                    firNo: caseData?.case?.fir_no || '',
+                    ncrpNo: caseData?.case?.ackn_no || '',
+                    htmlContent: htmlContent,
+                    records: [],
+                    startDate: '01/01/2024',
+                    endDate: new Date().toLocaleDateString('en-GB'),
+                    ...activeSocialFields,
+                    margins: margins
+                };
+            });
+        } else {
+            // Court Notice, Govt Notice, Others
+            const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
+            let htmlContent = undefined;
+            if (isHtmlContent) {
+                const quill = quillInstancesRef.current[elemId];
+                if (quill) {
+                    htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                } else {
+                    htmlContent = generateLetterHtml({
+                        year: new Date().getFullYear(),
+                        refId: `${id}/782-JP`,
+                        date: new Date().toLocaleDateString('en-GB'),
+                        bankName: selectedCategory,
+                        bankAddress: '',
+                        firNo: caseData?.case?.fir_no || '',
+                        ncrpNo: caseData?.case?.ackn_no || '',
+                        records: [],
+                        startDate: '01/01/2024',
+                        endDate: new Date().toLocaleDateString('en-GB'),
+                        ...getSocialFields(),
+                        margins: margins
+                    }, selectedTemplate);
+                }
+            }
+            return [{
+                year: new Date().getFullYear(),
+                refId: `${id}/782-JP`,
+                date: new Date().toLocaleDateString('en-GB'),
+                bankName: selectedCategory,
+                bankAddress: '',
+                firNo: caseData?.case?.fir_no || '',
+                ncrpNo: caseData?.case?.ackn_no || '',
+                htmlContent: htmlContent,
+                records: [],
+                startDate: '01/01/2024',
+                endDate: new Date().toLocaleDateString('en-GB'),
+                ...getSocialFields(),
+                margins: margins
+            }];
+        }
+    };
+
+    const handleSocialSelect = async (opt) => {
+        const isSel = selectedSubItems.has(opt);
+        const next = new Set(selectedSubItems);
+        if (isSel) {
+            next.delete(opt);
+            setSelectedSubItems(next);
+        } else {
+            const mapping = {
+                'Meta (Facebook)': { dbField: 'facebook_id', label: 'Meta (Facebook) Profile ID/URL' },
+                'Instagram': { dbField: 'insta_id', label: 'Instagram Handle/Username' },
+                'WhatsApp': { dbField: 'whatsapp_no', label: 'WhatsApp Number' },
+                'Google / YouTube': { dbField: 'gmail_id', label: 'Google Account / YouTube URL' },
+                'Telegram': { dbField: 'telegram_id', label: 'Telegram Handle/Number' },
+                'Signal': { dbField: 'other_social', label: 'Signal ID/Number (stored in other_social)' },
+                'Twitter / X': { dbField: 'twitter_id', label: 'Twitter/X Handle' },
+                'Snapchat': { dbField: 'other_social', label: 'Snapchat Handle (stored in other_social)' }
+            }[opt];
+
+            if (mapping) {
+                const dbField = mapping.dbField;
+                const acc = caseData?.accusedList?.[0] || {};
+                const currentVal = acc[dbField];
+                if (!currentVal || String(currentVal).trim() === '') {
+                    const enteredVal = await promptSocialInput(opt, mapping.label);
+                    if (enteredVal === null) {
+                        return; // User cancelled
+                    }
+                    const valTrimmed = enteredVal.trim();
+                    if (valTrimmed === '') {
+                        alert(`${opt} details are required to select this platform.`);
+                        return;
+                    }
+                    try {
+                        const existingAcc = caseData?.accusedList?.[0] || {};
+                        const updatedAcc = {
+                            ...existingAcc,
+                            [dbField]: valTrimmed
+                        };
+                        const payload = {
+                            accusedList: [updatedAcc]
+                        };
+                        const res = await api.put(`/cases/${id}/profiles`, payload);
+                        if (res.data.success) {
+                            const returnedAccList = res.data.data || [];
+                            setCaseData(prev => {
+                                if (!prev) return prev;
+                                let updatedAccusedList = [...(prev.accusedList || [])];
+                                if (returnedAccList.length > 0) {
+                                    updatedAccusedList = returnedAccList;
+                                } else {
+                                    if (updatedAccusedList.length === 0) {
+                                        updatedAccusedList.push(updatedAcc);
+                                    } else {
+                                        updatedAccusedList[0] = updatedAcc;
+                                    }
+                                }
+                                return {
+                                    ...prev,
+                                    accusedList: updatedAccusedList
+                                };
+                            });
+                            next.add(opt);
+                            setSelectedSubItems(next);
+                        } else {
+                            alert('Failed to save social details: ' + res.data.message);
+                        }
+                    } catch (err) {
+                        console.error('Failed to update social profiles:', err);
+                        alert('Network/Server error updating profiles.');
+                    }
+                } else {
+                    next.add(opt);
+                    setSelectedSubItems(next);
+                }
+            } else {
+                next.add(opt);
+                setSelectedSubItems(next);
+            }
+        }
     };
 
     const toggleBankSelection = (name) => {
@@ -367,31 +838,8 @@ const LetterPreview = () => {
         const pdf = new jsPDF('p', 'mm', 'a4');
         let isFirst = true;
 
-        const selectedGroups = bankGroups.filter(g => selectedBankIds.has(g.name));
-        for (const group of selectedGroups) {
-            const filteredRecords = group.records.filter(r => {
-                return selectedRecordUtrs.has(r.utr) && passesAllFilters(r);
-            });
-            if (filteredRecords.length === 0) continue;
-
-            const matchedBank = bankListRef.current.find(b => b.bank_name?.toLowerCase().trim() === group.name?.toLowerCase().trim()) || {};
-
-            const letterData = {
-                year: new Date().getFullYear(),
-                refId: `${id}/782-JP`,
-                date: new Date().toLocaleDateString('en-GB'),
-                bankName: group.name,
-                bankAddress: matchedBank.bankaddress || '',
-                records: filteredRecords.map(r => ({
-                    accountNumber: r.account,
-                    transactionId: r.utr,
-                    ifsc: r.ifsc,
-                    amount: `₹${parseFloat(r.amount).toLocaleString()}`
-                })),
-                startDate: '01/01/2024',
-                endDate: new Date().toLocaleDateString('en-GB')
-            };
-
+        const lettersToDownload = getGeneratedLetters(false);
+        for (const letterData of lettersToDownload) {
             const { generateBulkPdf } = await import('../services/letterGenerator');
             await generateBulkPdf(pdf, letterData, isFirst, selectedTemplate);
             isFirst = false;
@@ -400,7 +848,7 @@ const LetterPreview = () => {
     };
 
     const handleStepChange = (newStep) => {
-        if (newStep === 4) {
+        if (newStep === 3) {
             setGenerating(true);
             const firstViable = bankGroups.find(g => selectedBankIds.has(g.name) && g.records.some(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r)));
             if (firstViable) {
@@ -421,75 +869,50 @@ const LetterPreview = () => {
     };
 
     const formatText = (command, value = null) => {
-        restoreSelection();
-        document.execCommand(command, false, value);
+        const activeQuill = quillInstancesRef.current[activeQuillId];
+        if (activeQuill) {
+            activeQuill.focus();
+            if (command === 'bold' || command === 'italic' || command === 'underline') {
+                const current = activeQuill.getFormat()[command];
+                activeQuill.format(command, !current);
+            } else if (command === 'justifyLeft') {
+                activeQuill.format('align', '');
+            } else if (command === 'justifyCenter') {
+                activeQuill.format('align', 'center');
+            } else if (command === 'justifyRight') {
+                activeQuill.format('align', 'right');
+            } else if (command === 'insertUnorderedList') {
+                const current = activeQuill.getFormat().list;
+                activeQuill.format('list', current === 'bullet' ? false : 'bullet');
+            }
+        }
     };
 
     const applyFontSize = (size) => {
-        restoreSelection();
-        document.execCommand("fontSize", false, "7");
-        
-        const fixFonts = () => {
-            if (!activeEditorRef.current) return;
-            const fontElements = Array.from(activeEditorRef.current.getElementsByTagName('font'));
-            fontElements.forEach(font => {
-                if (font.size === '7' || font.getAttribute('size') === '7') {
-                    const span = document.createElement('span');
-                    span.style.fontSize = `${size}px`;
-                    span.innerHTML = font.innerHTML;
-                    font.parentNode.replaceChild(span, font);
-                }
-            });
-        };
-        fixFonts();
-        fixFonts();
+        const activeQuill = quillInstancesRef.current[activeQuillId];
+        if (activeQuill) {
+            activeQuill.focus();
+            activeQuill.format('size', `${size}px`);
+        }
     };
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
-        if (file) {
+        const activeQuill = quillInstancesRef.current[activeQuillId];
+        if (file && activeQuill) {
             const reader = new FileReader();
             reader.onload = (ev) => {
-                restoreSelection();
-                const img = `<img src="${ev.target.result}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" />`;
-                document.execCommand('insertHTML', false, img);
+                activeQuill.focus();
+                const range = activeQuill.getSelection();
+                const index = range ? range.index : activeQuill.getLength();
+                activeQuill.insertEmbed(index, 'image', ev.target.result);
             };
             reader.readAsDataURL(file);
         }
     };
 
     const handleSaveToDossier = async () => {
-        let idx = 0;
-        const lettersToSave = bankGroups
-            .filter(g => selectedBankIds.has(g.name))
-            .map(g => {
-                const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
-                if (recs.length === 0) return null;
-                
-                const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
-                const elem = document.getElementById(elemId);
-                idx++;
-
-                const matchedBank = bankListRef.current.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
-                
-                return {
-                    year: new Date().getFullYear(),
-                    refId: `${id}/782-JP`,
-                    date: new Date().toLocaleDateString('en-GB'),
-                    bankName: g.name,
-                    bankAddress: matchedBank.bankaddress || '',
-                    htmlContent: elem ? elem.innerHTML : selectedTemplate,
-                    records: recs.map(r => ({
-                        accountNumber: r.account,
-                        transactionId: r.utr,
-                        ifsc: r.ifsc,
-                        amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
-                    })),
-                    startDate: '01/01/2024',
-                    endDate: new Date().toLocaleDateString('en-GB')
-                };
-            })
-            .filter(Boolean);
+        const lettersToSave = getGeneratedLetters(true);
 
         if (lettersToSave.length === 0) {
             setStatusOverlay({
@@ -536,7 +959,7 @@ const LetterPreview = () => {
             });
             
             setTimeout(() => {
-                setProcessStep(5);
+                setProcessStep(4);
                 setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
             }, 2500);
         } catch (err) {
@@ -557,36 +980,11 @@ const LetterPreview = () => {
         try {
             setMissionReport(null);
             
-            let idx = 0;
-            const letters = bankGroups
-                .filter(g => selectedBankIds.has(g.name))
-                .map(g => {
-                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
-                    if (recs.length === 0) return null;
-
-                    const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
-                    const elem = document.getElementById(elemId);
-                    idx++;
-
-                    return {
-                        bankName: g.name,
-                        htmlContent: elem ? elem.innerHTML : selectedTemplate,
-                        data: {
-                            year: new Date().getFullYear(),
-                            refId: `${id}/782-JP`,
-                            date: new Date().toLocaleDateString('en-GB'),
-                            bankName: g.name,
-                            records: recs.map(r => ({
-                                accountNumber: r.account,
-                                transactionId: r.utr,
-                                amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
-                            })),
-                            startDate: '01/01/2024',
-                            endDate: new Date().toLocaleDateString('en-GB')
-                        }
-                    };
-                })
-                .filter(Boolean);
+            const letters = getGeneratedLetters(true).map(l => ({
+                bankName: l.bankName,
+                htmlContent: l.htmlContent || selectedTemplate,
+                data: l
+            }));
 
             if (letters.length === 0) {
                 alert('No notices to process');
@@ -632,7 +1030,7 @@ const LetterPreview = () => {
             } else {
                 // No conflicts, proceed to final modal
                 await new Promise(r => setTimeout(r, 800));
-                setProcessStep(5);
+                setProcessStep(4);
                 const res = await api.get(`/cases/${id}/nodal-recipients`);
                 if (res.data.success) {
                     setEmailRecipients(res.data.data);
@@ -762,8 +1160,8 @@ const LetterPreview = () => {
                 setShowConflictModal(false);
                 setPendingNotice(null);
                 
-                // Finalize: Sync Step 4 and Open Email Modal
-                setProcessStep(5);
+                // Finalize: Sync Step 3 and Open Email Modal
+                setProcessStep(4);
                 const res = await api.get(`/cases/${id}/nodal-recipients`);
                 if (res.data.success) {
                     setEmailRecipients(res.data.data);
@@ -818,43 +1216,16 @@ const LetterPreview = () => {
     const handleCompleteMission = async () => {
         setIsCompleting(true);
         try {
+            const lettersToSave = getGeneratedLetters(true);
             // Aggregate forensic phase complete details
-            const selectedBanksCount = bankGroups.filter(g => selectedBankIds.has(g.name)).length;
-            const targetRecordsCount = bankGroups.filter(g => selectedBankIds.has(g.name))
-                .flatMap(g => g.records)
-                .filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r)).length;
-
-            // Generate and save PDFs sequentially to related folders
-            let idx = 0;
-            const lettersToSave = bankGroups
-                .filter(g => selectedBankIds.has(g.name))
-                .map(g => {
-                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
-                    if (recs.length === 0) return null;
-                    const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
-                    const elem = document.getElementById(elemId);
-                    idx++;
-                    const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
-                    return {
-                        year: new Date().getFullYear(),
-                        refId: `${id}/782-JP`,
-                        date: new Date().toLocaleDateString('en-GB'),
-                        bankName: g.name,
-                        bankAddress: matchedBank.bankaddress || '',
-                        firNo: caseData?.case?.fir_no || '',
-                        ncrpNo: caseData?.case?.ackn_no || '',
-                        htmlContent: elem ? elem.innerHTML : selectedTemplate,
-                        records: recs.map(r => ({
-                            accountNumber: r.account,
-                            transactionId: r.utr,
-                            ifsc: r.ifsc,
-                            amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
-                        })),
-                        startDate: '01/01/2024',
-                        endDate: new Date().toLocaleDateString('en-GB')
-                    };
-                })
-                .filter(Boolean);
+            const selectedBanksCount = selectedCategory === 'Bank Notice' 
+                ? bankGroups.filter(g => selectedBankIds.has(g.name)).length 
+                : lettersToSave.length;
+            const targetRecordsCount = selectedCategory === 'Bank Notice'
+                ? bankGroups.filter(g => selectedBankIds.has(g.name))
+                    .flatMap(g => g.records)
+                    .filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r)).length
+                : 0;
 
             if (lettersToSave.length > 0) {
                 const totalLetters = lettersToSave.length;
@@ -984,7 +1355,7 @@ const LetterPreview = () => {
                             Report <span className="text-blue-600">Generation</span> Terminal
                         </h1>
                         <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-1">
-                            Case Intelligence Dossier #{id} // Forensic Phase {processStep} of 5
+                            Case Intelligence Dossier #{id} // Forensic Phase {processStep} of 4
                         </p>
                     </div>
                 </div>
@@ -993,10 +1364,9 @@ const LetterPreview = () => {
                 <div className="hidden lg:flex items-center gap-4 bg-slate-50 px-10 py-5 rounded-2xl border border-slate-100">
                     {[
                         { id: 1, label: 'UPLOAD', icon: Upload },
-                        { id: 2, label: 'REVIEW', icon: FileSearch },
-                        { id: 3, label: 'TEMPLATE', icon: FileText },
-                        { id: 4, label: 'DRAFT', icon: FileText },
-                        { id: 5, label: 'DISPATCH', icon: Send }
+                        { id: 2, label: 'TEMPLATE', icon: FileText },
+                        { id: 3, label: 'DRAFT', icon: FileText },
+                        { id: 4, label: 'DISPATCH', icon: Send }
                     ].map((step) => (
                         <React.Fragment key={step.id}>
                             <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => handleStepChange(step.id)}>
@@ -1005,15 +1375,14 @@ const LetterPreview = () => {
                                 </div>
                                 <span className={`text-[8px] font-black uppercase tracking-widest ${processStep >= step.id ? 'text-blue-600' : 'text-slate-300'}`}>{step.label}</span>
                             </div>
-                            {step.id < 5 && <div className={`w-16 h-0.5 rounded-full ${processStep > step.id ? 'bg-blue-600' : 'bg-slate-200'}`}></div>}
+                            {step.id < 4 && <div className={`w-16 h-0.5 rounded-full ${processStep > step.id ? 'bg-blue-600' : 'bg-slate-200'}`}></div>}
                         </React.Fragment>
                     ))}
                 </div>
 
                 <div className="flex gap-4">
-                    {processStep === 2 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(3)}>Select Template</Button>}
-                    {processStep === 3 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(4)} disabled={!selectedTemplate}>Generate Notices</Button>}
-                    {processStep === 4 && <Button variant="primary" className="bg-emerald-600 border-none px-10 py-4" icon={Send} onClick={() => setProcessStep(5)}>Proceed to Final</Button>}
+                    {processStep === 2 && <Button variant="primary" className="px-10 py-4" icon={FileText} onClick={() => handleStepChange(3)} disabled={!selectedTemplate}>Generate Notices</Button>}
+                    {processStep === 3 && <Button variant="primary" className="bg-emerald-600 border-none px-10 py-4" icon={Send} onClick={() => setProcessStep(4)}>Proceed to Final</Button>}
                 </div>
             </div>
 
@@ -1061,11 +1430,11 @@ const LetterPreview = () => {
 
                                         <div className="flex gap-4">
                                             <Button variant="primary" className="flex-1 py-5 text-xs tracking-widest" disabled={!excelFile || importing} loading={importing} onClick={handleExcelUpload} icon={FileSearch} >
-                                                {importing ? 'Processing...' : 'Process & Continue to Review'}
+                                                {importing ? 'Processing...' : 'Process & Continue to Template Selection'}
                                             </Button>
                                             {bankGroups.length > 0 && (
                                                 <Button variant="outline" className="px-8 py-5 text-xs tracking-widest" onClick={() => handleStepChange(2)} icon={ExternalLink} >
-                                                    Skip to Review
+                                                    Skip to Templates
                                                 </Button>
                                             )}
                                         </div>
@@ -1074,8 +1443,8 @@ const LetterPreview = () => {
                             </motion.div>
                         )}
 
-                        {processStep === 2 && (
-                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} key="step2">
+                        {false && (
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} key="step2-review">
                                 <Card className="p-0 overflow-hidden border-slate-200 shadow-xl bg-white">
                                     <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
                                         <div className="flex items-center gap-4">
@@ -1247,97 +1616,211 @@ const LetterPreview = () => {
                             </motion.div>
                         )}
 
-                        {processStep === 3 && (
-                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} key="step3">
+                        {processStep === 2 && (
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} key="step2">
                                 <Card className="p-0 overflow-hidden border-slate-200 shadow-xl bg-white">
+                                    {/* Header */}
                                     <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
                                         <div className="flex items-center gap-4">
                                             <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100">
-                                                <FileSearch className="text-white" size={24} />
+                                                <FileText className="text-white" size={24} />
                                             </div>
                                             <div>
-                                                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase italic">Template <span className="text-blue-600">Selection</span></h3>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 italic">Choose a custom format from Templates Config</p>
+                                                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase italic">Notice <span className="text-blue-600">Template Selection</span></h3>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 italic">Select notice category · pick a template · proceed to draft</p>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="p-8">
-                                        {loadingTemplates ? (
-                                            <div className="text-center py-20">
-                                                <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Loading Templates...</p>
-                                            </div>
-                                        ) : templates.length === 0 ? (
-                                            <div className="text-center py-20 text-slate-400">
-                                                <AlertTriangle size={32} className="mx-auto mb-4 text-slate-300" />
-                                                <p className="text-sm font-black uppercase tracking-widest">No templates found</p>
-                                                <p className="text-xs mt-2">Please create templates in the Templates Config section first.</p>
-                                            </div>
-                                        ) : (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                                {templates.map(t => (
-                                                    <div 
-                                                        key={t.template_id} 
-                                                        onClick={() => {
-                                                            setSelectedTemplate(t);
-                                                            let jsonData = t.json_data;
-                                                            if (typeof jsonData === 'string') {
-                                                                try { jsonData = JSON.parse(jsonData); } catch(e) {}
-                                                            }
-                                                            setMargins({ top: 50, left: 50, right: 50, bottom: 50, ...(jsonData?.margins || {}) });
-                                                        }}
-                                                        className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${selectedTemplate?.template_id === t.template_id ? 'border-blue-600 bg-blue-50/50 shadow-md shadow-blue-100' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}
-                                                    >
-                                                        <div className="flex justify-between items-start mb-4">
-                                                            <FileText size={24} className={selectedTemplate?.template_id === t.template_id ? 'text-blue-600' : 'text-slate-400'} />
-                                                            {selectedTemplate?.template_id === t.template_id && (
-                                                                <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold uppercase">Selected</span>
-                                                            )}
-                                                        </div>
-                                                        <h4 className={`font-bold ${selectedTemplate?.template_id === t.template_id ? 'text-blue-900' : 'text-slate-700'}`}>{t.template_name}</h4>
-                                                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">
-                                                            Fields: {t.json_data?.fields?.length || 0} | Columns: {t.json_data?.table_columns?.length || 0}
-                                                        </p>
+                                    {/* Category Tabs */}
+                                    <div className="px-8 pt-6 pb-5 flex flex-wrap gap-3 border-b border-slate-100 bg-slate-50/30">
+                                        {NOTICE_CATEGORIES.map(cat => (
+                                            <button
+                                                key={cat.id}
+                                                onClick={() => { setSelectedCategory(cat.id); setSelectedSubItems(new Set()); setSelectedTemplate(null); }}
+                                                className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all border-2 ${selectedCategory === cat.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                                            >
+                                                {cat.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {/* Two-column layout */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 min-h-[520px]">
+                                        {/* Left: Sub-selection */}
+                                        <div className="p-6 space-y-3 overflow-y-auto" style={{ maxHeight: '580px' }}>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                                                {selectedCategory === 'Bank Notice' ? 'Select Banks from Money Trail' :
+                                                 selectedCategory === 'Telecom Notice' ? 'Select Telecom / ISP Providers' :
+                                                 selectedCategory === 'Social Media' ? 'Select Platforms (Multi-Select)' :
+                                                 'Filter (Optional)'}
+                                            </p>
+                                            {selectedCategory === 'Bank Notice' && (
+                                                <div className="space-y-2">
+                                                    {bankGroups.length === 0 ? (
+                                                        <p className="text-xs text-slate-400 italic p-4 border border-dashed border-slate-200 rounded-2xl text-center">No bank data. Upload money trail Excel first.</p>
+                                                    ) : bankGroups.map(g => {
+                                                        const isSel = selectedBankIds.has(g.name);
+                                                        const layers = [...new Set(g.records.map(r => r.layer))].sort();
+                                                        return (
+                                                            <div key={g.name}
+                                                                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-white hover:border-slate-200'}`}
+                                                                onClick={() => toggleBankSelection(g.name)}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                                                                        {isSel && <CheckCircle2 size={12} className="text-white" />}
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-xs font-black text-slate-800 uppercase truncate">{g.name}</p>
+                                                                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">{g.records.length} records · {layers.slice(0,2).join(', ')}{layers.length > 2 ? '...' : ''}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {selectedCategory === 'Telecom Notice' && (
+                                                <div className="space-y-2">
+                                                    {TELECOM_OPTIONS.map(opt => {
+                                                        const isSel = selectedSubItems.has(opt);
+                                                        return (
+                                                            <div key={opt}
+                                                                className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-violet-500 bg-violet-50/50' : 'border-slate-100 bg-white hover:border-slate-200'}`}
+                                                                onClick={() => { const n = new Set(selectedSubItems); isSel ? n.delete(opt) : n.add(opt); setSelectedSubItems(n); }}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-violet-600 border-violet-600' : 'border-slate-300'}`}>
+                                                                        {isSel && <CheckCircle2 size={12} className="text-white" />}
+                                                                    </div>
+                                                                    <p className="text-xs font-black text-slate-700 uppercase">{opt}</p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {selectedCategory === 'Social Media' && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[9px] text-slate-400 italic mb-2">Multi-select — each platform generates a separate notice.</p>
+                                                    {SOCIAL_OPTIONS.map(opt => {
+                                                        const isSel = selectedSubItems.has(opt);
+                                                        return (
+                                                            <div key={opt}
+                                                                className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-pink-500 bg-pink-50/50' : 'border-slate-100 bg-white hover:border-slate-200'}`}
+                                                                onClick={() => handleSocialSelect(opt)}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'}`}>
+                                                                        {isSel && <CheckCircle2 size={12} className="text-white" />}
+                                                                    </div>
+                                                                    <p className="text-xs font-black text-slate-700 uppercase">{opt}</p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {['Court Notice', 'Govt Notice', 'Others'].includes(selectedCategory) && (
+                                                <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl text-center mt-4">
+                                                    <p className="text-xs text-slate-400 italic">Select a template from the right panel to proceed.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Right: Filtered Template Grid */}
+                                        <div className="col-span-2 p-6">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                                                {selectedCategory} Templates
+                                                <span className="ml-2 normal-case font-bold text-[9px] text-slate-300">({templates.filter(t => t.template_type === selectedCategory).length} available)</span>
+                                            </p>
+                                            {loadingTemplates ? (
+                                                <div className="text-center py-16">
+                                                    <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                                                    <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Loading Templates...</p>
+                                                </div>
+                                            ) : (() => {
+                                                const catTemplates = templates.filter(t => t.template_type === selectedCategory);
+                                                if (catTemplates.length === 0) return (
+                                                    <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
+                                                        <AlertTriangle size={28} className="mx-auto mb-3 text-slate-300" />
+                                                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No {selectedCategory} Templates</p>
+                                                        <p className="text-xs text-slate-400 mt-2 font-bold">Create a template with type <strong>"{selectedCategory}"</strong> in Templates Config.</p>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                                );
+                                                return (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {catTemplates.map(t => (
+                                                            <div
+                                                                key={t.template_id}
+                                                                onClick={() => {
+                                                                    setSelectedTemplate(t);
+                                                                    let jsonData = t.json_data;
+                                                                    if (typeof jsonData === 'string') { try { jsonData = JSON.parse(jsonData); } catch(e) {} }
+                                                                    setMargins({ top: 50, left: 50, right: 50, bottom: 50, ...(jsonData?.margins || {}) });
+                                                                    setLineSpacing(jsonData?.lineSpacing || '1.6');
+                                                                    setParagraphSpacing(jsonData?.paragraphSpacing || '12');
+                                                                    setWordWrap(jsonData?.wordWrap !== false);
+                                                                }}
+                                                                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${selectedTemplate?.template_id === t.template_id ? 'border-blue-600 bg-blue-50/50 shadow-md shadow-blue-100' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}
+                                                            >
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <FileText size={20} className={selectedTemplate?.template_id === t.template_id ? 'text-blue-600' : 'text-slate-400'} />
+                                                                    {selectedTemplate?.template_id === t.template_id && (
+                                                                        <span className="bg-blue-600 text-white text-[9px] px-2 py-1 rounded-full font-bold uppercase">Selected</span>
+                                                                    )}
+                                                                </div>
+                                                                <h4 className={`font-black text-sm ${selectedTemplate?.template_id === t.template_id ? 'text-blue-900' : 'text-slate-700'}`}>{t.template_name}</h4>
+                                                                <p className="text-[9px] text-slate-400 mt-1 font-bold">Fields: {t.json_data?.fields?.length || 0} | Columns: {t.json_data?.table_columns?.length || 0}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 </Card>
                             </motion.div>
                         )}
-
-                        <div className={processStep === 4 ? 'block' : 'hidden'}>
+                        <div className={processStep === 3 ? 'block' : 'hidden'}>
                             {(() => {
-                            // Build all letters for selected banks
-                            const allLetters = bankGroups
-                                .filter(g => selectedBankIds.has(g.name))
-                                .map(g => {
-                                    const recs = g.records.filter(r => selectedRecordUtrs.has(r.utr) && passesAllFilters(r));
-                                    if (recs.length === 0) return null;
-                                    const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
-                                    return {
-                                        year: new Date().getFullYear(),
-                                        refId: `${id}/782-JP`,
-                                        date: new Date().toLocaleDateString('en-GB'),
-                                        bankName: g.name,
-                                        bankAddress: matchedBank.bankaddress || '',
-                                        firNo: caseData?.case?.fir_no || '',
-                                        ncrpNo: caseData?.case?.ackn_no || '',
-                                        records: recs.map(r => ({
-                                            accountNumber: r.account,
-                                            transactionId: r.utr,
-                                            ifsc: r.ifsc,
-                                            amount: typeof r.amount === 'string' ? r.amount : `\u20b9${parseFloat(r.amount).toLocaleString()}`
-                                        })),
-                                        startDate: '01/01/2024',
-                                        endDate: new Date().toLocaleDateString('en-GB')
-                                    };
-                                })
-                                .filter(Boolean);
+                            const allLetters = getGeneratedLetters(false);
 
                             return (
                                 <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: 20 }} key="step3" className="flex flex-col gap-6">
+                                    <div id="dummy-quill-toolbar" style={{ display: 'none' }} />
+                                    <style>{`
+                                        .ql-editor table {
+                                            border-collapse: collapse;
+                                            margin-left: auto !important;
+                                            margin-right: auto !important;
+                                            margin-top: 15px !important;
+                                            margin-bottom: 15px !important;
+                                        }
+                                        .ql-editor td, .ql-editor th {
+                                            border: 1px solid #cbd5e1;
+                                            padding: 8px 12px;
+                                            min-width: 50px;
+                                        }
+                                        .ql-container.ql-snow {
+                                            border: none !important;
+                                            font-family: inherit;
+                                            font-size: inherit;
+                                        }
+                                        .ql-editor {
+                                            min-height: 1123px !important;
+                                            outline: none;
+                                        }
+                                        .ql-editor p {
+                                            margin-bottom: 1em;
+                                        }
+                                        .ql-editor img {
+                                            display: block;
+                                            max-width: 100%;
+                                            height: auto;
+                                            border-radius: 8px;
+                                            margin: 15px 0;
+                                            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                                        }
+                                    `}</style>
                                     {/* Top Action Bar */}
                                     <div className="flex justify-between items-center bg-white px-8 py-6 rounded-[28px] border border-blue-100 shadow-sm">
                                         <div className="flex items-center gap-4">
@@ -1360,50 +1843,7 @@ const LetterPreview = () => {
                                         <button onClick={() => setZoom(1.0)} className="px-4 py-2 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all shadow-sm">Reset</button>
                                     </div>
 
-                                    {/* Integrated Tactical Toolbar */}
-                                    <div className="bg-slate-900 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-6 sticky top-0 z-[100] shadow-xl rounded-2xl mx-12">
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                                <button onClick={() => formatText('bold')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Bold"><Bold size={16} /></button>
-                                                <button onClick={() => formatText('italic')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Italic"><Italic size={16} /></button>
-                                                <button onClick={() => formatText('underline')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Underline"><Underline size={16} /></button>
-                                            </div>
 
-                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                                <button onClick={() => formatText('justifyLeft')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Left"><AlignLeft size={16} /></button>
-                                                <button onClick={() => formatText('justifyCenter')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Center"><AlignCenter size={16} /></button>
-                                                <button onClick={() => formatText('justifyRight')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Right"><AlignRight size={16} /></button>
-                                            </div>
-
-                                            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                                <button onClick={() => formatText('insertUnorderedList')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="List"><List size={16} /></button>
-                                                <label className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer" title="Insert Image">
-                                                    <ImageIcon size={16} />
-                                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                                                </label>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
-                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Font Size</span>
-                                                <select 
-                                                    onChange={(e) => applyFontSize(e.target.value)}
-                                                    className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
-                                                    defaultValue="16"
-                                                >
-                                                    {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
-                                                        <option key={size} value={size}>{size}px</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block"></div>
-                                            <div className="hidden sm:flex flex-col items-end">
-                                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Editor Status</p>
-                                                <p className="text-[10px] font-black text-emerald-500 uppercase italic">Active_Encryption_Link</p>
-                                            </div>
-                                        </div>
-                                    </div>
 
                                     {/* PDF Viewer Frame */}
                                     <div className="bg-slate-600 rounded-[32px] shadow-inner relative overflow-hidden">
@@ -1426,22 +1866,28 @@ const LetterPreview = () => {
                                                             </div>
                                                             {/* Letter Paper with Margins */}
                                                             <div className="relative" style={{ zoom: zoom }}>
-                                                                <div 
-                                                                    id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`} 
-                                                                    contentEditable={true} 
-                                                                    suppressContentEditableWarning={true} 
-                                                                    spellCheck={false} 
-                                                                    onMouseUp={saveSelection}
-                                                                    onKeyUp={saveSelection}
-                                                                    className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out outline-none focus:ring-4 focus:ring-blue-500/30 min-h-[297mm] mx-auto prose prose-slate max-w-none text-slate-800" 
-                                                                    style={{ 
-                                                                        width: '210mm',
-                                                                        paddingTop: `${margins.top}px`,
-                                                                        paddingLeft: `${margins.left}px`,
-                                                                        paddingRight: `${margins.right}px`,
-                                                                        paddingBottom: `${margins.bottom}px`
-                                                                    }} 
-                                                                    dangerouslySetInnerHTML={{ __html: generateLetterHtml(letter, selectedTemplate) }} 
+                                                                <RichTextEditor
+                                                                    id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`}
+                                                                    ref={(ref) => {
+                                                                        if (ref && ref.getQuill()) {
+                                                                            quillInstancesRef.current[idx === 0 ? 'letter-preview' : `letter-preview-${idx}`] = ref.getQuill();
+                                                                        }
+                                                                    }}
+                                                                    defaultValue={generateLetterHtml(letter, selectedTemplate, true)}
+                                                                    margins={margins}
+                                                                    lineSpacing={lineSpacing}
+                                                                    paragraphSpacing={paragraphSpacing}
+                                                                    wordWrap={wordWrap}
+                                                                    onWordWrapChange={setWordWrap}
+                                                                    onLineSpacingChange={setLineSpacing}
+                                                                    onParagraphSpacingChange={setParagraphSpacing}
+                                                                    onSelectionChange={(range) => {
+                                                                        if (range) setActiveQuillId(idx === 0 ? 'letter-preview' : `letter-preview-${idx}`);
+                                                                    }}
+                                                                    className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out outline-none focus:ring-4 focus:ring-blue-500/30 min-h-[297mm] mx-auto prose prose-slate max-w-none text-slate-800 ql-editor-wrapper"
+                                                                    editorContainerClassName="min-h-[297mm]"
+                                                                    style={{ width: '210mm' }}
+                                                                    toolbarTop="0px"
                                                                 />
                                                                 
                                                                 {/* Margin Controls */}
@@ -1508,7 +1954,7 @@ const LetterPreview = () => {
                         })()}
                         </div>
 
-                        {processStep === 5 && (
+                        {processStep === 4 && (
                             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} key="step4" className="flex items-center justify-center min-h-[600px]">
                                 <Card className="max-w-xl w-full p-16 text-center space-y-8 bg-white shadow-2xl rounded-[48px] border-none relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 via-blue-400 to-emerald-500"></div>
@@ -1845,6 +2291,92 @@ const LetterPreview = () => {
                                 >
                                     <CheckCircle size={20} />
                                     Accept & Save as New Version
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {socialInputState.show && (
+                    <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-900/60 animate-in fade-in duration-300">
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="bg-white w-full max-w-md rounded-[32px] shadow-[0_0_100px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col border border-white/20"
+                        >
+                            {/* Header */}
+                            <div className="p-6 bg-blue-600 flex items-center justify-between relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-10 pointer-events-none">
+                                    <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+                                </div>
+                                <div className="flex items-center gap-4 relative z-10">
+                                    <div className="p-3 bg-white/20 rounded-xl text-white backdrop-blur-md">
+                                        <Globe size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-white uppercase tracking-tight italic">Update Credentials</h3>
+                                        <p className="text-[9px] text-blue-100 font-bold uppercase tracking-widest mt-0.5">Platform: {socialInputState.title}</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        setSocialInputState(prev => ({ ...prev, show: false }));
+                                        socialInputState.resolve(null);
+                                    }}
+                                    className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            {/* Input Area */}
+                            <div className="p-6 bg-slate-50 space-y-4">
+                                <p className="text-xs text-slate-500 font-bold leading-relaxed">
+                                    Enter details for <span className="text-slate-900 font-extrabold">{socialInputState.label}</span>. This footprint details will be saved to this case's accused profile details.
+                                </p>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Account Handle / URL / Number</label>
+                                    <div className="relative flex items-center">
+                                        <Hash className="absolute left-4 text-slate-400" size={16} />
+                                        <input 
+                                            type="text" 
+                                            value={socialInputState.value}
+                                            onChange={(e) => setSocialInputState(prev => ({ ...prev, value: e.target.value }))}
+                                            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pl-11 pr-4 text-xs font-black text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all placeholder-slate-300"
+                                            placeholder="EX: @username or phone number"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    setSocialInputState(prev => ({ ...prev, show: false }));
+                                                    socialInputState.resolve(e.target.value);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
+                                <button 
+                                    onClick={() => {
+                                        setSocialInputState(prev => ({ ...prev, show: false }));
+                                        socialInputState.resolve(null);
+                                    }}
+                                    className="flex-1 py-3.5 rounded-2xl text-xs font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 text-center"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setSocialInputState(prev => ({ ...prev, show: false }));
+                                        socialInputState.resolve(socialInputState.value);
+                                    }}
+                                    className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 text-center"
+                                >
+                                    Save Handle
                                 </button>
                             </div>
                         </motion.div>

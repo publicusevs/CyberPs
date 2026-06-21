@@ -1,5 +1,23 @@
 'use strict';
 
+// Polyfill AbortSignal.any for older Node.js versions (Node 18 targets packaged by pkg)
+if (typeof AbortSignal !== 'undefined' && !AbortSignal.any) {
+    AbortSignal.any = function (signals) {
+        const controller = new AbortController();
+        for (const signal of signals) {
+            if (!signal) continue;
+            if (signal.aborted) {
+                controller.abort(signal.reason);
+                return controller.signal;
+            }
+            signal.addEventListener('abort', () => {
+                controller.abort(signal.reason);
+            }, { once: true });
+        }
+        return controller.signal;
+    };
+}
+
 const path = require('path');
 const isPkg = typeof process.pkg !== 'undefined';
 

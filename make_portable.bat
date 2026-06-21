@@ -1,6 +1,46 @@
 @echo off
 setlocal
-title CyberPS - Portable Build System
+
+:: If running in logged mode, skip redirect and go to main
+if "%1"=="--logged" (
+    shift
+    goto :main
+)
+
+:: Re-run ourselves via PowerShell to capture both console output and log file
+echo.
+echo ============================================================
+echo   CyberPS Portable Build System - Initiating Logged Run
+echo ============================================================
+echo   Logs will be saved to: %~dp0portable_build.log
+echo.
+
+:: Set environment variables and invoke powershell Tee-Object
+powershell -Command "$env:NOPAUSE='1'; & '%~f0' --logged | Tee-Object -FilePath '%~dp0portable_build.log'"
+set BUILD_ERR=%ERRORLEVEL%
+
+echo.
+if %BUILD_ERR% neq 0 (
+    echo ============================================================
+    echo   [ERROR] BUILD FAILED!
+    echo   Please review '%~dp0portable_build.log' for details.
+    echo ============================================================
+    echo.
+    if not defined NOPAUSE pause
+    exit /b %BUILD_ERR%
+) else (
+    echo ============================================================
+    echo   [SUCCESS] BUILD COMPLETED SUCCESSFULLY!
+    echo   Portable Package: %~dp0Portable_CyberPS
+    echo   Log File: %~dp0portable_build.log
+    echo ============================================================
+    echo.
+    if not defined NOPAUSE pause
+    exit /b 0
+)
+
+:main
+title CyberPS - Portable Build System (Building...)
 cd /d "%~dp0"
 
 echo.
@@ -16,6 +56,7 @@ if exist "%BUILD_DIR%" (
     rd /s /q "%BUILD_DIR%"
 )
 mkdir "%BUILD_DIR%"
+mkdir "%BUILD_DIR%\bin"
 mkdir "%BUILD_DIR%\backend"
 mkdir "%BUILD_DIR%\frontend\dist"
 mkdir "%BUILD_DIR%\ramail"
@@ -23,6 +64,18 @@ mkdir "%BUILD_DIR%\uploads\fir"
 mkdir "%BUILD_DIR%\uploads\notices"
 mkdir "%BUILD_DIR%\uploads\excels"
 mkdir "%BUILD_DIR%\uploads\evidence"
+
+echo.
+echo ============================================================
+echo  [0/4] Checking and Downloading System Dependencies...
+echo ============================================================
+echo.
+powershell -ExecutionPolicy Bypass -File "%~dp0setup_dependencies.ps1"
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to set up system dependencies.
+    if not defined NOPAUSE pause
+    exit /b 1
+)
 
 echo.
 echo ==========================================
@@ -69,7 +122,7 @@ pip install -r requirements.txt
 echo Installing PyInstaller...
 pip install pyinstaller
 echo Compiling python service into executable...
-pyinstaller --onefile main.py --name ramail --clean
+pyinstaller --onefile main.py --name ramail --clean --paths=modules/mail-system --hidden-import=celery.fixups --hidden-import=celery.fixups.django
 if %errorlevel% neq 0 (
     echo [ERROR] Python compilation failed.
     if not defined NOPAUSE pause
@@ -90,9 +143,31 @@ copy "%~dp0ramail\dist\ramail.exe" "%BUILD_DIR%\ramail\ramail.exe" /y
 echo Copying frontend compiled assets...
 xcopy "%~dp0frontend\dist" "%BUILD_DIR%\frontend\dist" /e /h /y
 
-echo Copying default configuration files...
-copy "%~dp0backend\.env.example" "%BUILD_DIR%\.env" /y
+echo Copying bank list data...
 copy "%~dp0bankmaillist.json" "%BUILD_DIR%\bankmaillist.json" /y
+
+echo Copying portable dependencies (Tesseract, Poppler)...
+xcopy "%~dp0bin" "%BUILD_DIR%\bin" /e /h /i /y
+
+echo Merging and copying active configurations (.env)...
+:: 1. Copy root .env (ports)
+if exist "%~dp0.env" (
+    copy "%~dp0.env" "%BUILD_DIR%\.env" /y
+) else (
+    echo. > "%BUILD_DIR%\.env"
+)
+:: 2. Append backend .env (DB and general configurations)
+if exist "%~dp0backend\.env" (
+    echo. >> "%BUILD_DIR%\.env"
+    echo # Backend Configurations >> "%BUILD_DIR%\.env"
+    type "%~dp0backend\.env" >> "%BUILD_DIR%\.env"
+)
+:: 3. Append ramail .env (Exchange email credentials)
+if exist "%~dp0ramail\.env" (
+    echo. >> "%BUILD_DIR%\.env"
+    echo # Ramail Configurations >> "%BUILD_DIR%\.env"
+    type "%~dp0ramail\.env" >> "%BUILD_DIR%\.env"
+)
 
 echo Generating portable launcher script...
 (
@@ -164,3 +239,4 @@ echo   Location: %BUILD_DIR%
 echo ============================================================
 echo.
 if not defined NOPAUSE pause
+exit /b 0

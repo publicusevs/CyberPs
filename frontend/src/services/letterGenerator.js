@@ -87,7 +87,18 @@ const templateSource = `
 
 Handlebars.registerHelper('add', (index, val) => index + val);
 
-export const generateLetterHtml = (data, selectedTemplate = null) => {
+export const SOCIAL_ADDRESSES = {
+    'facebook_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+    'insta_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+    'whatsapp_address': 'WhatsApp LLC, 1601 Willow Road, Menlo Park, California 94025, USA (India Nodal: Mumbai)',
+    'gmail_address': 'Google India Pvt Ltd, Unitech Signature Tower-II, Tower-B, Sector-15, Part-II, Village Silokhera, Gurgaon, Haryana-122001',
+    'telegram_address': 'Telegram FZ-LLC, Business Central Towers, Tower A, Office 1003, P.O. Box 501919, Dubai, UAE',
+    'twitter_address': 'Twitter Communications India Pvt. Ltd., Level 9, Tower C, Epitome, Building No. 5, DLF Cyber City, Phase III, Gurgaon, Haryana-122002',
+    'linkedin_address': 'LinkedIn Ireland Unlimited Company, Wilton Plaza, Wilton Place, Dublin 2, Ireland',
+    'snapchat_address': 'Snap Inc., 3000 31st Street, Santa Monica, CA 90405, USA'
+};
+
+export const generateLetterHtml = (data, selectedTemplate = null, excludeContainer = false) => {
     if (!selectedTemplate) {
         const template = Handlebars.compile(templateSource);
         return template(data);
@@ -111,6 +122,23 @@ export const generateLetterHtml = (data, selectedTemplate = null) => {
         '{BANK_ACCUSEDBANK_IFSCCODE}': data.records && data.records.length > 0 ? [...new Set(data.records.map(r => r.ifsc))].join(', ') : '',
         '{FIR_NO}': data.firNo || '',
         '{NCRP_NO}': data.ncrpNo || '',
+        '{whatsapp_no}': data.whatsapp_no || '',
+        '{gmail_id}': data.gmail_id || '',
+        '{facebook_id}': data.facebook_id || '',
+        '{twitter_id}': data.twitter_id || '',
+        '{linkedin_id}': data.linkedin_id || '',
+        '{insta_id}': data.insta_id || '',
+        '{telegram_id}': data.telegram_id || '',
+        '{website_url}': data.website_url || '',
+        '{other_social}': data.other_social || '',
+        '{facebook_address}': SOCIAL_ADDRESSES.facebook_address,
+        '{insta_address}': SOCIAL_ADDRESSES.insta_address,
+        '{whatsapp_address}': SOCIAL_ADDRESSES.whatsapp_address,
+        '{gmail_address}': SOCIAL_ADDRESSES.gmail_address,
+        '{telegram_address}': SOCIAL_ADDRESSES.telegram_address,
+        '{twitter_address}': SOCIAL_ADDRESSES.twitter_address,
+        '{linkedin_address}': SOCIAL_ADDRESSES.linkedin_address,
+        '{snapchat_address}': SOCIAL_ADDRESSES.snapchat_address,
     };
 
     Object.entries(replacements).forEach(([key, value]) => {
@@ -148,7 +176,51 @@ export const generateLetterHtml = (data, selectedTemplate = null) => {
         html = html.replace(/\{TRANSACTION_TABLE\}/g, tableHtml);
     }
 
-    return `<div style="padding: 60px; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; line-height: 1.6; border: 1px solid #eee; margin: auto;">${html}</div>`;
+    // Extract margins, lineSpacing, and wordWrap from data or selectedTemplate
+    let margins = data.margins;
+    if (!margins && selectedTemplate) {
+        let jsonData = selectedTemplate.json_data;
+        if (typeof jsonData === 'string') {
+            try { jsonData = JSON.parse(jsonData); } catch(e) {}
+        }
+        margins = jsonData?.margins;
+    }
+    if (!margins) {
+        margins = { top: 50, left: 50, right: 50, bottom: 50 };
+    }
+
+    let lineSpacing = '1.6';
+    let wordWrap = true;
+    if (selectedTemplate) {
+        let jsonData = selectedTemplate.json_data;
+        if (typeof jsonData === 'string') {
+            try { jsonData = JSON.parse(jsonData); } catch(e) {}
+        }
+        lineSpacing = jsonData?.lineSpacing || '1.6';
+        wordWrap = jsonData?.wordWrap !== false;
+    }
+
+    if (excludeContainer) {
+        return html;
+    }
+
+    const paddingTop = `${margins.top ?? 50}px`;
+    const paddingLeft = `${margins.left ?? 50}px`;
+    const paddingRight = `${margins.right ?? 50}px`;
+    const paddingBottom = `${margins.bottom ?? 50}px`;
+    const spaceStyle = wordWrap ? 'pre-wrap' : 'pre';
+
+    return `<div class="letter-print-container" style="padding-top: ${paddingTop}; padding-left: ${paddingLeft}; padding-right: ${paddingRight}; padding-bottom: ${paddingBottom}; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; min-height: 1123px; line-height: ${lineSpacing}; border: 1px solid #eee; margin: auto; white-space: ${spaceStyle}; word-break: break-word; box-sizing: border-box;">${html}</div>`;
+};
+
+export const wrapHtmlInContainer = (html, margins, lineSpacing = '1.6', wordWrap = true) => {
+    const paddingTop = `${margins.top ?? 50}px`;
+    const paddingLeft = `${margins.left ?? 50}px`;
+    const paddingRight = `${margins.right ?? 50}px`;
+    const paddingBottom = `${margins.bottom ?? 50}px`;
+    const spaceStyle = wordWrap ? 'pre-wrap' : 'pre';
+
+    return `<div class="letter-print-container ql-editor" style="padding-top: ${paddingTop}; padding-left: ${paddingLeft}; padding-right: ${paddingRight}; padding-bottom: ${paddingBottom}; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; min-height: 1123px; line-height: ${lineSpacing}; border: 1px solid #eee; margin: auto; white-space: ${spaceStyle}; word-break: break-word; box-sizing: border-box;">${html}</div>`;
 };
 
 export const downloadPdf = async (elementId, filename) => {

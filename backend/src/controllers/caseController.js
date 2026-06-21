@@ -297,7 +297,14 @@ exports.updateProfiles = async (req, res) => {
 
         // 2. Update AccusedList
         if (accusedList && Array.isArray(accusedList)) {
-            for (const acc of accusedList) {
+            const existingReq = new mssql.Request(transaction);
+            const existingRes = await existingReq
+                .input('case_id', mssql.Int, id)
+                .query('SELECT accused_id FROM case_accused WHERE case_id = @case_id');
+            const existingRecords = existingRes.recordset;
+
+            for (let i = 0; i < accusedList.length; i++) {
+                const acc = accusedList[i];
                 if (acc.accused_id) {
                     const accReq = new mssql.Request(transaction);
                     await accReq
@@ -317,8 +324,67 @@ exports.updateProfiles = async (req, res) => {
                         .query(`UPDATE case_accused SET name=@name, alias=@alias, mobile=@mobile, whatsapp_no=@whatsapp_no, gmail_id=@gmail_id, 
                                 facebook_id=@facebook_id, twitter_id=@twitter_id, linkedin_id=@linkedin_id, insta_id=@insta_id, telegram_id=@telegram_id, 
                                 website_url=@website_url, other_social=@other_social WHERE accused_id=@accused_id`);
+                } else if (existingRecords[i]) {
+                    const accReq = new mssql.Request(transaction);
+                    await accReq
+                        .input('accused_id', mssql.Int, existingRecords[i].accused_id)
+                        .input('name', mssql.NVarChar, acc.name || '')
+                        .input('alias', mssql.NVarChar, acc.alias || '')
+                        .input('mobile', mssql.NVarChar, acc.mobile || '')
+                        .input('whatsapp_no', mssql.NVarChar, acc.whatsapp_no || '')
+                        .input('gmail_id', mssql.NVarChar, acc.gmail_id || '')
+                        .input('facebook_id', mssql.NVarChar, acc.facebook_id || '')
+                        .input('twitter_id', mssql.NVarChar, acc.twitter_id || '')
+                        .input('linkedin_id', mssql.NVarChar, acc.linkedin_id || '')
+                        .input('insta_id', mssql.NVarChar, acc.insta_id || '')
+                        .input('telegram_id', mssql.NVarChar, acc.telegram_id || '')
+                        .input('website_url', mssql.NVarChar, acc.website_url || '')
+                        .input('other_social', mssql.NVarChar, acc.other_social || '')
+                        .query(`UPDATE case_accused SET name=@name, alias=@alias, mobile=@mobile, whatsapp_no=@whatsapp_no, gmail_id=@gmail_id, 
+                                facebook_id=@facebook_id, twitter_id=@twitter_id, linkedin_id=@linkedin_id, insta_id=@insta_id, telegram_id=@telegram_id, 
+                                website_url=@website_url, other_social=@other_social WHERE accused_id=@accused_id`);
+                } else {
+                    const accReq = new mssql.Request(transaction);
+                    await accReq
+                        .input('case_id', mssql.Int, id)
+                        .input('name', mssql.NVarChar, acc.name || '')
+                        .input('alias', mssql.NVarChar, acc.alias || '')
+                        .input('mobile', mssql.NVarChar, acc.mobile || '')
+                        .input('whatsapp_no', mssql.NVarChar, acc.whatsapp_no || '')
+                        .input('gmail_id', mssql.NVarChar, acc.gmail_id || '')
+                        .input('facebook_id', mssql.NVarChar, acc.facebook_id || '')
+                        .input('twitter_id', mssql.NVarChar, acc.twitter_id || '')
+                        .input('linkedin_id', mssql.NVarChar, acc.linkedin_id || '')
+                        .input('insta_id', mssql.NVarChar, acc.insta_id || '')
+                        .input('telegram_id', mssql.NVarChar, acc.telegram_id || '')
+                        .input('website_url', mssql.NVarChar, acc.website_url || '')
+                        .input('other_social', mssql.NVarChar, acc.other_social || '')
+                        .query(`INSERT INTO case_accused 
+                            (case_id, name, alias, mobile, whatsapp_no, gmail_id, facebook_id, 
+                             twitter_id, linkedin_id, insta_id, telegram_id, website_url, other_social)
+                            VALUES 
+                            (@case_id, @name, @alias, @mobile, @whatsapp_no, @gmail_id, @facebook_id,
+                             @twitter_id, @linkedin_id, @insta_id, @telegram_id, @website_url, @other_social)`);
                 }
             }
+        }
+
+        // 3. Update Case Social Handles
+        const socialFields = {};
+        ['whatsapp_no', 'gmail_id', 'facebook_id', 'twitter_id', 'linkedin_id', 'insta_id', 'telegram_id', 'website_url', 'other_social'].forEach(field => {
+            if (req.body[field] !== undefined) {
+                socialFields[field] = req.body[field];
+            }
+        });
+        if (Object.keys(socialFields).length > 0) {
+            const caseReq = new mssql.Request(transaction);
+            caseReq.input('case_id', mssql.Int, id);
+            let setClause = [];
+            Object.entries(socialFields).forEach(([key, val]) => {
+                caseReq.input(key, mssql.NVarChar, val || '');
+                setClause.push(`${key} = @${key}`);
+            });
+            await caseReq.query(`UPDATE cases SET ${setClause.join(', ')} WHERE case_id = @case_id`);
         }
 
         await transaction.commit();

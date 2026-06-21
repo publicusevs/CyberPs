@@ -24,10 +24,20 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gpt-4o"
     
     # OCR Settings
-    # On Windows, path to tesseract.exe (e.g., C:\Program Files\Tesseract-OCR\tesseract.exe)
-    TESSERACT_PATH: Optional[str] = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    # On Windows, path to poppler/bin (e.g., C:\poppler\bin)
-    POPPLER_PATH: Optional[str] = r"C:\poppler-24.07.0\Library\bin"
+    TESSERACT_PATH: Optional[str] = (
+        os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "Tesseract-OCR", "tesseract.exe"))
+        if os.path.exists(os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "Tesseract-OCR", "tesseract.exe")))
+        else r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
+    POPPLER_PATH: Optional[str] = (
+        os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "poppler", "Library", "bin"))
+        if os.path.exists(os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "poppler", "Library", "bin")))
+        else (
+            os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "poppler", "bin"))
+            if os.path.exists(os.path.abspath(os.path.join(_BASE_DIR, "..", "bin", "poppler", "bin")))
+            else r"C:\poppler-24.07.0\Library\bin"
+        )
+    )
     
     # Infrastructure
     REDIS_URL: str = "redis://localhost:6379/0"

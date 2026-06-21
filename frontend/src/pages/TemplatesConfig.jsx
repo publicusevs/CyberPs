@@ -10,6 +10,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import RichTextEditor from '../components/ui/RichTextEditor';
+
+const staticSocialVars = [
+    { name: 'whatsapp_no', label: 'WhatsApp Number' },
+    { name: 'gmail_id', label: 'Gmail / Google ID' },
+    { name: 'facebook_id', label: 'Facebook Profile ID/URL' },
+    { name: 'twitter_id', label: 'Twitter/X Handle' },
+    { name: 'linkedin_id', label: 'LinkedIn Profile' },
+    { name: 'insta_id', label: 'Instagram Username' },
+    { name: 'telegram_id', label: 'Telegram Handle' },
+    { name: 'website_url', label: 'Website URL' },
+    { name: 'other_social', label: 'Other Social handle' },
+    { name: 'facebook_address', label: 'Facebook Nodal Address' },
+    { name: 'insta_address', label: 'Instagram Nodal Address' },
+    { name: 'whatsapp_address', label: 'WhatsApp Nodal Address' },
+    { name: 'gmail_address', label: 'Gmail/Google Nodal Address' },
+    { name: 'telegram_address', label: 'Telegram Nodal Address' },
+    { name: 'twitter_address', label: 'Twitter/X Nodal Address' },
+    { name: 'linkedin_address', label: 'LinkedIn Nodal Address' },
+    { name: 'snapchat_address', label: 'Snapchat Nodal Address' }
+];
 
 const TemplatesConfig = () => {
     const [view, setView] = useState('list'); // 'list' | 'editor'
@@ -33,11 +54,14 @@ const TemplatesConfig = () => {
     const lastSelectionRef = useRef(null);
 
     const editorRef = useRef(null);
+    const quillRef = useRef(null);
 
     useEffect(() => {
         fetchTemplates();
         fetchGlobalVars();
     }, []);
+
+
 
     const fetchGlobalVars = async () => {
         try {
@@ -71,7 +95,7 @@ const TemplatesConfig = () => {
         setWordWrap(true);
         setActiveTemplate({
             template_name: '',
-            template_type: 'Standard',
+            template_type: 'Bank Notice',
             subject_text: '',
             body_text: '',
             footer_text: '',
@@ -158,9 +182,10 @@ const TemplatesConfig = () => {
 
         setSaving(true);
         try {
+            const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current ? editorRef.current.innerHTML : activeTemplate.body_text);
             const payload = {
                 ...activeTemplate,
-                body_text: editorRef.current.innerHTML,
+                body_text: currentBody,
                 json_data: {
                     ...activeTemplate.json_data,
                     margins: margins,
@@ -189,96 +214,20 @@ const TemplatesConfig = () => {
         }
     };
 
-    const formatText = (command, value = null) => {
-        editorRef.current.focus();
-        if (lastSelectionRef.current) {
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(lastSelectionRef.current);
-        }
-        document.execCommand(command, false, value);
-    };
-
-    const applyFontSize = (size) => {
-        editorRef.current.focus();
-        if (lastSelectionRef.current) {
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(lastSelectionRef.current);
-        }
-
-        document.execCommand('fontSize', false, '7');
-        
-        // Use a more aggressive approach to find and replace font tags
-        const fixFonts = () => {
-            const fontElements = Array.from(editorRef.current.getElementsByTagName('font'));
-            fontElements.forEach(font => {
-                if (font.size === '7' || font.getAttribute('size') === '7') {
-                    const span = document.createElement('span');
-                    span.style.fontSize = `${size}px`;
-                    span.innerHTML = font.innerHTML;
-                    font.parentNode.replaceChild(span, font);
-                }
-            });
-        };
-
-        fixFonts();
-        // Sometimes nested tags need a second pass
-        fixFonts();
-    };
-
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = `<img src="${event.target.result}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" />`;
-                document.execCommand('insertHTML', false, img);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handlePaste = (e) => {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-        for (let index in items) {
-            const item = items[index];
-            if (item.kind === 'file') {
-                const blob = item.getAsFile();
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = `<img src="${event.target.result}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" />`;
-                    document.execCommand('insertHTML', false, img);
-                };
-                reader.readAsDataURL(blob);
-                e.preventDefault();
-            }
-        }
-    };
-
-    const saveSelection = () => {
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-            lastSelectionRef.current = sel.getRangeAt(0);
-        }
-    };
-
     const insertPlaceholder = (name) => {
         const placeholder = `{${name}}`;
-        editorRef.current.focus();
-        
-        if (lastSelectionRef.current) {
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(lastSelectionRef.current);
-        }
-        
-        document.execCommand('insertText', false, placeholder);
-        
-        // Update last selection after insertion
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-            lastSelectionRef.current = sel.getRangeAt(0);
+        if (quillRef.current?.getQuill()) {
+            const q = quillRef.current.getQuill();
+            q.focus();
+            const range = q.getSelection();
+            if (range) {
+                q.insertText(range.index, placeholder);
+                q.setSelection(range.index + placeholder.length);
+            } else {
+                const length = q.getLength();
+                q.insertText(length - 1, placeholder);
+                q.setSelection(length - 1 + placeholder.length);
+            }
         }
     };
 
@@ -290,8 +239,7 @@ const TemplatesConfig = () => {
         const { type, name, defaultValue } = modalConfig;
         if (!name) return;
 
-        // Capture current editor content to prevent reset
-        const currentBody = editorRef.current?.innerHTML || activeTemplate.body_text;
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
 
         if (type === 'field') {
             const exists = activeTemplate.json_data.fields.some(f => f.name === name);
@@ -322,7 +270,7 @@ const TemplatesConfig = () => {
     };
 
     const removeField = (name) => {
-        const currentBody = editorRef.current?.innerHTML || activeTemplate.body_text;
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
         setActiveTemplate(prev => ({
             ...prev,
             body_text: currentBody,
@@ -334,7 +282,7 @@ const TemplatesConfig = () => {
     };
 
     const removeColumn = (name) => {
-        const currentBody = editorRef.current?.innerHTML || activeTemplate.body_text;
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
         setActiveTemplate(prev => ({
             ...prev,
             body_text: currentBody,
@@ -344,6 +292,8 @@ const TemplatesConfig = () => {
             }
         }));
     };
+
+
 
     const getProcessedHTML = (html) => {
         if (!html) return '';
@@ -356,6 +306,31 @@ const TemplatesConfig = () => {
                 processed = processed.replace(regex, `<span class="bg-emerald-50 text-emerald-700 px-1 rounded border border-emerald-200 print:bg-transparent print:border-none print:p-0">${v.variable_value || `[${v.variable_name}]`}</span>`);
             });
         }
+
+        // 1.5 Replace Social Media Variables with Sample Values
+        const socialSamples = {
+            'whatsapp_no': '+91 9999999999',
+            'gmail_id': 'suspect@gmail.com',
+            'facebook_id': 'facebook.com/suspect.profile',
+            'twitter_id': '@suspect_handle',
+            'linkedin_id': 'linkedin.com/in/suspect',
+            'insta_id': '@suspect_instagram',
+            'telegram_id': '@suspect_telegram',
+            'website_url': 'www.suspect-website.com',
+            'other_social': 'other_social_details',
+            'facebook_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+            'insta_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+            'whatsapp_address': 'WhatsApp LLC, 1601 Willow Road, Menlo Park, California 94025, USA (India Nodal: Mumbai)',
+            'gmail_address': 'Google India Pvt Ltd, Unitech Signature Tower-II, Sector-15, Gurgaon, Haryana-122001',
+            'telegram_address': 'Telegram FZ-LLC, Business Central Towers, Dubai, UAE',
+            'twitter_address': 'Twitter Communications India Pvt. Ltd., DLF Cyber City, Gurgaon, Haryana-122002',
+            'linkedin_address': 'LinkedIn Ireland Unlimited Company, Wilton Plaza, Dublin 2, Ireland',
+            'snapchat_address': 'Snap Inc., 3000 31st Street, Santa Monica, CA 90405, USA'
+        };
+        Object.entries(socialSamples).forEach(([name, sampleVal]) => {
+            const regex = new RegExp(`\\{${name}\\}`, 'g');
+            processed = processed.replace(regex, `<span class="bg-blue-50 text-blue-700 px-1 rounded border border-blue-200 print:bg-transparent print:border-none print:p-0">${sampleVal}</span>`);
+        });
 
         // 2. Replace Local Template Fields
         if (activeTemplate?.json_data?.fields) {
@@ -482,7 +457,7 @@ const TemplatesConfig = () => {
 
     const handleEnterPrintMode = () => {
         // Sync editor content to state first
-        const currentBody = editorRef.current?.innerHTML || activeTemplate.body_text;
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
         setActiveTemplate(prev => ({ ...prev, body_text: currentBody }));
         setPrintMode(true);
     };
@@ -552,85 +527,8 @@ const TemplatesConfig = () => {
             <div className={`grid grid-cols-1 ${printMode ? 'lg:grid-cols-1' : 'lg:grid-cols-12'} gap-10`}>
                 {/* Left Side: Editor Core */}
                 <div className={`${printMode ? 'lg:col-span-1 max-w-4xl mx-auto w-full' : (sidebarOpen ? 'lg:col-span-8' : 'lg:col-span-12')} space-y-8 no-print`}>
-                    <Card className={`overflow-hidden border-slate-200 shadow-2xl transition-all duration-500 ${printMode ? 'bg-slate-50 border-none shadow-none p-0' : 'bg-white p-0'}`}>
-                        {/* Integrated Tactical Toolbar */}
-                        {!printMode && (
-                            <div className="bg-slate-900 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-6 sticky top-0 z-[100] shadow-xl no-print">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                        <button onClick={() => formatText('bold')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Bold"><Bold size={16} /></button>
-                                        <button onClick={() => formatText('italic')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Italic"><Italic size={16} /></button>
-                                        <button onClick={() => formatText('underline')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Underline"><Underline size={16} /></button>
-                                    </div>
+                    <Card className={`overflow-visible border-slate-200 shadow-2xl transition-all duration-500 ${printMode ? 'bg-slate-50 border-none shadow-none p-0' : 'bg-white p-0'}`}>
 
-                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                        <button onClick={() => formatText('justifyLeft')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Left"><AlignLeft size={16} /></button>
-                                        <button onClick={() => formatText('justifyCenter')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Center"><AlignCenter size={16} /></button>
-                                        <button onClick={() => formatText('justifyRight')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Align Right"><AlignRight size={16} /></button>
-                                    </div>
-
-                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                        <button onClick={() => formatText('insertUnorderedList')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="List"><List size={16} /></button>
-                                        <label className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer" title="Insert Image">
-                                            <ImageIcon size={16} />
-                                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                                        </label>
-                                    </div>
-
-                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shadow-inner">
-                                        <button onClick={() => formatText('outdent')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Decrease Indent"><Outdent size={16} /></button>
-                                        <button onClick={() => formatText('indent')} className="p-2.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all" title="Increase Indent"><Indent size={16} /></button>
-                                        <button onClick={() => setWordWrap(!wordWrap)} className={`p-2.5 rounded-lg transition-all ${wordWrap ? 'text-emerald-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`} title="Toggle Word Wrap"><WrapText size={16} /></button>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Font Size</span>
-                                        <select 
-                                            onChange={(e) => applyFontSize(e.target.value)}
-                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
-                                            defaultValue="16"
-                                        >
-                                            {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(size => (
-                                                <option key={size} value={size}>{size}px</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Line Spacing</span>
-                                        <select 
-                                            value={lineSpacing}
-                                            onChange={(e) => setLineSpacing(e.target.value)}
-                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
-                                        >
-                                            {['1.0', '1.15', '1.25', '1.5', '1.75', '2.0', '2.5'].map(space => (
-                                                <option key={space} value={space}>{space}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner">
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Para Spacing</span>
-                                        <select 
-                                            value={paragraphSpacing}
-                                            onChange={(e) => setParagraphSpacing(e.target.value)}
-                                            className="bg-transparent text-emerald-400 text-[11px] font-black outline-none cursor-pointer hover:text-emerald-300 transition-colors w-16"
-                                        >
-                                            {['0', '4', '8', '12', '16', '20', '24', '32'].map(space => (
-                                                <option key={space} value={space}>{space}px</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block"></div>
-                                    <div className="hidden sm:flex flex-col items-end">
-                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Editor Status</p>
-                                        <p className="text-[10px] font-black text-emerald-500 uppercase italic">Active_Encryption_Link</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         <div className={`${printMode ? 'p-0' : 'p-10'} space-y-8`}>
                             {!printMode && (
@@ -645,6 +543,26 @@ const TemplatesConfig = () => {
                                         value={activeTemplate?.template_name}
                                         onChange={(e) => setActiveTemplate(p => ({ ...p, template_name: e.target.value }))}
                                     />
+                                </div>
+                            )}
+
+                            {!printMode && (
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic flex items-center gap-2">
+                                        <Shield size={12} className="text-blue-500" /> Notice Category / Type
+                                    </label>
+                                    <select
+                                        value={activeTemplate?.template_type || 'Bank Notice'}
+                                        onChange={(e) => setActiveTemplate(p => ({ ...p, template_type: e.target.value }))}
+                                        className="w-full px-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-3xl text-sm font-black italic focus:border-blue-500/50 focus:bg-white outline-none transition-all shadow-inner cursor-pointer"
+                                    >
+                                        <option value="Bank Notice">Bank Notice</option>
+                                        <option value="Telecom Notice">Telecom Notice</option>
+                                        <option value="Social Media">Social Media</option>
+                                        <option value="Court Notice">Court Notice</option>
+                                        <option value="Govt Notice">Govt Notice</option>
+                                        <option value="Others">Others</option>
+                                    </select>
                                 </div>
                             )}
 
@@ -669,28 +587,47 @@ const TemplatesConfig = () => {
                                                 <Shield size={400} />
                                             </div>
                                         )}
-                                        <div 
-                                            key={(activeTemplate?.template_id || 'new') + (printMode ? '_print' : '_edit')}
-                                            ref={editorRef}
-                                            contentEditable="true"
-                                            suppressContentEditableWarning
-                                            onPaste={handlePaste}
-                                            onMouseUp={saveSelection}
-                                            onKeyUp={saveSelection}
-                                            style={{
-                                                paddingTop: `${margins.top}px`,
-                                                paddingLeft: `${margins.left}px`,
-                                                paddingRight: `${margins.right}px`,
-                                                lineHeight: lineSpacing,
-                                                whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-                                                overflowX: wordWrap ? 'visible' : 'auto',
-                                                width: printMode ? 'auto' : '794px',
-                                                minWidth: printMode ? 'auto' : '794px',
-                                                maxWidth: printMode ? 'auto' : '794px'
-                                            }}
-                                            className={`${printMode ? 'min-h-[1123px] shadow-2xl border border-slate-100' : 'min-h-[1123px] shadow-2xl border border-slate-200'} bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style`}
-                                            dangerouslySetInnerHTML={{ __html: printMode ? getProcessedHTML(activeTemplate?.body_text) : activeTemplate?.body_text }}
-                                        />
+                                        {printMode ? (
+                                            <div 
+                                                key={(activeTemplate?.template_id || 'new') + '_print'}
+                                                style={{
+                                                    paddingTop: `${margins.top}px`,
+                                                    paddingLeft: `${margins.left}px`,
+                                                    paddingRight: `${margins.right}px`,
+                                                    lineHeight: lineSpacing,
+                                                    whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                                    overflowX: wordWrap ? 'visible' : 'auto',
+                                                    width: 'auto',
+                                                    minWidth: 'auto',
+                                                    maxWidth: 'auto'
+                                                }}
+                                                className="min-h-[1123px] shadow-2xl border border-slate-100 bg-white rounded-xl prose prose-slate max-w-none text-slate-800 print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style"
+                                                dangerouslySetInnerHTML={{ __html: getProcessedHTML(activeTemplate?.body_text) }}
+                                            />
+                                        ) : (
+                                            <RichTextEditor
+                                                key={(activeTemplate?.template_id || 'new') + '_edit'}
+                                                ref={quillRef}
+                                                id="template-editor"
+                                                value={activeTemplate?.body_text || ''}
+                                                onChange={(html) => setActiveTemplate(p => p ? { ...p, body_text: html } : p)}
+                                                margins={margins}
+                                                lineSpacing={lineSpacing}
+                                                paragraphSpacing={paragraphSpacing}
+                                                wordWrap={wordWrap}
+                                                printMode={printMode}
+                                                onWordWrapChange={setWordWrap}
+                                                onLineSpacingChange={setLineSpacing}
+                                                onParagraphSpacingChange={setParagraphSpacing}
+                                                editorContainerClassName="min-h-[1123px]"
+                                                style={{
+                                                    width: '794px',
+                                                    minWidth: '794px',
+                                                    maxWidth: '794px'
+                                                }}
+                                                className="shadow-2xl border border-slate-200 bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all cursor-text mx-auto custom-editor-style ql-editor-wrapper"
+                                            />
+                                        )}
 
                                     {/* Margin Controls */}
                                     {!printMode && (
@@ -764,9 +701,29 @@ const TemplatesConfig = () => {
                         </div>
                         
                         <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mb-12">
-                            {globalVars.length === 0 ? (
-                                <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No protocol variables defined</p>
-                            ) : globalVars.filter(v => 
+                            {staticSocialVars.filter(v => 
+                                v.name.toLowerCase().includes(protocolSearchQuery.toLowerCase()) ||
+                                v.label.toLowerCase().includes(protocolSearchQuery.toLowerCase())
+                            ).map(v => (
+                                <div key={v.name} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-blue-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(v.name)}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></div>
+                                        <div>
+                                            <p className="text-[10px] font-black italic text-blue-400">{"{" + v.name + "}"}</p>
+                                            <p className="text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate max-w-[150px]">{v.label}</p>
+                                        </div>
+                                    </div>
+                                    <div className="opacity-0 group-hover:opacity-100 p-1.5 text-white/20"><Plus size={14} /></div>
+                                </div>
+                            ))}
+
+                            {globalVars.length > 0 && (
+                                <div className="border-t border-white/10 my-4 pt-4">
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">Custom Protocol Variables</p>
+                                </div>
+                            )}
+
+                            {globalVars.filter(v => 
                                 v.variable_name.toLowerCase().includes(protocolSearchQuery.toLowerCase()) || 
                                 (v.variable_value && v.variable_value.toLowerCase().includes(protocolSearchQuery.toLowerCase()))
                             ).map(v => (
@@ -941,6 +898,44 @@ const TemplatesConfig = () => {
                     border-radius: 8px; 
                     margin: 15px 0;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                }
+                .ql-editor table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                }
+                .ql-editor td, .ql-editor th {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                }
+                .prose table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                }
+                .prose td, .prose th {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                }
+                /* Quill overrides to preserve A4 page layout */
+                .ql-container.ql-snow {
+                    border: none !important;
+                    font-family: inherit;
+                    font-size: inherit;
+                }
+                .ql-editor {
+                    min-height: 1123px !important;
+                    outline: none;
+                }
+                #quill-toolbar button.ql-active {
+                    color: #34d399 !important; /* emerald-400 */
+                    background-color: rgba(255, 255, 255, 0.1);
                 }
                 @media print {
                     .no-print { display: none !important; }
