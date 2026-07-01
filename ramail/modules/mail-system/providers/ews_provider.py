@@ -46,7 +46,7 @@ class EwsProvider(BaseMailProvider):
             pass
             
         # Return unprocessed items
-        return list(target_folder.all().order_by('-datetime_received')[:limit])
+        return list(target_folder.filter(is_read=False).order_by('-datetime_received')[:limit])
 
     def send_email(self, recipients: List[str], subject: str, body_html: str, attachments: Optional[List[str]] = None) -> bool:
         if not self.account:

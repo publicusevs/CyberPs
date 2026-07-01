@@ -1,0 +1,15 @@
+CyberPS Investigation Hunter
+============================
+
+LICENSE AGREEMENT
+
+This software is the exclusive property of Cyber Police Station,
+Commissionerate, Jaipur, Rajasthan, India.
+
+Unauthorized copying, distribution, or modification of this software
+is strictly prohibited.
+
+This software is intended for authorized law enforcement use only.
+
+(c) 2024 Cyber Police Station, Jaipur Commissionerate.
+All Rights Reserved.

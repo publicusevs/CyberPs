@@ -1,11 +1,29 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Dict
-from config.mail_config import mail_settings
-from providers.ews_provider import EwsProvider
+from config import mail_config
+from providers.factory import ProviderFactory
 from services.mail_service import MailService
 
 router = APIRouter(prefix="/api/v2/mail", tags=["Enterprise Mail System"])
+
+# OPTIMIZATION: Cache provider instance so SMTP connection is reused across requests
+_cached_provider = None
+_cached_user = None
+
+def get_or_create_provider():
+    """Return a cached provider, rebuilding only when credentials change."""
+    global _cached_provider, _cached_user
+    mail_config.reload_mail_settings()
+    current_user = mail_config.mail_settings.EMAIL_USER
+    if _cached_provider is None or _cached_user != current_user:
+        _cached_provider = ProviderFactory.get_provider(
+            email_address=mail_config.mail_settings.EMAIL_USER,
+            password=mail_config.mail_settings.EMAIL_PASSWORD,
+            exchange_host=mail_config.mail_settings.EXCHANGE_HOST
+        )
+        _cached_user = current_user
+    return _cached_provider
 
 class ComposeMailRequest(BaseModel):
     recipients: List[EmailStr]
@@ -18,21 +36,14 @@ class ComposeMailRequest(BaseModel):
 @router.post("/send")
 async def send_enterprise_mail(req: ComposeMailRequest):
     """
-    Enterprise send mail endpoint. Now sends real emails using configured credentials.
+    Enterprise send mail endpoint. Reuses persistent SMTP connection for speed.
     """
     if req.is_draft:
         return {"message": "Draft saved successfully (Logic pending)."}
 
-    # Initialize Provider with real credentials from mail config
-    provider = EwsProvider(
-        email=mail_settings.EMAIL_USER, 
-        password=mail_settings.EMAIL_PASSWORD,
-        server=mail_settings.EXCHANGE_HOST
-    )
-    
+    provider = get_or_create_provider()
     mail_service = MailService(provider)
-    
-    # Send synchronously for testing (Can be moved to background_tasks later)
+
     success = mail_service.send_enterprise_mail(
         recipients=req.recipients,
         subject_template=req.subject_template,
@@ -40,7 +51,7 @@ async def send_enterprise_mail(req: ComposeMailRequest):
         variables=req.variables,
         attachments=req.attachments if req.attachments and "string" not in req.attachments else None
     )
-    
+
     if success:
         return {
             "status": "Success",
@@ -48,7 +59,10 @@ async def send_enterprise_mail(req: ComposeMailRequest):
             "timeline_event": "mail.sent emitted"
         }
     else:
+        # Reset cached provider so next request reconnects fresh
+        _cached_provider = None
         raise HTTPException(status_code=500, detail="Failed to send email. Check server logs.")
+
 
 @router.get("/dashboard/alerts")
 async def get_dashboard_alerts():

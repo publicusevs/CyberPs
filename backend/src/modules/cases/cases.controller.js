@@ -78,3 +78,61 @@ exports.sendNodalEmails = asyncHandler(async (req, res) => {
     const result = await CasesService.sendNodalEmails(req.body);
     sendSuccess(res, result, 'Mailing process complete');
 });
+
+exports.parseFirPdf = asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No PDF file uploaded' });
+    
+    const fs = require('fs');
+    const path = require('path');
+    const { spawn } = require('child_process');
+    
+    const pdfPath = req.file.path;
+    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'fir_extractor.py');
+    
+    try {
+        const extractedDataJSON = await new Promise((resolve, reject) => {
+            const pythonProcess = spawn('python', [scriptPath, pdfPath]);
+            let output = '';
+            let errorOutput = '';
+
+            pythonProcess.stdout.on('data', (data) => { output += data.toString(); });
+            pythonProcess.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+            pythonProcess.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Python script failed: ${errorOutput}`));
+                } else {
+                    resolve(output.trim());
+                }
+            });
+        });
+
+        // Cleanup PDF file
+        if (fs.existsSync(pdfPath)) {
+            fs.unlinkSync(pdfPath);
+        }
+
+        // Parse JSON output from python
+        let parsedData;
+        try {
+            parsedData = JSON.parse(extractedDataJSON);
+            // Save a copy of the extracted JSON for debugging as requested by user
+            fs.writeFileSync(path.join(__dirname, '../../../../extracted_fir.json'), JSON.stringify(parsedData, null, 2), 'utf8');
+            if (!parsedData.success) {
+                fs.writeFileSync('last_error.txt', parsedData.trace || parsedData.error);
+                return res.status(500).json({ success: false, message: parsedData.error, trace: parsedData.trace });
+            }
+        } catch (e) {
+            fs.writeFileSync(path.join(__dirname, '../../../../last_error.txt'), `JSON Parse Error: ${e.message}\nOutput was: ${extractedDataJSON}`);
+            return res.status(500).json({ success: false, message: 'Failed to parse extracted data', trace: e.message });
+        }
+        
+        sendSuccess(res, parsedData.data, 'PDF parsed successfully');
+    } catch (error) {
+        if (typeof pdfPath !== 'undefined' && fs.existsSync(pdfPath)) {
+            fs.unlinkSync(pdfPath);
+        }
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Failed to process PDF', error: error.message });
+    }
+});

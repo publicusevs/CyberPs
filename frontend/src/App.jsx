@@ -28,6 +28,7 @@ import GlobalVariables from './pages/GlobalVariables';
 import GenerateLetter from './pages/GenerateLetter';
 import MoneyTrailStandalone, { CaseMoneyTrail } from './pages/MoneyTrailAnalyzer';
 import EmailTest from './pages/EmailTest';
+import MailSettings from './pages/MailSettings';
 import { Navigate } from 'react-router-dom';
 
 function App() {
@@ -53,6 +54,7 @@ function App() {
                                 <Route path="/cases/:id/notices/editor" element={<NoticeEditor />} />
                                 <Route path="/templates-config" element={<TemplatesConfig />} />
                                 <Route path="/global-variables" element={<GlobalVariables />} />
+                                <Route path="/settings/mail" element={<MailSettings />} />
                                 <Route path="/generate-letter" element={<GenerateLetter />} />
                                 <Route path="/reports" element={<div className="p-20 text-center font-black uppercase text-slate-400 italic">Reports Module Coming Soon</div>} />
                                 <Route path="/admin/police-stations" element={<PoliceStationRegistration />} />

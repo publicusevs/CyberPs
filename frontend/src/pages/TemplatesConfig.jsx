@@ -307,7 +307,55 @@ const TemplatesConfig = () => {
             });
         }
 
-        // 1.5 Replace Social Media Variables with Sample Values
+        // 1.5 Replace System / Case Variables with Sample Values (shown in purple)
+        const systemSamples = {
+            'FIR_NO': '184/2024',
+            'FIR_SECTIONS': '66C, 66D IT Act, 419 IPC',
+            'FIR_ACT': '66C, 66D IT Act, 419 IPC',
+            'NCRP_NO': 'NCRP-2024-001234',
+            'NCRP_ACK_NO': 'NCRP-2024-001234',
+            'CASE_ID': '42',
+            'REF_ID': '42/782-JP',
+            'BANK_NAME': 'State Bank of India',
+            'BANK_ADDRESS': 'Main Branch, MI Road, Jaipur',
+            'BANK_ACCUSEDBANK_NAME': 'State Bank of India',
+            'BANK_ACCUSEDBANK_ADDRESS': 'Main Branch, MI Road, Jaipur',
+            'BANK_ACCUSEDBANK_ACCOUNT': '1234567890 (IFSC: SBIN0001234)',
+            'BANK_ACCUSEDBANK_IFSCCODE': 'SBIN0001234',
+            'FRAUD_AMOUNT': 'Rs. 50,000',
+            'TRANSACTION_TABLE': '[Transaction Table will appear here]',
+            'TEST_TRANSACTION_TABLE': '[Transaction Table will appear here]',
+            'COMPLAINANT_NAME': 'Ramesh Kumar',
+            'COMPLAINANT_MOBILE': '+91 9876543210',
+            'COMPLAINANT_EMAIL': 'ramesh@example.com',
+            'COMPLAINANT_ADDRESS': '123, Civil Lines, Jaipur',
+            'VICTIM_NAME': 'Ramesh Kumar',
+            'VICTIM_MOBILE': '+91 9876543210',
+            'ACCUSED_NAME': 'Unknown Suspect',
+            'ACCUSED_MOBILE': '+91 9999999999',
+            'ACCUSED_WHATSAPP': '+91 9999999999',
+            'ACCUSED_FACEBOOK': 'facebook.com/suspect.profile',
+            'ACCUSED_TWITTER': '@suspect_handle',
+            'ACCUSED_INSTAGRAM': '@suspect_instagram',
+            'ACCUSED_TELEGRAM': '@suspect_telegram',
+            'ACCUSED_GMAIL': 'suspect@gmail.com',
+            'ACCUSED_LINKEDIN': 'linkedin.com/in/suspect',
+            'ACCUSED_WEBSITE': 'www.suspect-site.com',
+            'ACCUSED_SOCIAL_MEDIA_TYPE': 'Meta (Facebook)',
+            'ACCUSED_SOCIAL_MEDIA_ID': 'facebook.com/suspect.profile',
+            'ACCUSED_SOCIAL_MEDIA_ADDRESS': 'Meta Platforms (India) Pvt Ltd',
+            'ACCUSED_INSTA': '@suspect_instagram',
+            'ACCUSED_X': '@suspect_x',
+            'ACCUSED_YOUTUBE': 'suspect_youtube_channel',
+            'ACCUSED_SIGNAL': 'suspect_signal_no',
+            'ACCUSED_SNAPCHAT': 'suspect_snapchat',
+        };
+        Object.entries(systemSamples).forEach(([name, sampleVal]) => {
+            const regex = new RegExp(`\\{${name}\\}`, 'g');
+            processed = processed.replace(regex, `<span class="bg-purple-50 text-purple-700 px-1 rounded border border-purple-200 print:bg-transparent print:border-none print:p-0">${sampleVal}</span>`);
+        });
+
+        // 1.6 Replace Social Media Variables with Sample Values
         const socialSamples = {
             'whatsapp_no': '+91 9999999999',
             'gmail_id': 'suspect@gmail.com',

@@ -6,13 +6,49 @@ import QuillTableBetter from 'quill-table-better';
 import 'quill-table-better/dist/quill-table-better.css';
 
 if (typeof window !== 'undefined') {
-    const SizeStyle = Quill.import('attributors/style/size');
-    SizeStyle.whitelist = ['8px', '9px', '10px', '11px', '12px', '14px', '16px', '18px', '20px', '22px', '24px', '26px', '28px', '32px', '36px', '40px', '48px', '50px'];
-    Quill.register(SizeStyle, true);
+    try {
+        const SizeStyle = Quill.import('attributors/style/size');
+        SizeStyle.whitelist = ['8px', '9px', '10px', '11px', '12px', '14px', '16px', '18px', '20px', '22px', '24px', '26px', '28px', '32px', '36px', '40px', '48px', '50px'];
+        Quill.register(SizeStyle, true);
 
-    Quill.register({
-        'modules/table-better': QuillTableBetter
-    }, true);
+        Quill.register({
+            'modules/table-better': QuillTableBetter
+        }, true);
+    } catch (e) {
+        // quill-table-better may be incompatible with this Quill version — fail silently
+        console.warn('[RichTextEditor] quill-table-better registration skipped:', e.message);
+    }
+    
+    // Register custom Image Blot to support styles and focus
+    const BaseImage = Quill.import('formats/image');
+    class CustomImage extends BaseImage {
+        static create(value) {
+            const node = super.create(value);
+            node.setAttribute('tabindex', '0');
+            node.style.cursor = 'move';
+            node.title = "Use Arrow keys to move, +/- to resize";
+            return node;
+        }
+        static formats(domNode) {
+            const formats = {};
+            if (domNode.hasAttribute('style')) formats.style = domNode.getAttribute('style');
+            if (domNode.hasAttribute('width')) formats.width = domNode.getAttribute('width');
+            if (domNode.hasAttribute('height')) formats.height = domNode.getAttribute('height');
+            return formats;
+        }
+        format(name, value) {
+            if (name === 'style' || name === 'width' || name === 'height') {
+                if (value) {
+                    this.domNode.setAttribute(name, value);
+                } else {
+                    this.domNode.removeAttribute(name);
+                }
+            } else {
+                super.format(name, value);
+            }
+        }
+    }
+    Quill.register(CustomImage, true);
 }
 
 const RichTextEditor = forwardRef(({
@@ -38,6 +74,7 @@ const RichTextEditor = forwardRef(({
     const editorContainerRef = useRef(null);
     const quillInstance = useRef(null);
     const isLocalUpdate = useRef(false);
+    const savedSelection = useRef(null);
 
     useEffect(() => {
         if (!editorContainerRef.current || quillInstance.current) return;
@@ -54,7 +91,7 @@ const RichTextEditor = forwardRef(({
                     toolbarTable: false
                 },
                 keyboard: {
-                    bindings: QuillTableBetter.keyboardBindings
+                    bindings: QuillTableBetter?.keyboardBindings || {}
                 }
             }
         });
@@ -78,12 +115,70 @@ const RichTextEditor = forwardRef(({
         });
 
         quillInstance.current.on('selection-change', (range) => {
+            if (range) {
+                savedSelection.current = range;
+            }
             if (onSelectionChange) {
                 onSelectionChange(range, quillInstance.current);
             }
         });
 
+        const handleKeyDown = (e) => {
+            const img = document.activeElement;
+            if (img && img.tagName === 'IMG' && editorContainerRef.current?.contains(img)) {
+                const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+                const isResize = e.key === '+' || e.key === '=' || e.key === '-';
+                
+                if (isArrow || isResize) {
+                    e.preventDefault();
+                    let left = parseFloat(img.style.left);
+                    let top = parseFloat(img.style.top);
+                    let width = img.offsetWidth || 100;
+                    const step = e.shiftKey ? 10 : 1;
+                    const resizeStep = e.shiftKey ? 20 : 5;
+                    
+                    if (isNaN(left)) left = img.offsetLeft || 0;
+                    if (isNaN(top)) top = img.offsetTop || 0;
+                    
+                    if (isArrow && img.style.position !== 'absolute') {
+                        // Switch to absolute but keep its current visual position
+                        img.style.position = 'absolute';
+                        img.style.zIndex = '10';
+                    }
+
+                    if (e.key === 'ArrowUp') top -= step;
+                    if (e.key === 'ArrowDown') top += step;
+                    if (e.key === 'ArrowLeft') left -= step;
+                    if (e.key === 'ArrowRight') left += step;
+                    
+                    if (e.key === '+' || e.key === '=') width += resizeStep;
+                    if (e.key === '-') width = Math.max(10, width - resizeStep);
+
+                    if (isArrow) {
+                        img.style.left = `${left}px`;
+                        img.style.top = `${top}px`;
+                    }
+                    if (isResize) {
+                        img.style.width = `${width}px`;
+                        img.style.height = 'auto';
+                    }
+                    
+                    const blot = Quill.find(img);
+                    if (blot) {
+                        blot.format('style', img.getAttribute('style'));
+                        blot.format('width', img.getAttribute('width'));
+                        if (onChange) {
+                            onChange(quillInstance.current.root.innerHTML);
+                        }
+                    }
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+
         return () => {
+            document.removeEventListener('keydown', handleKeyDown);
             quillInstance.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,10 +246,24 @@ const RichTextEditor = forwardRef(({
         const reader = new FileReader();
         reader.onload = (event) => {
             const base64Image = event.target.result;
-            const range = quillInstance.current.getSelection() || { index: quillInstance.current.getLength() };
+            // Use saved selection instead of current selection (which is lost when clicking input)
+            const range = savedSelection.current || { index: quillInstance.current.getLength() - 1 };
             quillInstance.current.insertEmbed(range.index, 'image', base64Image);
+            quillInstance.current.setSelection(range.index + 1);
+            
+            // Try to focus the inserted image so user can immediately move/resize it
+            setTimeout(() => {
+                const imgs = editorContainerRef.current.querySelectorAll('img');
+                for (let i = 0; i < imgs.length; i++) {
+                    if (imgs[i].src === base64Image) {
+                        imgs[i].focus();
+                        break;
+                    }
+                }
+            }, 100);
         };
         reader.readAsDataURL(file);
+        e.target.value = ''; // reset file input
     };
 
     const formatText = (command) => {

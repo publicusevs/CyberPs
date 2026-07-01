@@ -261,8 +261,7 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                 setGenerated(newlyGenerated);
 
                 // 2. Convert all generated HTML notices into PDF and upload to uploads/notices/{case_id}/
-                const { default: jsPDF } = await import('jspdf');
-                const { default: html2canvas } = await import('html2canvas');
+                const { convertHtmlToPdfBlob, wrapHtmlInContainer } = await import('../services/letterGenerator');
 
                 let completedCount = 0;
                 const totalCount = newlyGenerated.length;
@@ -283,40 +282,12 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                     // and browser can run Garbage Collection before the heavy canvas operation!
                     await new Promise(r => setTimeout(r, 150));
 
-                    const element = document.createElement('div');
-                    element.innerHTML = `<div style="box-sizing: border-box; padding: 20mm; width: 210mm; min-height: 297mm; background: white; font-family: sans-serif; color: black; line-height: 1.6; font-size: 14px;">${g.notice_content}</div>`;
-                    element.style.position = 'absolute';
-                    element.style.left = '-9999px';
-                    element.style.top = '-9999px';
-                    document.body.appendChild(element);
-
                     try {
-                        // Use scale: 1.5 to save massive memory and prevent browser from crashing on 100+ notices
-                        const canvas = await html2canvas(element, { scale: 1.5, logging: false, useCORS: true });
-                        // Use JPEG instead of PNG for 5x smaller memory footprint
-                        const imgData = canvas.toDataURL('image/jpeg', 0.8); 
-                        const pdf = new jsPDF('p', 'mm', 'a4');
-                        
-                        const pdfWidth = pdf.internal.pageSize.getWidth();
-                        const pageHeight = pdf.internal.pageSize.getHeight();
-                        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-                        
-                        let heightLeft = imgHeight;
-                        let position = 0;
+                        const finalHtml = g.notice_content.includes('letter-print-container') 
+                            ? g.notice_content 
+                            : wrapHtmlInContainer(g.notice_content, {top:50, left:50, right:50, bottom:50});
 
-                        // Add first page
-                        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-                        heightLeft -= pageHeight;
-
-                        // Add subsequent pages if the content is longer than one A4 page
-                        while (heightLeft > 0) {
-                            position -= pageHeight;
-                            pdf.addPage();
-                            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-                            heightLeft -= pageHeight;
-                        }
-                        
-                        const pdfBlob = pdf.output('blob');
+                        const pdfBlob = await convertHtmlToPdfBlob(finalHtml);
                         const pdfBase64 = await new Promise((resolve) => {
                             const reader = new FileReader();
                             reader.onloadend = () => resolve(reader.result);
@@ -332,10 +303,8 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                         });
                     } catch (canvasErr) {
                         console.error('Failed to generate PDF for: ', g.bank_name, canvasErr);
-                    } finally {
-                        // ALWAYS remove element to prevent DOM memory leak
-                        document.body.removeChild(element);
                     }
+                    
                     
                     completedCount++;
                     

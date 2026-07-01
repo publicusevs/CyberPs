@@ -19,6 +19,7 @@ import {
     Globe,
     Mail,
     ChevronLeft,
+    ChevronDown,
     CheckSquare,
     Square,
     FileSpreadsheet,
@@ -37,7 +38,7 @@ import {
     ZoomIn,
     ZoomOut,
     Minus,
-    Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon
+    Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Image as ImageIcon, Edit2
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -177,6 +178,8 @@ const LetterPreview = () => {
     const [isCompleting, setIsCompleting] = useState(false);
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [emailRecipients, setEmailRecipients] = useState([]);
+    const [editingBankEmail, setEditingBankEmail] = useState(null);
+    const [editingBankEmailValue, setEditingBankEmailValue] = useState("");
     const [isSendingEmails, setIsSendingEmails] = useState(false);
     const [fetchingRecipients, setFetchingRecipients] = useState(false);
     const [selectedRecipients, setSelectedRecipients] = useState(new Set());
@@ -238,6 +241,9 @@ const LetterPreview = () => {
     const [layerFilter, setLayerFilter] = useState('ALL');
     const [sortConfig, setSortConfig] = useState({ key: 'layer', dir: 'asc' });
     const [searchText, setSearchText] = useState('');
+    const [bankSearchText, setBankSearchText] = useState('');
+    const [bankLayerFilter, setBankLayerFilter] = useState([]);
+    const [showLayerDropdown, setShowLayerDropdown] = useState(false);
 
     const filterColumns = [
         { id: 'account', label: 'Account Number', type: 'text' },
@@ -337,9 +343,9 @@ const LetterPreview = () => {
     const initProcess = async () => {
         try {
             setLoading(true);
-            const listRes = await api.get('/cases/bankmaillist').catch(() => null);
-            if (listRes?.data?.success) {
-                bankListRef.current = listRes.data.data;
+            const listRes = await api.get('/settings/banks').catch(() => null);
+            if (listRes?.data) {
+                bankListRef.current = listRes.data;
             }
             fetchProcessData();
             fetchTemplates();
@@ -439,7 +445,7 @@ const LetterPreview = () => {
 
                 const groupArray = Object.values(groups);
                 setBankGroups(groupArray);
-                setSelectedBankIds(new Set(groupArray.map(g => g.name)));
+                setSelectedBankIds(new Set()); // Unselected by default as requested
                 setSelectedRecordUtrs(allUtrs);
                 setStats({ totalBanks: groupArray.length, totalRecords: allUtrs.size, status: 'CLEAN' });
 
@@ -474,6 +480,17 @@ const LetterPreview = () => {
             date: new Date().toLocaleDateString('en-GB'),
             bankName: group.name,
             bankAddress: matchedBank.bankaddress || '',
+            firNo: caseData?.case?.fir_no || '',
+            ncrpNo: caseData?.case?.ackn_no || '',
+            ncrpAckNo: caseData?.case?.ackn_no || '',
+            sections: caseData?.case?.sections || '',
+            firSections: caseData?.case?.sections || '',
+            caseId: id,
+            fraudAmount: caseData?.case?.fraud_amount ? `Rs. ${parseFloat(caseData.case.fraud_amount).toLocaleString('en-IN')}` : '',
+            complainantName: caseData?.complainant?.name || caseData?.victim?.name || '',
+            complainantMobile: caseData?.complainant?.mobile || caseData?.victim?.mobile || '',
+            victimName: caseData?.victim?.name || caseData?.complainant?.name || '',
+            victimMobile: caseData?.victim?.mobile || caseData?.complainant?.mobile || '',
             records: filteredRecords.map(r => ({
                 accountNumber: r.account,
                 transactionId: r.utr,
@@ -554,6 +571,38 @@ const LetterPreview = () => {
 
     const getGeneratedLetters = (isHtmlContent = false) => {
         let idx = 0;
+        // Helper to get accused fields
+        const getAccusedFields = () => {
+            const acc = caseData?.accusedList?.[0] || {};
+            return {
+                accusedName: acc.name || '',
+                accusedMobile: acc.mobile || '',
+                accused_whatsapp_no: acc.whatsapp_no || '',
+                accused_facebook_id: acc.facebook_id || '',
+                accused_twitter_id: acc.twitter_id || '',
+                accused_insta_id: acc.insta_id || '',
+                accused_telegram_id: acc.telegram_id || '',
+                accused_gmail_id: acc.gmail_id || '',
+                accused_linkedin_id: acc.linkedin_id || '',
+                accused_website_url: acc.website_url || '',
+                accused_other_social: acc.other_social || '',
+            };
+        };
+        const getCommonCaseFields = () => ({
+            sections: caseData?.case?.sections || '',
+            firSections: caseData?.case?.sections || '',
+            caseId: id,
+            fraudAmount: caseData?.case?.fraud_amount ? `Rs. ${parseFloat(caseData.case.fraud_amount).toLocaleString('en-IN')}` : '',
+            complainantName: caseData?.complainant?.name || caseData?.victim?.name || '',
+            complainantMobile: caseData?.complainant?.mobile || caseData?.victim?.mobile || '',
+            complainantEmail: caseData?.complainant?.email || caseData?.victim?.email || '',
+            complainantAddress: caseData?.complainant?.address || caseData?.victim?.address || '',
+            victimName: caseData?.victim?.name || caseData?.complainant?.name || '',
+            victimMobile: caseData?.victim?.mobile || caseData?.complainant?.mobile || '',
+            victimEmail: caseData?.victim?.email || caseData?.complainant?.email || '',
+            victimAddress: caseData?.victim?.address || caseData?.complainant?.address || '',
+            ...getAccusedFields(),
+        });
         if (selectedCategory === 'Bank Notice') {
             return bankGroups
                 .filter(g => selectedBankIds.has(g.name))
@@ -562,36 +611,9 @@ const LetterPreview = () => {
                     if (recs.length === 0) return null;
                     const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
                     const matchedBank = bankListRef.current?.find(b => b.bank_name?.toLowerCase().trim() === g.name?.toLowerCase().trim()) || {};
-                    
                     let htmlContent = undefined;
-                    if (isHtmlContent) {
-                        const quill = quillInstancesRef.current[elemId];
-                        if (quill) {
-                            htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
-                        } else {
-                            htmlContent = generateLetterHtml({
-                                year: new Date().getFullYear(),
-                                refId: `${id}/782-JP`,
-                                date: new Date().toLocaleDateString('en-GB'),
-                                bankName: g.name,
-                                bankAddress: matchedBank.bankaddress || '',
-                                firNo: caseData?.case?.fir_no || '',
-                                ncrpNo: caseData?.case?.ackn_no || '',
-                                records: recs.map(r => ({
-                                    accountNumber: r.account,
-                                    transactionId: r.utr,
-                                    ifsc: r.ifsc,
-                                    amount: typeof r.amount === 'string' ? r.amount : `₹${parseFloat(r.amount).toLocaleString()}`
-                                })),
-                                startDate: '01/01/2024',
-                                endDate: new Date().toLocaleDateString('en-GB'),
-                                ...getSocialFields(),
-                                margins: margins
-                            }, selectedTemplate);
-                        }
-                    }
-                    idx++;
-                    return {
+                    
+                    const letterData = {
                         year: new Date().getFullYear(),
                         refId: `${id}/782-JP`,
                         date: new Date().toLocaleDateString('en-GB'),
@@ -599,7 +621,7 @@ const LetterPreview = () => {
                         bankAddress: matchedBank.bankaddress || '',
                         firNo: caseData?.case?.fir_no || '',
                         ncrpNo: caseData?.case?.ackn_no || '',
-                        htmlContent: htmlContent,
+                        ncrpAckNo: caseData?.case?.ackn_no || '',
                         records: recs.map(r => ({
                             accountNumber: r.account,
                             transactionId: r.utr,
@@ -609,7 +631,21 @@ const LetterPreview = () => {
                         startDate: '01/01/2024',
                         endDate: new Date().toLocaleDateString('en-GB'),
                         ...getSocialFields(),
+                        ...getCommonCaseFields(),
                         margins: margins
+                    };
+                    if (isHtmlContent) {
+                        const quill = quillInstancesRef.current[elemId];
+                        if (quill) {
+                            htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                        } else {
+                            htmlContent = generateLetterHtml(letterData, selectedTemplate);
+                        }
+                    }
+                    idx++;
+                    return {
+                        ...letterData,
+                        htmlContent: htmlContent,
                     };
                 })
                 .filter(Boolean);
@@ -618,32 +654,21 @@ const LetterPreview = () => {
                 const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
                 const platformAddr = getPlatformAddress(opt);
                 const activeSocialFields = getActivePlatformFields(opt);
+                // Determine which social field is active for this platform
+                const acc = caseData?.accusedList?.[0] || {};
+                const norm = opt.toLowerCase();
+                let activeHandle = '';
+                if (norm.includes('facebook') || norm.includes('meta')) activeHandle = acc.facebook_id || '';
+                else if (norm.includes('instagram') || norm.includes('insta')) activeHandle = acc.insta_id || '';
+                else if (norm.includes('whatsapp')) activeHandle = acc.whatsapp_no || '';
+                else if (norm.includes('google') || norm.includes('youtube')) activeHandle = acc.gmail_id || '';
+                else if (norm.includes('telegram')) activeHandle = acc.telegram_id || '';
+                else if (norm.includes('twitter') || norm.includes('x')) activeHandle = acc.twitter_id || '';
+                else if (norm.includes('linkedin')) activeHandle = acc.linkedin_id || '';
+                else activeHandle = acc.other_social || '';
 
                 let htmlContent = undefined;
-                if (isHtmlContent) {
-                    const quill = quillInstancesRef.current[elemId];
-                    if (quill) {
-                        htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
-                    } else {
-                        const adaptedTemplate = adaptTemplateForPlatform(selectedTemplate, opt);
-                        htmlContent = generateLetterHtml({
-                            year: new Date().getFullYear(),
-                            refId: `${id}/782-JP`,
-                            date: new Date().toLocaleDateString('en-GB'),
-                            bankName: opt,
-                            bankAddress: platformAddr,
-                            firNo: caseData?.case?.fir_no || '',
-                            ncrpNo: caseData?.case?.ackn_no || '',
-                            records: [],
-                            startDate: '01/01/2024',
-                            endDate: new Date().toLocaleDateString('en-GB'),
-                            ...activeSocialFields,
-                            margins: margins
-                        }, adaptedTemplate);
-                    }
-                }
-                idx++;
-                return {
+                const letterData = {
                     year: new Date().getFullYear(),
                     refId: `${id}/782-JP`,
                     date: new Date().toLocaleDateString('en-GB'),
@@ -651,40 +676,36 @@ const LetterPreview = () => {
                     bankAddress: platformAddr,
                     firNo: caseData?.case?.fir_no || '',
                     ncrpNo: caseData?.case?.ackn_no || '',
-                    htmlContent: htmlContent,
+                    ncrpAckNo: caseData?.case?.ackn_no || '',
                     records: [],
                     startDate: '01/01/2024',
                     endDate: new Date().toLocaleDateString('en-GB'),
                     ...activeSocialFields,
+                    ...getCommonCaseFields(),
+                    accusedSocialMediaType: opt,
+                    accusedSocialMediaId: activeHandle,
                     margins: margins
+                };
+                if (isHtmlContent) {
+                    const quill = quillInstancesRef.current[elemId];
+                    if (quill) {
+                        htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                    } else {
+                        const adaptedTemplate = adaptTemplateForPlatform(selectedTemplate, opt);
+                        htmlContent = generateLetterHtml(letterData, adaptedTemplate);
+                    }
+                }
+                idx++;
+                return {
+                    ...letterData,
+                    htmlContent: htmlContent,
                 };
             });
         } else {
             // Court Notice, Govt Notice, Others
             const elemId = idx === 0 ? 'letter-preview' : `letter-preview-${idx}`;
             let htmlContent = undefined;
-            if (isHtmlContent) {
-                const quill = quillInstancesRef.current[elemId];
-                if (quill) {
-                    htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
-                } else {
-                    htmlContent = generateLetterHtml({
-                        year: new Date().getFullYear(),
-                        refId: `${id}/782-JP`,
-                        date: new Date().toLocaleDateString('en-GB'),
-                        bankName: selectedCategory,
-                        bankAddress: '',
-                        firNo: caseData?.case?.fir_no || '',
-                        ncrpNo: caseData?.case?.ackn_no || '',
-                        records: [],
-                        startDate: '01/01/2024',
-                        endDate: new Date().toLocaleDateString('en-GB'),
-                        ...getSocialFields(),
-                        margins: margins
-                    }, selectedTemplate);
-                }
-            }
-            return [{
+            const letterData = {
                 year: new Date().getFullYear(),
                 refId: `${id}/782-JP`,
                 date: new Date().toLocaleDateString('en-GB'),
@@ -692,12 +713,25 @@ const LetterPreview = () => {
                 bankAddress: '',
                 firNo: caseData?.case?.fir_no || '',
                 ncrpNo: caseData?.case?.ackn_no || '',
-                htmlContent: htmlContent,
+                ncrpAckNo: caseData?.case?.ackn_no || '',
                 records: [],
                 startDate: '01/01/2024',
                 endDate: new Date().toLocaleDateString('en-GB'),
                 ...getSocialFields(),
+                ...getCommonCaseFields(),
                 margins: margins
+            };
+            if (isHtmlContent) {
+                const quill = quillInstancesRef.current[elemId];
+                if (quill) {
+                    htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                } else {
+                    htmlContent = generateLetterHtml(letterData, selectedTemplate);
+                }
+            }
+            return [{
+                ...letterData,
+                htmlContent: htmlContent,
             }];
         }
     };
@@ -991,14 +1025,15 @@ const LetterPreview = () => {
                 return;
             }
 
-            // 2. Generation & Conflict Detection Loop
+            // 2. Generation & Conflict Detection — ALL PARALLEL for max speed
             const { default: jsPDF } = await import('jspdf');
             const { generateBulkPdf } = await import('../services/letterGenerator');
             
-            const queue = [];
             setStatusOverlay({ show: true, type: 'warning', title: 'Dossier Integrity Scan', message: 'Scanning for intelligence collisions...' });
 
-            for (const letter of letters) {
+            const queue = [];
+
+            const processLetter = async (letter) => {
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 await generateBulkPdf(pdf, letter.data, true, letter.htmlContent);
                 const pdfBlob = pdf.output('blob');
@@ -1017,9 +1052,14 @@ const LetterPreview = () => {
                 });
 
                 if (!res.data.success && res.data.conflict) {
-                    queue.push({ letter: letter.data, pdfBase64, bankName: letter.bankName });
+                    return { letter: letter.data, pdfBase64, bankName: letter.bankName };
                 }
-            }
+                return null;
+            };
+
+            const conflictResults = await Promise.all(letters.map(processLetter));
+            conflictResults.forEach(item => { if (item) queue.push(item); });
+
 
             setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
 
@@ -1031,10 +1071,12 @@ const LetterPreview = () => {
                 // No conflicts, proceed to final modal
                 await new Promise(r => setTimeout(r, 800));
                 setProcessStep(4);
-                const res = await api.get(`/cases/${id}/nodal-recipients`);
+                const res = await api.get(`/cases/${id}/nodal-recipients?category=${encodeURIComponent(selectedCategory)}`);
                 if (res.data.success) {
-                    setEmailRecipients(res.data.data);
-                    const valid = res.data.data.filter(r => r.email).map(r => r.bankname);
+                    const filterSet = selectedCategory === 'Bank Notice' ? selectedBankIds : selectedSubItems;
+                    const filteredRecipients = res.data.data.filter(r => filterSet.has(r.bankname));
+                    setEmailRecipients(filteredRecipients);
+                    const valid = filteredRecipients.filter(r => r.email).map(r => r.bankname);
                     setSelectedRecipients(new Set(valid));
                     setShowEmailModal(true);
                 }
@@ -1162,10 +1204,12 @@ const LetterPreview = () => {
                 
                 // Finalize: Sync Step 3 and Open Email Modal
                 setProcessStep(4);
-                const res = await api.get(`/cases/${id}/nodal-recipients`);
+                const res = await api.get(`/cases/${id}/nodal-recipients?category=${encodeURIComponent(selectedCategory)}`);
                 if (res.data.success) {
-                    setEmailRecipients(res.data.data);
-                    const valid = res.data.data.filter(r => r.email).map(r => r.bankname);
+                    const filterSet = selectedCategory === 'Bank Notice' ? selectedBankIds : selectedSubItems;
+                    const filteredRecipients = res.data.data.filter(r => filterSet.has(r.bankname));
+                    setEmailRecipients(filteredRecipients);
+                    const valid = filteredRecipients.filter(r => r.email).map(r => r.bankname);
                     setSelectedRecipients(new Set(valid));
                     setShowEmailModal(true);
                 }
@@ -1654,29 +1698,123 @@ const LetterPreview = () => {
                                                  'Filter (Optional)'}
                                             </p>
                                             {selectedCategory === 'Bank Notice' && (
-                                                <div className="space-y-2">
-                                                    {bankGroups.length === 0 ? (
-                                                        <p className="text-xs text-slate-400 italic p-4 border border-dashed border-slate-200 rounded-2xl text-center">No bank data. Upload money trail Excel first.</p>
-                                                    ) : bankGroups.map(g => {
-                                                        const isSel = selectedBankIds.has(g.name);
-                                                        const layers = [...new Set(g.records.map(r => r.layer))].sort();
-                                                        return (
-                                                            <div key={g.name}
-                                                                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-white hover:border-slate-200'}`}
-                                                                onClick={() => toggleBankSelection(g.name)}
-                                                            >
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                                                                        {isSel && <CheckCircle2 size={12} className="text-white" />}
-                                                                    </div>
-                                                                    <div className="min-w-0">
-                                                                        <p className="text-xs font-black text-slate-800 uppercase truncate">{g.name}</p>
-                                                                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">{g.records.length} records · {layers.slice(0,2).join(', ')}{layers.length > 2 ? '...' : ''}</p>
-                                                                    </div>
-                                                                </div>
+                                                <div className="space-y-4">
+                                                    {/* Intelligent Filter */}
+                                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                                                        <div className="flex gap-2">
+                                                            <div className="relative flex-1">
+                                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Search Bank..."
+                                                                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                                    value={bankSearchText}
+                                                                    onChange={e => setBankSearchText(e.target.value)}
+                                                                />
                                                             </div>
-                                                        );
-                                                    })}
+                                                            <div className="relative">
+                                                                <div 
+                                                                    className="px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white cursor-pointer flex justify-between items-center min-w-[120px] hover:border-blue-500 transition-colors"
+                                                                    onClick={() => setShowLayerDropdown(!showLayerDropdown)}
+                                                                >
+                                                                    <span className="truncate">
+                                                                        {bankLayerFilter.length === 0 ? 'All Layers' : `${bankLayerFilter.length} Layer(s)`}
+                                                                    </span>
+                                                                    <ChevronDown size={14} className={`text-slate-400 ml-2 transition-transform ${showLayerDropdown ? 'rotate-180' : ''}`} />
+                                                                </div>
+                                                                {showLayerDropdown && (
+                                                                    <div className="absolute top-full mt-1 right-0 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto py-1">
+                                                                        <label className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs transition-colors">
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                className="mr-3 rounded border-slate-300 w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
+                                                                                checked={bankLayerFilter.length === 0}
+                                                                                onChange={() => setBankLayerFilter([])}
+                                                                            />
+                                                                            <span className={bankLayerFilter.length === 0 ? 'font-bold text-blue-600' : 'text-slate-700'}>All Layers</span>
+                                                                        </label>
+                                                                        <div className="border-t border-slate-100 my-1"></div>
+                                                                        {[...new Set(bankGroups.flatMap(g => g.records.map(r => r.layer)))].sort().map(l => {
+                                                                            const isChecked = bankLayerFilter.includes(l);
+                                                                            return (
+                                                                                <label key={l} className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs transition-colors">
+                                                                                    <input 
+                                                                                        type="checkbox" 
+                                                                                        className="mr-3 rounded border-slate-300 w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
+                                                                                        checked={isChecked}
+                                                                                        onChange={(e) => {
+                                                                                            if (e.target.checked) {
+                                                                                                setBankLayerFilter([...bankLayerFilter, l]);
+                                                                                            } else {
+                                                                                                setBankLayerFilter(bankLayerFilter.filter(x => x !== l));
+                                                                                            }
+                                                                                        }}
+                                                                                    />
+                                                                                    <span className={isChecked ? 'font-bold text-blue-600' : 'text-slate-700'}>{l}</span>
+                                                                                </label>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center px-1">
+                                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                                                {bankGroups.filter(g => 
+                                                                    g.name.toLowerCase().includes(bankSearchText.toLowerCase()) &&
+                                                                    (bankLayerFilter.length === 0 || bankLayerFilter.some(l => g.records.some(r => r.layer === l)))
+                                                                ).length} Banks Found
+                                                            </span>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const filtered = bankGroups.filter(g => 
+                                                                            g.name.toLowerCase().includes(bankSearchText.toLowerCase()) &&
+                                                                            (bankLayerFilter.length === 0 || bankLayerFilter.some(l => g.records.some(r => r.layer === l)))
+                                                                        );
+                                                                        const newSet = new Set(selectedBankIds);
+                                                                        filtered.forEach(g => newSet.add(g.name));
+                                                                        setSelectedBankIds(newSet);
+                                                                    }}
+                                                                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase"
+                                                                >Select All Visible</button>
+                                                                <button
+                                                                    onClick={() => setSelectedBankIds(new Set())}
+                                                                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase"
+                                                                >Clear</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        {bankGroups.length === 0 ? (
+                                                            <p className="text-xs text-slate-400 italic p-4 border border-dashed border-slate-200 rounded-2xl text-center">No bank data. Upload money trail Excel first.</p>
+                                                        ) : bankGroups
+                                                            .filter(g => 
+                                                                g.name.toLowerCase().includes(bankSearchText.toLowerCase()) &&
+                                                                (bankLayerFilter.length === 0 || bankLayerFilter.some(l => g.records.some(r => r.layer === l)))
+                                                            )
+                                                            .map(g => {
+                                                                const isSel = selectedBankIds.has(g.name);
+                                                                const layers = [...new Set(g.records.map(r => r.layer))].sort();
+                                                                return (
+                                                                    <div key={g.name}
+                                                                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-white hover:border-slate-200'}`}
+                                                                        onClick={() => toggleBankSelection(g.name)}
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                                                                                {isSel && <CheckCircle2 size={12} className="text-white" />}
+                                                                            </div>
+                                                                            <div className="min-w-0">
+                                                                                <p className="text-xs font-black text-slate-800 uppercase truncate">{g.name}</p>
+                                                                                <p className="text-[9px] text-slate-400 font-bold mt-0.5">{g.records.length} records · {layers.slice(0,2).join(', ')}{layers.length > 2 ? '...' : ''}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </div>
                                                 </div>
                                             )}
                                             {selectedCategory === 'Telecom Notice' && (
@@ -2125,8 +2263,58 @@ const LetterPreview = () => {
                                                             <div>
                                                                 <h4 className="text-base font-black text-slate-900 tracking-tight">{rec.bankname}</h4>
                                                                 <div className="flex items-center gap-2 mt-1">
-                                                                    <div className={`w-2 h-2 rounded-full ${hasEmail ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-rose-500'}`}></div>
-                                                                    <p className={`text-[11px] font-bold tracking-tight uppercase ${hasEmail ? 'text-blue-600' : 'text-rose-500'}`}>{rec.email || 'Registry Link Broken'}</p>
+                                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${hasEmail ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-rose-500'}`}></div>
+                                                                    {editingBankEmail === rec.bankname ? (
+                                                                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                                            <input 
+                                                                                autoFocus
+                                                                                type="email" 
+                                                                                value={editingBankEmailValue} 
+                                                                                onChange={(e) => setEditingBankEmailValue(e.target.value)}
+                                                                                onKeyDown={(e) => {
+                                                                                    if (e.key === 'Enter') {
+                                                                                        setEmailRecipients(prev => prev.map(r => r.bankname === rec.bankname ? { ...r, email: editingBankEmailValue } : r));
+                                                                                        setEditingBankEmail(null);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-2 py-0.5 text-[11px] font-bold tracking-tight text-blue-600 border-b border-blue-300 focus:outline-none focus:border-blue-600 bg-blue-50/50 min-w-[150px]"
+                                                                            />
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setEmailRecipients(prev => prev.map(r => r.bankname === rec.bankname ? { ...r, email: editingBankEmailValue } : r));
+                                                                                    setEditingBankEmail(null);
+                                                                                }}
+                                                                                className="text-blue-600 hover:text-blue-800 p-1"
+                                                                            >
+                                                                                <Save size={12} />
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setEditingBankEmail(null);
+                                                                                }}
+                                                                                className="text-slate-400 hover:text-slate-600 p-1"
+                                                                            >
+                                                                                <X size={12} />
+                                                                            </button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-1.5 group/edit">
+                                                                            <p className={`text-[11px] font-bold tracking-tight uppercase ${hasEmail ? 'text-blue-600' : 'text-rose-500'}`}>{rec.email || 'Registry Link Broken'}</p>
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setEditingBankEmail(rec.bankname);
+                                                                                    setEditingBankEmailValue(rec.email || '');
+                                                                                }}
+                                                                                className="text-slate-300 hover:text-blue-500 opacity-0 group-hover/edit:opacity-100 transition-opacity"
+                                                                                title="Edit Email Temporarily"
+                                                                            >
+                                                                                <Edit2 size={12} />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>

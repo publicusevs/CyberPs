@@ -115,13 +115,52 @@ export const generateLetterHtml = (data, selectedTemplate = null, excludeContain
         '{year}': data.year,
         '{startDate}': data.startDate,
         '{endDate}': data.endDate,
+        // Bank fields
         '{BANK_ACCUSEDBANK_NAME}': data.bankName,
+        '{BANK_NAME}': data.bankName,
         '{BANK_ACCUSEDBANK_ADDRESS}': data.bankAddress || '',
         '{BANK_ADDRESS}': data.bankAddress || '',
         '{BANK_ACCUSEDBANK_ACCOUNT}': data.records && data.records.length > 0 ? data.records.map(r => `${r.accountNumber} (IFSC: ${r.ifsc})`).join(', ') : '',
         '{BANK_ACCUSEDBANK_IFSCCODE}': data.records && data.records.length > 0 ? [...new Set(data.records.map(r => r.ifsc))].join(', ') : '',
+        // FIR / Case fields
         '{FIR_NO}': data.firNo || '',
         '{NCRP_NO}': data.ncrpNo || '',
+        '{NCRP_ACK_NO}': data.ncrpNo || data.ncrpAckNo || '',  // alias
+        '{FIR_SECTIONS}': data.sections || data.firSections || '',
+        '{FIR_ACT}': data.sections || data.firSections || '',
+        '{CASE_ID}': data.caseId || '',
+        '{REF_ID}': data.refId || '',
+        // Complainant / Victim fields
+        '{COMPLAINANT_NAME}': data.complainantName || data.victimName || '',
+        '{COMPLAINANT_MOBILE}': data.complainantMobile || data.victimMobile || '',
+        '{COMPLAINANT_EMAIL}': data.complainantEmail || data.victimEmail || '',
+        '{COMPLAINANT_ADDRESS}': data.complainantAddress || data.victimAddress || '',
+        '{VICTIM_NAME}': data.victimName || data.complainantName || '',
+        '{VICTIM_MOBILE}': data.victimMobile || data.complainantMobile || '',
+        '{VICTIM_EMAIL}': data.victimEmail || data.complainantEmail || '',
+        '{VICTIM_ADDRESS}': data.victimAddress || data.complainantAddress || '',
+        '{FRAUD_AMOUNT}': data.fraudAmount || '',
+        // Accused / Suspect social fields
+        '{ACCUSED_NAME}': data.accusedName || '',
+        '{ACCUSED_MOBILE}': data.accusedMobile || '',
+        '{ACCUSED_WHATSAPP}': data.accused_whatsapp_no || data.whatsapp_no || '',
+        '{ACCUSED_FACEBOOK}': data.accused_facebook_id || data.facebook_id || '',
+        '{ACCUSED_TWITTER}': data.accused_twitter_id || data.twitter_id || '',
+        '{ACCUSED_INSTAGRAM}': data.accused_insta_id || data.insta_id || '',
+        '{ACCUSED_TELEGRAM}': data.accused_telegram_id || data.telegram_id || '',
+        '{ACCUSED_GMAIL}': data.accused_gmail_id || data.gmail_id || '',
+        '{ACCUSED_LINKEDIN}': data.accused_linkedin_id || data.linkedin_id || '',
+        '{ACCUSED_WEBSITE}': data.accused_website_url || data.website_url || '',
+        '{ACCUSED_OTHER_SOCIAL}': data.accused_other_social || data.other_social || '',
+        '{ACCUSED_SOCIAL_MEDIA_TYPE}': data.accusedSocialMediaType || data.bankName || '',
+        '{ACCUSED_SOCIAL_MEDIA_ID}': data.accusedSocialMediaId || data.whatsapp_no || data.facebook_id || data.gmail_id || '',
+        '{ACCUSED_SOCIAL_MEDIA_ADDRESS}': data.bankAddress || '',
+        '{ACCUSED_INSTA}': data.accused_insta_id || data.insta_id || '',
+        '{ACCUSED_X}': data.accused_twitter_id || data.twitter_id || '',
+        '{ACCUSED_YOUTUBE}': data.accused_gmail_id || data.gmail_id || '',
+        '{ACCUSED_SIGNAL}': data.accused_other_social || data.other_social || '',
+        '{ACCUSED_SNAPCHAT}': data.accused_other_social || data.other_social || '',
+        // Legacy social (per-accused) fields
         '{whatsapp_no}': data.whatsapp_no || '',
         '{gmail_id}': data.gmail_id || '',
         '{facebook_id}': data.facebook_id || '',
@@ -131,6 +170,7 @@ export const generateLetterHtml = (data, selectedTemplate = null, excludeContain
         '{telegram_id}': data.telegram_id || '',
         '{website_url}': data.website_url || '',
         '{other_social}': data.other_social || '',
+        // Nodal addresses
         '{facebook_address}': SOCIAL_ADDRESSES.facebook_address,
         '{insta_address}': SOCIAL_ADDRESSES.insta_address,
         '{whatsapp_address}': SOCIAL_ADDRESSES.whatsapp_address,
@@ -171,9 +211,13 @@ export const generateLetterHtml = (data, selectedTemplate = null, excludeContain
     });
     tableHtml += `</tbody></table>`;
 
-    // Inject table into {TRANSACTION_TABLE} ONLY if the placeholder is explicitly used
+    // Inject table into {TRANSACTION_TABLE} or {TEST_TRANSACTION_TABLE} if placeholder is used
     if (html.includes('{TRANSACTION_TABLE}')) {
         html = html.replace(/\{TRANSACTION_TABLE\}/g, tableHtml);
+    }
+    // Alias: {TEST_TRANSACTION_TABLE} -> same transaction table
+    if (html.includes('{TEST_TRANSACTION_TABLE}')) {
+        html = html.replace(/\{TEST_TRANSACTION_TABLE\}/g, tableHtml);
     }
 
     // Extract margins, lineSpacing, and wordWrap from data or selectedTemplate
@@ -537,13 +581,15 @@ export const generateBulkPdf = async (pdf, data, isFirstPage, selectedTemplate =
         document.body.appendChild(container);
 
         try {
+            // OPTIMIZATION: Reduce scale slightly for better performance without noticeable quality loss
             const canvas = await html2canvas(container.firstChild, {
-                scale: 2,
+                scale: 1.2,
                 useCORS: true,
                 backgroundColor: '#ffffff'
             });
 
-            const imgData = canvas.toDataURL('image/png');
+            // OPTIMIZATION: Use JPEG instead of PNG for massive file size reduction (10MB -> ~300KB)
+            const imgData = canvas.toDataURL('image/jpeg', 0.65);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
             const imgHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -551,13 +597,14 @@ export const generateBulkPdf = async (pdf, data, isFirstPage, selectedTemplate =
             let heightLeft = imgHeight;
             let position = 0;
 
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            // OPTIMIZATION: Use 'FAST' compression alias and proper image alias
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, 'IMG_ALIAS', 'FAST');
             heightLeft -= pdfHeight;
 
             while (heightLeft > 0) {
                 position -= pdfHeight;
                 pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, 'IMG_ALIAS', 'FAST');
                 heightLeft -= pdfHeight;
             }
         } finally {
@@ -704,4 +751,52 @@ export const generateAllBankLettersPdf = async (transactions, caseId) => {
     }
 
     return jspdf;
+};
+
+/**
+ * Renders HTML into a PDF blob using the exact same configuration as bulk download.
+ */
+export const convertHtmlToPdfBlob = async (htmlString) => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: html2canvas } = await import('html2canvas');
+
+    const container = document.createElement('div');
+    container.innerHTML = htmlString;
+    container.style.position = 'absolute';
+    container.style.top = '-9999px';
+    container.style.left = '-9999px';
+    container.style.width = '794px';
+    document.body.appendChild(container);
+
+    try {
+        const canvas = await html2canvas(container.firstChild, {
+            scale: 1.2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.65);
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, 'IMG_ALIAS', 'FAST');
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+            position -= pageHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, 'IMG_ALIAS', 'FAST');
+            heightLeft -= pageHeight;
+        }
+
+        return pdf.output('blob');
+    } finally {
+        document.body.removeChild(container);
+    }
 };

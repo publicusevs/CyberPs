@@ -3,7 +3,7 @@ import time
 import sys
 from app.api import app
 from app.logger import app_logger
-from app.utils import get_exchange_account
+from app.utils import get_mail_provider
 from app.attachment_downloader import process_and_download_attachments
 from app.database import init_db, log_processed_email
 from app.config import settings
@@ -17,9 +17,9 @@ def poll_and_process():
     
     while True:
         try:
-            account = get_exchange_account()
+            provider = get_mail_provider()
             # Fetch unread emails
-            unread_messages = account.inbox.filter(is_read=False).order_by('datetime_received')[:settings.FETCH_COUNT]
+            unread_messages = provider.fetch_emails(limit=settings.FETCH_COUNT)
             
             for msg in unread_messages:
                 app_logger.info(f"New Email detected: {msg.subject}")

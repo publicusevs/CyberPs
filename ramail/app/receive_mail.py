@@ -1,4 +1,4 @@
-from .utils import get_exchange_account
+from .utils import get_mail_provider
 from .attachment_handler import save_attachments
 from .logger import app_logger
 from .config import settings
@@ -9,10 +9,10 @@ def process_unread_emails():
     and marks them as read.
     """
     try:
-        account = get_exchange_account()
+        provider = get_mail_provider()
         
         # Query unread emails
-        unread_messages = account.inbox.filter(is_read=False).order_by('-datetime_received')[:settings.FETCH_COUNT]
+        unread_messages = provider.fetch_emails(limit=settings.FETCH_COUNT)
         
         count = 0
         for message in unread_messages:

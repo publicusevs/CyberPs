@@ -1,8 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
-import Tesseract from 'tesseract.js';
 import { 
     Upload, FileText, CheckCircle, AlertTriangle, ChevronRight, FileSearch, ArrowRight, ShieldCheck, 
     Save, Play, Loader2, ArrowLeft, RefreshCw, Activity
@@ -12,8 +9,6 @@ import { Button } from '../components/ui/Button';
 import { InputField } from '../components/ui/InputField';
 import { useToast } from '../context/ToastContext';
 
-// Set PDF.js worker locally using Vite
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const FIRReader = () => {
     const navigate = useNavigate();
@@ -26,6 +21,7 @@ const FIRReader = () => {
     
     const [extractedData, setExtractedData] = useState({});
     const [confidenceScores, setConfidenceScores] = useState({});
+    const [progress, setProgress] = useState(0);
 
     const addLog = (msg, type = 'info') => {
         setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
@@ -38,6 +34,7 @@ const FIRReader = () => {
             setStatus('idle');
             setLogs([]);
             setExtractedData({});
+            setProgress(0);
         } else {
             toast.error("Please upload a valid PDF file.", "Invalid Format");
         }
@@ -46,48 +43,35 @@ const FIRReader = () => {
     const processPDF = async () => {
         if (!file) return;
         setStatus('reading');
-        addLog(`Starting extraction for: ${file.name}`);
+        addLog(`Sending PDF for structural extraction: ${file.name}`);
         
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-            const pdf = await loadingTask.promise;
+            const formData = new FormData();
+            formData.append('fir_file', file);
             
-            addLog(`PDF Loaded successfully. Pages: ${pdf.numPages}`, 'success');
+            setProgress(30);
             
-            let fullText = "";
-            let requiresOCR = false;
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                addLog(`Processing page ${i}/${pdf.numPages}...`);
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                
-                if (pageText.trim().length > 50) {
-                    fullText += pageText + "\n";
-                    addLog(`Page ${i}: Extracted text natively.`);
-                } else {
-                    addLog(`Page ${i}: Native text missing. Flagging for OCR.`, 'warning');
-                    requiresOCR = true;
-                    // Run OCR on page
-                    const viewport = page.getViewport({ scale: 2.0 });
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-                    
-                    const dataUrl = canvas.toDataURL('image/png');
-                    addLog(`Page ${i}: Running Tesseract OCR...`);
-                    const { data: { text } } = await Tesseract.recognize(dataUrl, 'eng+hin');
-                    fullText += text + "\n";
-                    addLog(`Page ${i}: OCR text extracted successfully.`, 'success');
-                }
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5174/api/cases/parse-pdf', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+            
+            setProgress(70);
+            
+            const result = await response.json();
+            
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Failed to extract data');
             }
             
-            addLog(`Extraction complete. Total characters: ${fullText.length}`, 'success');
-            parseExtractedText(fullText);
+            setProgress(100);
+            addLog(`PDF parsed successfully.`, 'success');
+            
+            parseExtractedData(result.data);
             
         } catch (error) {
             console.error(error);
@@ -97,107 +81,47 @@ const FIRReader = () => {
         }
     };
 
-    const parseExtractedText = (text) => {
+    const parseExtractedData = (data) => {
         setStatus('parsing');
-        addLog(`Running Structural NLP / Pattern Matching...`);
+        addLog(`Mapping extracted JSON to form...`);
         
-        // Setup initial default object matching CaseForm state
+        // Setup default object matching CaseForm state
         const parsed = {
-            fir_no: '',
-            fir_date: '',
-            police_station: '',
-            district: '',
-            sections: '',
-            complainant_name: '',
-            complainant_mobile: '',
-            complainant_email: '',
-            complainant_address: '',
-            fraud_amount: '',
-            description: '',
+            fir_no: data.fir?.fir_no || '',
+            fir_date: data.fir?.fir_date ? data.fir.fir_date.replace(/\//g, '-') : '',
+            police_station: data.fir?.police_station_hi || data.fir?.police_station_en || '',
+            district: data.fir?.district_hi || data.fir?.district_en || '',
+            sections: data.acts_sections?.map(s => s.section).join(', ') || '',
+            complainant_name: data.complainant?.name || '',
+            complainant_mobile: data.complainant?.mobile || '',
+            complainant_email: data.complainant?.email || '',
+            complainant_address: data.complainant?.addresses?.[0]?.address || '',
+            fraud_amount: '', // Requires custom regex logic if needed, or null
+            description: data.brief_facts || '',
         };
-        const conf = {};
-
-        // Helper
-        const matchField = (regex, fieldName, confScore = 90) => {
-            const match = text.match(regex);
-            if (match && match[1]) {
-                parsed[fieldName] = match[1].trim();
-                conf[fieldName] = confScore;
-                addLog(`Mapped [${fieldName}]: ${parsed[fieldName]}`);
-            } else {
-                conf[fieldName] = 0;
-            }
+        
+        const conf = {
+            fir_no: parsed.fir_no ? 100 : 0,
+            fir_date: parsed.fir_date ? 100 : 0,
+            police_station: parsed.police_station ? 100 : 0,
+            district: parsed.district ? 100 : 0,
+            sections: parsed.sections ? 100 : 0,
+            complainant_name: parsed.complainant_name ? 100 : 0,
+            complainant_mobile: parsed.complainant_mobile ? 100 : 0,
+            complainant_email: parsed.complainant_email ? 100 : 0,
+            complainant_address: parsed.complainant_address ? 100 : 0,
+            description: parsed.description ? 100 : 0,
         };
 
-        // Ultra-Resilient FIR No Extractor
-        let foundFir = false;
-        
-        // Strategy 1: Extract 4 digits from the filename
-        if (file && file.name) {
-            const nameMatch = file.name.match(/\d{6,}(\d{4})/);
-            if (nameMatch) {
-                parsed.fir_no = nameMatch[1];
-                conf['fir_no'] = 95;
-                addLog(`Mapped [fir_no] from filename: ${parsed.fir_no}`);
-                foundFir = true;
-            }
+        if (data.properties && data.properties.length > 0) {
+            parsed.fraud_amount = data.properties[0].value || '';
+            conf.fraud_amount = parsed.fraud_amount ? 100 : 0;
         }
-
-        // Strategy 2: Contextual search near Police/Jaipur/Commissionerate
-        if (!foundFir) {
-            const firMatch = text.match(/(?:JAIPUR|COMMISSIONERATE|STATION)[\s\S]{0,40}?\b(\d{4})\b/i);
-            if (firMatch) {
-                parsed.fir_no = firMatch[1];
-                conf['fir_no'] = 85;
-                addLog(`Mapped [fir_no] from contextual anchor: ${parsed.fir_no}`);
-                foundFir = true;
-            }
-        }
-        
-        // Strategy 3: Global fallback for a zero-padded 4-digit number
-        if (!foundFir) {
-            const genericMatch = text.substring(0, 1000).match(/\b(0\d{3})\b/);
-            if (genericMatch) {
-                parsed.fir_no = genericMatch[1];
-                conf['fir_no'] = 80;
-                addLog(`Mapped [fir_no] from global fallback: ${parsed.fir_no}`);
-                foundFir = true;
-            }
-        }
-
-        if (!foundFir) {
-            conf['fir_no'] = 0;
-        }
-
-        // Ultra-Resilient FIR Date Extractor
-        let foundDate = false;
-        // Search globally for the very first valid date format at the top of the document
-        const dateMatch = text.substring(0, 1500).match(/\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\b/);
-        if (dateMatch) {
-            parsed.fir_date = dateMatch[1];
-            conf['fir_date'] = 95;
-            addLog(`Mapped [fir_date] globally: ${parsed.fir_date}`);
-            foundDate = true;
-        }
-        if (!foundDate) {
-            conf['fir_date'] = 0;
-        }
-        
-        matchField(/(?:P\.S\.|Police Station|थाना)[\s\S]{0,30}?[:\-]?\s*([A-Za-z\s]+)(?=District|City|Date|,|\n)/i, 'police_station', 85);
-        matchField(/(?:District|ज़िला)[\s\S]{0,20}?[:\-]?\s*([A-Za-z\s]+)(?=P\.S|Police|,|\n)/i, 'district', 85);
-        matchField(/(?:Name|नाम|\(a\) Name)[\s\S]{0,15}?[:\-]\s*([A-Za-z\s\.]{3,50})(?=\n|Father|Age|Mobile|Address|Passport|Nationality|,)/i, 'complainant_name', 85);
-        matchField(/Mobile.*?[:\-]?\s*(\d{10})/i, 'complainant_mobile', 98);
-        matchField(/Email\s*[:\-]?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i, 'complainant_email', 100);
-        matchField(/Sections[\s\S]{0,20}?[:\-]?\s*([A-Za-z0-9\(\)\s,]+)/i, 'sections', 75);
-        matchField(/(?:Rs\.|INR|Amount)[\s\S]{0,20}?[:\-]?\s*([\d,]+(?:\.\d{2})?)/i, 'fraud_amount', 88);
-
-        parsed.description = text.substring(0, 1000) + "... [Truncated]";
-        conf['description'] = 100;
 
         setExtractedData(parsed);
         setConfidenceScores(conf);
         setStatus('reviewing');
-        addLog(`Parsing Engine complete. Ready for Review.`, 'success');
+        addLog(`Mapping complete. Ready for Review.`, 'success');
     };
 
     const handleFieldChange = (field, value) => {
@@ -405,9 +329,24 @@ const FIRReader = () => {
                                     <>
                                         <Loader2 size={48} className="text-indigo-500 animate-spin mb-6" />
                                         <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight mb-2 animate-pulse">Running Deep Scan</h3>
-                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">
                                             {status === 'reading' ? 'Extracting text and running OCR on image layers...' : 'Applying regex constraints and field mapping...'}
                                         </p>
+                                        
+                                        {status === 'reading' && (
+                                            <div className="w-full max-w-md">
+                                                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                                                    <span>Processing Document</span>
+                                                    <span>{progress}%</span>
+                                                </div>
+                                                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="h-full bg-indigo-500 transition-all duration-300 ease-out"
+                                                        style={{ width: `${progress}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>

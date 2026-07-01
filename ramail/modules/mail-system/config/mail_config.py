@@ -33,3 +33,9 @@ class MailSettings(BaseSettings):
     SENDTO_EMAIL: str
 
 mail_settings = MailSettings()
+
+def reload_mail_settings():
+    global mail_settings
+    from dotenv import load_dotenv
+    load_dotenv(_ENV_FILE_PATH, override=True)
+    mail_settings = MailSettings()

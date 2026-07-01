@@ -25,3 +25,10 @@ class MailSettings(BaseSettings):
     TEST_RECIPIENT: str = "akshay.doit@rajasthan.gov.in"
 
 mail_settings = MailSettings()
+
+def reload_mail_settings():
+    global mail_settings
+    from dotenv import load_dotenv
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".env")
+    load_dotenv(env_path, override=True)
+    mail_settings = MailSettings()

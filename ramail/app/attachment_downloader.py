@@ -23,7 +23,8 @@ def process_and_download_attachments(message):
     
     # 1. First Pass: Download and Extract Text
     for attachment in message.attachments:
-        if isinstance(attachment, FileAttachment):
+        # Support both exchangelib's FileAttachment and our MockAttachment
+        if hasattr(attachment, 'content') and hasattr(attachment, 'name'):
             # Save temporarily to analyze
             temp_path = os.path.join(settings.NORMAL_DIR, f"temp_{attachment.name}")
             with open(temp_path, 'wb') as f:

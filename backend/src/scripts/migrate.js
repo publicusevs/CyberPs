@@ -99,6 +99,54 @@ async function migrate() {
         END
     `);
 
+    // ── 5. cases — add sections column if missing ─────────────────────────────
+    logger.info('[MIGRATE] Checking cases.sections column...');
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sysobjects WHERE name='cases' AND xtype='U')
+        BEGIN
+            IF NOT EXISTS (
+                SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'cases' AND COLUMN_NAME = 'sections'
+            )
+            BEGIN
+                ALTER TABLE cases ADD sections NVARCHAR(500) NULL
+                PRINT 'Added sections column to cases'
+            END
+        END
+    `);
+
+    // ── 6. cases — add sho_name column if missing ─────────────────────────────
+    logger.info('[MIGRATE] Checking cases.sho_name column...');
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sysobjects WHERE name='cases' AND xtype='U')
+        BEGIN
+            IF NOT EXISTS (
+                SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'cases' AND COLUMN_NAME = 'sho_name'
+            )
+            BEGIN
+                ALTER TABLE cases ADD sho_name NVARCHAR(200) NULL
+                PRINT 'Added sho_name column to cases'
+            END
+        END
+    `);
+
+    // ── 7. cases — add remarks column if missing ───────────────────────────────
+    logger.info('[MIGRATE] Checking cases.remarks column...');
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sysobjects WHERE name='cases' AND xtype='U')
+        BEGIN
+            IF NOT EXISTS (
+                SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'cases' AND COLUMN_NAME = 'remarks'
+            )
+            BEGIN
+                ALTER TABLE cases ADD remarks NVARCHAR(MAX) NULL
+                PRINT 'Added remarks column to cases'
+            END
+        END
+    `);
+
     logger.info('[MIGRATE] ✔ Migration complete. All tables verified.');
     process.exit(0);
 }

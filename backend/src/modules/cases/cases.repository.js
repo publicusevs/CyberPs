@@ -43,15 +43,16 @@ const CasesRepository = {
             .input('other_social', mssql.NVarChar, fields.other_social)
             .input('sho_name', mssql.NVarChar, fields.sho_details || fields.sho_name || null)
             .input('remarks', mssql.NVarChar, fields.remarks || null)
+            .input('sections', mssql.NVarChar, fields.sections || null)
             .query(`INSERT INTO cases 
                 (fir_no, ackn_no, fraud_amount, description, assigned_to, created_by, 
                  whatsapp_no, gmail_id, facebook_id, twitter_id, linkedin_id, insta_id, 
-                 telegram_id, website_url, other_social, sho_name, remarks) 
+                 telegram_id, website_url, other_social, sho_name, remarks, sections) 
                 OUTPUT INSERTED.case_id 
                 VALUES 
                 (@fir_no, @ackn_no, @fraud_amount, @description, @assigned_to, @created_by,
                  @whatsapp_no, @gmail_id, @facebook_id, @twitter_id, @linkedin_id, @insta_id,
-                 @telegram_id, @website_url, @other_social, @sho_name, @remarks)`);
+                 @telegram_id, @website_url, @other_social, @sho_name, @remarks, @sections)`);
         return result.recordset[0].case_id;
     },
 
@@ -93,6 +94,7 @@ const CasesRepository = {
             .input('priority_id', mssql.Int, fields.priority_id ? toInt(fields.priority_id) : null)
             .input('sho_name', mssql.NVarChar, fields.sho_details || fields.sho_name || null)
             .input('remarks', mssql.NVarChar, fields.remarks || null)
+            .input('sections', mssql.NVarChar, fields.sections || null)
             .query(`UPDATE cases SET 
                 fir_no=@fir_no, 
                 ackn_no=@ackn_no, 
@@ -112,7 +114,8 @@ const CasesRepository = {
                 status_id=@status_id,
                 priority_id=@priority_id,
                 sho_name=@sho_name,
-                remarks=@remarks
+                remarks=@remarks,
+                sections=@sections
                 WHERE case_id=@case_id`);
     },
 

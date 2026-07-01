@@ -50,7 +50,7 @@ const Dashboard = () => {
 
     const fetchDashboardData = async () => {
         try {
-            const res = await api.get('/dashboard');
+            const res = await api.get('/dashboard/stats');
             if (res.data.success) {
                 setStats(res.data.stats);
                 setRecentActivity(res.data.recentActivity);

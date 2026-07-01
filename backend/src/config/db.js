@@ -1,5 +1,6 @@
 const mssql = require('mssql');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const server = process.env.DB_SERVER || 'localhost';
 // Handle both single and double backslashes from .env
@@ -12,7 +13,7 @@ console.log(`📡 Connection Blueprint: Host=${host}, Port=${process.env.DB_PORT
 const dbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    server: process.env.DB_SERVER,
+    server: server, // Use the parsed variable which has a fallback
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 1433,
     database: process.env.DB_NAME,
     pool: {
@@ -43,7 +44,7 @@ const poolPromise = {
         } catch (err) {
             console.error('✘ Database Connection Failed! ', err.message);
             globalPoolInstance = null;
-            resolve(null);
+            reject(err);
         }
     }
 };

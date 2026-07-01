@@ -307,6 +307,109 @@ const CaseForm = () => {
         }
     };
 
+    const handleAutoFillPdf = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setFirFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setPreview(reader.result);
+        reader.readAsDataURL(file);
+
+        const data = new FormData();
+        data.append('fir_file', file);
+        
+        setLoading(true);
+        try {
+            const res = await api.post('/cases/parse-pdf', data, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            
+            if (res.data.success && res.data.data) {
+                const extracted = res.data.data;
+                setFormData(prev => {
+                    const mapped = { ...prev };
+                    
+                    const formatDt = (dStr) => {
+                        if (!dStr) return '';
+                        const parts = dStr.split('/');
+                        return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : dStr;
+                    };
+                    
+                    // Step 1: Core FIR Details
+                    if (extracted.fir?.fir_no) mapped.fir_no = extracted.fir.fir_no;
+                    if (extracted.fir?.year) mapped.fir_year = extracted.fir.year;
+                    if (extracted.fir?.fir_date) mapped.fir_date = formatDt(extracted.fir.fir_date);
+                    if (extracted.fir?.fir_time) mapped.fir_time = extracted.fir.fir_time;
+                    if (extracted.fir?.gd_entry_no) mapped.gd_no = extracted.fir.gd_entry_no;
+                    
+                    if (extracted.occurrence?.information_received_date) mapped.info_received_date = formatDt(extracted.occurrence.information_received_date);
+                    if (extracted.occurrence?.information_received_time) mapped.info_received_time = extracted.occurrence.information_received_time;
+                    
+                    // Sections / Acts formatting
+                    if (extracted.acts_sections && extracted.acts_sections.length > 0) {
+                        const sectionsList = extracted.acts_sections.map(a => {
+                            const match = a.section ? a.section.match(/\d+[a-zA-Z]?(?:-[a-zA-Z]+)?(?:\([a-zA-Z]+\))?/g) : null;
+                            return match ? match.join(', ') : '';
+                        }).filter(Boolean).join(', ');
+                        mapped.sections = sectionsList;
+                    }
+                    
+                    // Match District and Police Station by Name
+                    if (extracted.fir?.district_hi && districts.length > 0) {
+                        const searchDist = String(extracted.fir.district_hi).toLowerCase();
+                        const matchDist = districts.find(d => d && d.name && searchDist.includes(String(d.name).toLowerCase()));
+                        if (matchDist) mapped.district = matchDist.id;
+                    }
+                    
+                    if (extracted.fir?.police_station_hi && allStations.length > 0) {
+                        const searchPs = String(extracted.fir.police_station_hi).toLowerCase();
+                        const matchPs = allStations.find(ps => ps && ps.name && searchPs.includes(String(ps.name).toLowerCase()));
+                        if (matchPs) mapped.police_station = matchPs.id;
+                    }
+
+                    // Step 2: Occurrence Details
+                    if (extracted.occurrence?.date_from) mapped.occurrence_date_from = formatDt(extracted.occurrence.date_from);
+                    if (extracted.occurrence?.date_to) mapped.occurrence_date_to = formatDt(extracted.occurrence.date_to);
+                    if (extracted.occurrence?.time_from) mapped.occurrence_time_from = extracted.occurrence.time_from;
+                    if (extracted.occurrence?.time_to) mapped.occurrence_time_to = extracted.occurrence.time_to;
+                    
+                    // Place of Occurrence
+                    if (extracted.place_of_occurrence?.address) mapped.incident_address = extracted.place_of_occurrence.address;
+                    if (extracted.place_of_occurrence?.direction_from_ps) mapped.distance_from_ps = extracted.place_of_occurrence.direction_from_ps;
+                    if (extracted.place_of_occurrence?.beat_no) mapped.beat_number = extracted.place_of_occurrence.beat_no;
+                    
+                    // Step 3: Complainant Details
+                    if (extracted.complainant?.name) mapped.complainant_name = extracted.complainant.name;
+                    if (extracted.complainant?.mobile) mapped.complainant_mobile = extracted.complainant.mobile;
+                    if (extracted.complainant?.uid) mapped.complainant_aadhaar = extracted.complainant.uid;
+                    if (extracted.complainant?.address) mapped.complainant_address = extracted.complainant.address;
+                    
+                    // Step 4: Narrative
+                    if (extracted.brief_facts) mapped.description = extracted.brief_facts;
+
+                    // Step 6: IO Mapping
+                    if (extracted.officer) mapped.sho_details = extracted.officer;
+                    
+                    if (extracted.officer && investigators && investigators.length > 0) {
+                        const searchName = extracted.officer.toLowerCase();
+                        const match = investigators.find(i => i.name.toLowerCase().includes(searchName));
+                        if (match) {
+                            mapped.assigned_to = match.user_id;
+                        }
+                    }
+                    return mapped;
+                });
+                toast.success("Document analyzed and fields populated successfully.", "Extraction Complete");
+            }
+        } catch (err) {
+            console.error('Extraction Error:', err);
+            toast.error("Failed to extract data from the provided PDF.", "Extraction Error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const saveDraft = () => {
         localStorage.setItem('caseFormDraft', JSON.stringify({ formData, accusedList, step }));
         toast.success("Draft securely saved to local storage.", "Draft Saved");
@@ -467,9 +570,17 @@ const CaseForm = () => {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-8"
                             >
-                                <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                                    <Shield className="text-blue-600" size={24} />
-                                    <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">1. FIR Core Details</h2>
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        <Shield className="text-blue-600" size={24} />
+                                        <h2 className="text-lg font-black text-black opacity-100 tracking-tight uppercase">1. FIR Core Details</h2>
+                                    </div>
+                                    <div>
+                                        <label className="flex items-center gap-2 cursor-pointer bg-blue-50 text-blue-700 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-100 transition-colors border border-blue-200">
+                                            <Upload size={14} /> Auto-Fill via PDF
+                                            <input type="file" className="hidden" accept=".pdf" onChange={handleAutoFillPdf} />
+                                        </label>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <SelectField

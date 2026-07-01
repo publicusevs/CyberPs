@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     LayoutDashboard, Briefcase, Search, ShieldCheck, Settings,
     Settings2, FileText, Network, Database,
-    Scan
+    Scan, Mail
 } from 'lucide-react';
 import { SidebarLink } from './SidebarLink';
 import Navbar from './Navbar';
@@ -102,6 +102,7 @@ const AppLayout = ({ children }) => {
                             <SidebarLink to="/generate-letter" icon={FileText} label="Generate Letter" active={location.pathname === '/generate-letter'} collapsed={collapsed && !mobileOpen} />
                             <SidebarLink to="/admin/police-stations" icon={ShieldCheck} label="Unit Registry" active={location.pathname === '/admin/police-stations'} collapsed={collapsed && !mobileOpen} />
                             <SidebarLink to="/global-variables" icon={Database} label="Protocol Registry" active={location.pathname === '/global-variables'} collapsed={collapsed && !mobileOpen} />
+                            <SidebarLink to="/settings/mail" icon={Mail} label="Mail Settings" active={location.pathname === '/settings/mail'} collapsed={collapsed && !mobileOpen} />
                         </>
                     )}
 

@@ -570,7 +570,7 @@ const CasesService = {
             }
         });
 
-        // 3. Match with emails
+        // 3. Match with emails and select the most recent file
         return Object.keys(bankFiles).map(bankName => {
             const norm = bankName.toLowerCase().replace(/\s+/g, '');
             const match = bankEmails.find(b => {
@@ -578,10 +578,22 @@ const CasesService = {
                 return bName === norm;
             });
 
+            // Sort by version descending and take only the latest file
+            const sortedFiles = bankFiles[bankName].sort((a, b) => {
+                const getVersion = (f) => {
+                    const parts = f.replace('.pdf', '').split('_');
+                    if (parts.length >= 2 && /^\d+$/.test(parts[parts.length - 1])) {
+                        return parseInt(parts[parts.length - 1], 10);
+                    }
+                    return 0;
+                };
+                return getVersion(b) - getVersion(a);
+            });
+
             return {
                 bankname: bankName,
                 email: match ? match.bankmail : '',
-                files: bankFiles[bankName],
+                files: [sortedFiles[0]], // Only attach the single most recent file
                 folderPath: path.resolve(dir),
                 caseId: caseId
             };
@@ -589,8 +601,9 @@ const CasesService = {
     },
 
     async sendNodalEmails({ recipients, subject, body }) {
-        const results = [];
-        for (const recipient of recipients) {
+        // OPTIMIZATION: Send all emails CONCURRENTLY using Promise.all
+        // This reduces total time from N*T to ~T (single email send time)
+        const sendSingle = async (recipient) => {
             try {
                 if (!recipient.email) {
                     throw new Error('No email address found for this entity');
@@ -635,14 +648,18 @@ const CasesService = {
                 }
 
                 const data = await response.json();
-                results.push({ bankname: recipient.bankname, email: recipient.email, success: true, messageId: data.timeline_event || 'EWS-dispatched' });
+                return { bankname: recipient.bankname, email: recipient.email, success: true, messageId: data.timeline_event || 'dispatched' };
             } catch (err) {
                 logger.error(`[CASES] Enterprise Mail Dispatch Failed for ${recipient.bankname}`, err);
-                results.push({ bankname: recipient.bankname, success: false, error: err.message });
+                return { bankname: recipient.bankname, success: false, error: err.message };
             }
-        }
+        };
+
+        // Fire all sends in parallel, collect results
+        const results = await Promise.all(recipients.map(sendSingle));
         return results;
     }
+
 };
 
 module.exports = CasesService;

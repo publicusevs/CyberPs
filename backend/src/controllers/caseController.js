@@ -731,3 +731,75 @@ exports.sendNodalEmails = async (req, res) => {
         res.status(500).json({ success: false, message: 'Batch mailing failed' });
     }
 };
+
+exports.parseFirPdf = async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'No PDF file uploaded' });
+        
+        const pdfParse = require('pdf-parse');
+        const dataBuffer = fs.readFileSync(req.file.path);
+        const data = await pdfParse(dataBuffer);
+        const text = data.text;
+        
+        let extractedData = {};
+        
+        // FIR No
+        const firNoMatch = text.match(/FIR No\.\s*\n?\([^\)]+\):.*?(\d{4})/is);
+        if (firNoMatch) extractedData.fir_no = firNoMatch[1];
+        
+        // FIR Date and Time
+        const firDateTimeMatch = text.match(/Date and Time of FIR.*?(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/is);
+        if (firDateTimeMatch) {
+            const [DD, MM, YYYY] = firDateTimeMatch[1].split('/');
+            extractedData.fir_date = `${YYYY}-${MM}-${DD}`;
+            extractedData.fir_time = firDateTimeMatch[2];
+        }
+        
+        // Info Received Date and Time
+        const infoDateTimeMatch = text.match(/Information received at P\.S\..*?(\d{2}:\d{2})\s+बजे\s+(\d{2}\/\d{2}\/\d{4})/is);
+        if (infoDateTimeMatch) {
+            extractedData.info_received_time = infoDateTimeMatch[1];
+            const [DD, MM, YYYY] = infoDateTimeMatch[2].split('/');
+            extractedData.info_received_date = `${YYYY}-${MM}-${DD}`;
+        }
+        
+        // Sections
+        const sectionsMatches = [...text.matchAll(/भा दं सं 1860\s+(\S+)/gi)];
+        const itMatches = [...text.matchAll(/सूचना ᮧौ᳎ोिगकᳱ.*?अिधिनयम 2000\s+(\S+)/gi)];
+        let sections = [];
+        sectionsMatches.forEach(m => sections.push(`${m[1]} IPC`));
+        itMatches.forEach(m => sections.push(`${m[1]} IT Act`));
+        if (sections.length > 0) extractedData.sections = sections.join(', ');
+        
+        // Occurrence Date From/To
+        const occDateTo = text.match(/Date To\s*\n\([^\)]+\):.*?(?:\d{2}:\d{2}\s+बजे)?\s*(\d{2}\/\d{2}\/\d{4})/is);
+        if (occDateTo) {
+             const [DD, MM, YYYY] = occDateTo[1].split('/');
+             extractedData.occurrence_date_to = `${YYYY}-${MM}-${DD}`;
+        }
+        const occDateFrom = text.match(/Date From\s*\n\([^\)]+\):.*?(?:\d{2}:\d{2}\s+बजे)?\s*(\d{2}\/\d{2}\/\d{4})/is);
+        if (occDateFrom) {
+             const [DD, MM, YYYY] = occDateFrom[1].split('/');
+             extractedData.occurrence_date_from = `${YYYY}-${MM}-${DD}`;
+        }
+        
+        // Complainant Name
+        const nameMatch = text.match(/Name\(नाम\):\(a\)\s*(.+?)(?=\n|$)/is);
+        if (nameMatch) extractedData.complainant_name = nameMatch[1].trim();
+        
+        // Complainant Mobile
+        const mobileMatch = text.match(/Mobile \(मोबाइल न\.\):\s*(\d+-\d+)/is);
+        if (mobileMatch) extractedData.complainant_mobile = mobileMatch[1].split('-').pop(); // extract actual number
+        
+        // Assigned IO Name
+        const ioMatch = text.match(/I\s*\([^\)]+\)\s*([A-Za-z\s]+?)\s*Name\(नाम\):/is);
+        if (ioMatch) {
+             extractedData.io_name_extracted = ioMatch[1].trim();
+        }
+
+        res.json({ success: true, data: extractedData });
+    } catch (err) {
+        console.error('PDF parsing error:', err);
+        res.status(500).json({ success: false, message: 'Failed to parse PDF', error: err.message });
+    }
+};

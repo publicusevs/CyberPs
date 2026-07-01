@@ -69,6 +69,7 @@ const templateRoutes = require('./src/modules/templates/templates.routes');
 const variableRoutes = require('./src/modules/variables/variables.routes');
 const trailRoutes = require('./src/modules/trail/trail.routes');
 const emailRoutes = require('./src/modules/email/email.routes');
+const settingsRoutes = require('./src/modules/settings/settings.routes');
 
 const app = express();
 
@@ -129,6 +130,7 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/variables', variableRoutes);
 app.use('/api/trail', trailRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

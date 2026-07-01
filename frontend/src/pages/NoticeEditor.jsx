@@ -65,12 +65,12 @@ const NoticeEditor = () => {
             logging: false
         });
         
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.80);
         const pdf = new jsPDF('p', 'mm', 'a4');
         const imgWidth = 210;
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
         pdf.save(`NOTICE_${notice.platform_name}_CASE_${id}.pdf`);
     };
 

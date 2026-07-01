@@ -28,6 +28,7 @@ router.post('/:id/status', authenticate, casesController.updateStatus);
 router.post('/transaction', authenticate, transactionsController.addTransaction);
 router.put('/:id/profiles', authenticate, casesController.updateProfiles);
 router.put('/:id/full', authenticate, upload.single('fir_file'), casesController.updateFullCase);
+router.post('/parse-pdf', authenticate, upload.single('fir_file'), casesController.parseFirPdf);
 router.post('/evidence', authenticate, upload.array('evidence_files', 5), casesController.addEvidence);
 router.post('/delete-file', authenticate, casesController.deleteFile);
 router.post('/save-notice', authenticate, casesController.saveNotice);

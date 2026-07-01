@@ -1,0 +1,32 @@
+# CyberPS Configuration File
+# Fill in your database and email settings below
+
+# === PORTS ===
+BACKEND_PORT=5174
+FRONTEND_PORT=5173
+RAMAIL_PORT=8000
+
+# === DATABASE (REQUIRED - Fill these in!) ===
+DB_SERVER=SQL1003.site4now.net
+DB_NAME=db_ab6f95_cyberweb
+DB_USER=db_ab6f95_cyberweb_admin
+DB_PASSWORD=Vij@3636
+DB_PORT=1433
+DB_ENCRYPT=false
+DB_TRUST_SERVER_CERTIFICATE=true
+
+# === SECURITY (REQUIRED - Change this!) ===
+JWT_SECRET=investigation_hunter_secret_key_2024
+JWT_REFRESH_SECRET=investigation_hunter_refresh_secret_key_2024
+
+# === APPLICATION ===
+NODE_ENV=production
+CORS_ORIGIN=http://localhost:5174,http://localhost:5173
+
+# === EMAIL SERVICE (Optional) ===
+# EXCHANGE_SERVER=mail.yourserver.com
+# EXCHANGE_EMAIL=user@yourdomain.com
+# EXCHANGE_PASSWORD=your_email_password
+
+# === OPENAI (Optional - for AI features) ===
+# OPENAI_API_KEY=sk-your-openai-key-here
