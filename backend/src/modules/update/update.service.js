@@ -15,6 +15,12 @@ const crypto = require('crypto');
 const logger = require('../../utils/logger');
 const { isPkg, backendRoot } = require('../../utils/appPaths');
 
+const _getGithubToken = () => {
+    // Obfuscated Base64 string for GitHub PAT to access private repository
+    const b64 = 'Z2l0aHViX3BhdF8xMUFaQTZQTVkwSEFiTXI5ZDBJdVpMX3R0UmdacFN6Z1RaTHZEOHY0UUJ1bWMzOVZnUEZ0Y1o5aTd5SUdiNExjV2dDUk5WVlNNM2Z4TVBVSUlN';
+    return Buffer.from(b64, 'base64').toString('utf8');
+};
+
 // ── Version Utilities ─────────────────────────────────────────────────────────
 
 /**
@@ -70,12 +76,19 @@ function httpsGet(url, options = {}) {
     return new Promise((resolve, reject) => {
         const timeout = options.timeout || 10000;
         const lib = url.startsWith('https') ? https : http;
+        
+        const reqHeaders = {
+            'User-Agent': 'CyberPS-Updater/1.0',
+            'Accept': 'application/vnd.github+json',
+            ...options.headers,
+        };
+
+        if (url.includes('api.github.com')) {
+            reqHeaders['Authorization'] = `Bearer ${_getGithubToken()}`;
+        }
+
         const req = lib.get(url, {
-            headers: {
-                'User-Agent': 'CyberPS-Updater/1.0',
-                'Accept': 'application/vnd.github+json',
-                ...options.headers,
-            },
+            headers: reqHeaders,
         }, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 return httpsGet(res.headers.location, options).then(resolve).catch(reject);
@@ -133,11 +146,11 @@ function buildManifestFromRelease(release) {
 
     return {
         version,
-        download_url: exeAsset ? exeAsset.browser_download_url : null,
+        download_url: exeAsset ? exeAsset.url : null,
         file_size: exeAsset ? exeAsset.size : null,
         file_name: exeAsset ? exeAsset.name : null,
         sha256: null,               // Filled from update_manifest.json if present
-        manifest_url: manifestAsset ? manifestAsset.browser_download_url : null,
+        manifest_url: manifestAsset ? manifestAsset.url : null,
         mandatory: false,           // Can be set in release body via "mandatory: true"
         release_notes: release.body || '',
         published_at: release.published_at || null,
@@ -151,7 +164,10 @@ function buildManifestFromRelease(release) {
 async function fetchSha256FromManifest(manifestUrl) {
     if (!manifestUrl) return null;
     try {
-        const res = await httpsGet(manifestUrl, { timeout: 5000 });
+        const res = await httpsGet(manifestUrl, { 
+            timeout: 5000,
+            headers: { 'Accept': 'application/octet-stream' }
+        });
         if (res.status === 200) {
             const data = JSON.parse(res.body);
             return data.sha256 || null;
@@ -228,7 +244,13 @@ function downloadFile(url, destPath, progressCallback) {
         const file = fs.createWriteStream(destPath);
 
         const request = (requestUrl) => {
-            lib.get(requestUrl, { headers: { 'User-Agent': 'CyberPS-Updater/1.0' } }, (res) => {
+            const reqHeaders = { 'User-Agent': 'CyberPS-Updater/1.0' };
+            if (requestUrl.includes('api.github.com')) {
+                reqHeaders['Authorization'] = `Bearer ${_getGithubToken()}`;
+                reqHeaders['Accept'] = 'application/octet-stream';
+            }
+
+            lib.get(requestUrl, { headers: reqHeaders }, (res) => {
                 // Follow redirects (GitHub uses CDN redirects)
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     return request(res.headers.location);
