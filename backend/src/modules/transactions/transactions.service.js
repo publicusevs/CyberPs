@@ -14,6 +14,7 @@ const TransactionsRepository = require('./transactions.repository');
 const { FundFlowService } = require('../../services/FundFlowService');
 const AppError = require('../../core/AppError');
 const logger = require('../../utils/logger');
+const { getUploadsDir } = require('../../utils/appPaths');
 
 // Smart column aliases for account numbers across different bank Excel formats
 const ACCOUNT_COLS = [
@@ -74,12 +75,12 @@ const TransactionsService = {
         }
         // ─────────────────────────────────────────────────────────────────────
 
-        // 1. Setup target directory
-        const caseExcelDir = path.join('uploads', 'excels', caseId.toString());
-        if (!fs.existsSync(caseExcelDir)) fs.mkdirSync(caseExcelDir, { recursive: true });
+        // 1. Setup target directory — use appPaths to get a real writable path
+        // (relative paths crash in pkg portable builds due to read-only virtual fs)
+        const caseExcelDir = getUploadsDir('excels', caseId.toString());
 
         const targetPath = path.join(caseExcelDir, file.filename);
-        const dbFilePath = targetPath.replace(/\\/g, '/');
+        const dbFilePath = `/uploads/excels/${caseId}/${file.filename}`;
 
         // 2. Parse workbook — use buffer to avoid file lock issues on Windows
         const fileBuffer = fs.readFileSync(file.path);

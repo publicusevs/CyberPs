@@ -1,16 +1,27 @@
+'use strict';
+
+/**
+ * fileUpload.js — Multer middleware configured with a WRITABLE destination path.
+ *
+ * CRITICAL FIX: In pkg portable builds, `process.cwd()` and relative paths
+ * resolve to a virtual read-only snapshot. We use appPaths.getUploadsDir()
+ * to always get a real, writable path on disk.
+ */
+
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { getUploadsDir } = require('../utils/appPaths');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Use default 'fir' or check body. If body is empty during multipart start, 
-        // we might need a fixed directory or handle it better.
+        // Use uploadType from body, or fall back to 'fir'.
+        // Note: during multipart upload the body may not be fully parsed yet,
+        // so we use 'fir' as the default for PDF/FIR uploads.
         const type = req.body.uploadType || 'fir';
-        const dir = `uploads/${type}`;
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        
+        // getUploadsDir creates the directory if it doesn't exist
+        // and returns the REAL absolute path (works in both dev & pkg).
+        const dir = getUploadsDir(type);
         cb(null, dir);
     },
     filename: (req, file, cb) => {
@@ -18,13 +29,13 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ 
+const upload = multer({
     storage,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB — large forensic Excel files
     fileFilter: (req, file, cb) => {
         const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.xlsx', '.xls', '.csv'];
         const ext = path.extname(file.originalname).toLowerCase();
-        
+
         const allowedMimes = [
             'application/pdf',
             'image/jpeg',
@@ -39,7 +50,7 @@ const upload = multer({
         if (allowedExts.includes(ext) || allowedMimes.includes(file.mimetype)) {
             return cb(null, true);
         }
-        
+
         cb(new Error('Only images, PDFs, and Excel files are allowed'));
     }
 });

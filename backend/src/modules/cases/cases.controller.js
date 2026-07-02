@@ -8,6 +8,7 @@
 const asyncHandler = require('../../core/asyncHandler');
 const { sendSuccess, sendCreated } = require('../../core/responseHelper');
 const CasesService = require('./cases.service');
+const { isPkg, backendRoot } = require('../../utils/appPaths');
 
 exports.register = asyncHandler(async (req, res) => {
     const result = await CasesService.registerCyberCrimeCase(req.body, req.user, req.file);
@@ -87,17 +88,16 @@ exports.parseFirPdf = asyncHandler(async (req, res) => {
     const { spawn } = require('child_process');
     
     const pdfPath = req.file.path;
-    const isPkg = typeof process.pkg !== 'undefined';
-    let cmd, args, scriptPath;
+    let cmd, args;
     
     if (isPkg) {
-        // In portable mode, we run the compiled fir_extractor.exe
-        scriptPath = path.join(path.dirname(process.execPath), 'scripts', 'fir_extractor.exe');
-        cmd = scriptPath;
+        // In portable mode, fir_extractor.exe sits next to backend.exe in the /scripts/ folder
+        const extractorPath = path.join(backendRoot, 'scripts', 'fir_extractor.exe');
+        cmd = extractorPath;
         args = [pdfPath];
     } else {
-        // In dev mode, we run python script directly
-        scriptPath = path.join(__dirname, '..', '..', 'scripts', 'fir_extractor.py');
+        // In dev mode, run python script directly
+        const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'fir_extractor.py');
         cmd = 'python';
         args = [scriptPath, pdfPath];
     }

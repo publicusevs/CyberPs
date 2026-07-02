@@ -19,7 +19,7 @@ if (typeof AbortSignal !== 'undefined' && !AbortSignal.any) {
 }
 
 const path = require('path');
-const isPkg = typeof process.pkg !== 'undefined';
+const { isPkg, uploadsRoot } = require('./src/utils/appPaths');
 
 // Load local .env first
 require('dotenv').config();
@@ -108,11 +108,9 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
 app.use(sanitize); // Strip HTML tags and null bytes from all request bodies
 
-// Serve uploaded files statically
-const uploadsDir = isPkg
-    ? path.join(path.dirname(process.execPath), '..', 'uploads')
-    : path.join(__dirname, 'uploads');
-app.use('/uploads', express.static(uploadsDir));
+// Serve uploaded files statically — use appPaths to get the real writable path
+// In portable builds, uploads live outside the read-only snapshot.
+app.use('/uploads', express.static(uploadsRoot));
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter);  // Strict: prevents brute force on login
@@ -271,9 +269,19 @@ const serverInstance = app.listen(PORT, () => {
 });
 
 // ── Process-level Error Handlers ──────────────────────────────────────────────
+// IMPORTANT: In portable builds we NEVER call process.exit on uncaughtException
+// because that would kill the entire backend server (causing ERR_CONNECTION_REFUSED).
+// Instead we log the error and continue serving requests.
 process.on('uncaughtException', (err) => {
-    logger.error('Uncaught Exception — shutting down.', err);
-    process.exit(1);
+    logger.error('Uncaught Exception — logged and continuing.', err);
+    // Do NOT call process.exit(1) — that crashes the server and causes
+    // ERR_CONNECTION_RESET / ERR_CONNECTION_REFUSED on the client.
+    // Express's own error handler (errorHandler middleware) catches route errors;
+    // this handler only fires for truly unexpected runtime exceptions.
+    if (!isPkg) {
+        // In dev mode, crash fast so we notice bugs immediately
+        process.exit(1);
+    }
 });
 
 process.on('unhandledRejection', (reason) => {
