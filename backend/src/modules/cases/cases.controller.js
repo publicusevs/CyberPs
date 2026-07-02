@@ -133,14 +133,26 @@ exports.parseFirPdf = asyncHandler(async (req, res) => {
         let parsedData;
         try {
             parsedData = JSON.parse(extractedDataJSON);
-            // Save a copy of the extracted JSON for debugging as requested by user
-            fs.writeFileSync(path.join(__dirname, '../../../../extracted_fir.json'), JSON.stringify(parsedData, null, 2), 'utf8');
+            
+            // Save a copy of the extracted JSON for debugging as requested by user (only in dev)
+            if (!isPkg) {
+                try {
+                    fs.writeFileSync(path.join(__dirname, '../../../../extracted_fir.json'), JSON.stringify(parsedData, null, 2), 'utf8');
+                } catch(e) { console.warn("Could not write extracted_fir.json", e); }
+            }
+            
             if (!parsedData.success) {
-                fs.writeFileSync('last_error.txt', parsedData.trace || parsedData.error);
+                try {
+                    fs.writeFileSync('last_error.txt', parsedData.trace || parsedData.error);
+                } catch(e) { console.warn("Could not write last_error.txt", e); }
                 return res.status(500).json({ success: false, message: parsedData.error, trace: parsedData.trace });
             }
         } catch (e) {
-            fs.writeFileSync(path.join(__dirname, '../../../../last_error.txt'), `JSON Parse Error: ${e.message}\nOutput was: ${extractedDataJSON}`);
+            if (!isPkg) {
+                try {
+                    fs.writeFileSync(path.join(__dirname, '../../../../last_error.txt'), `JSON Parse Error: ${e.message}\nOutput was: ${extractedDataJSON}`);
+                } catch(err) { console.warn("Could not write last_error.txt", err); }
+            }
             return res.status(500).json({ success: false, message: 'Failed to parse extracted data', trace: e.message });
         }
         
