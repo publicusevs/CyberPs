@@ -228,12 +228,12 @@ for /f "tokens=2 delims=:,\" %%v in ('findstr "version" version.json') do (
 
 :: Create a final release folder for easy copy
 mkdir "CyberPS_Release" 2>nul
-copy /Y "dist_installer\CyberPS_Setup_v1.0.0.exe" "CyberPS_Release\" >nul
+copy /Y "dist_installer\CyberPS_Setup_v!APP_VER!.exe" "CyberPS_Release\" >nul
 copy /Y "installer\README_INSTALL.txt" "CyberPS_Release\" >nul
 copy /Y "version.json" "CyberPS_Release\" >nul
 
 echo   Installer ready in folder: CyberPS_Release\
-echo   (File: CyberPS_Setup_v1.0.0.exe)
+echo   (File: CyberPS_Setup_v!APP_VER!.exe)
 echo.
 echo   This .exe installer contains:
 echo     - CyberPS.exe (Launcher)
