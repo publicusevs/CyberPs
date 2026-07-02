@@ -87,20 +87,37 @@ exports.parseFirPdf = asyncHandler(async (req, res) => {
     const { spawn } = require('child_process');
     
     const pdfPath = req.file.path;
-    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'fir_extractor.py');
+    const isPkg = typeof process.pkg !== 'undefined';
+    let cmd, args, scriptPath;
+    
+    if (isPkg) {
+        // In portable mode, we run the compiled fir_extractor.exe
+        scriptPath = path.join(path.dirname(process.execPath), 'scripts', 'fir_extractor.exe');
+        cmd = scriptPath;
+        args = [pdfPath];
+    } else {
+        // In dev mode, we run python script directly
+        scriptPath = path.join(__dirname, '..', '..', 'scripts', 'fir_extractor.py');
+        cmd = 'python';
+        args = [scriptPath, pdfPath];
+    }
     
     try {
         const extractedDataJSON = await new Promise((resolve, reject) => {
-            const pythonProcess = spawn('python', [scriptPath, pdfPath]);
+            const pythonProcess = spawn(cmd, args);
             let output = '';
             let errorOutput = '';
 
             pythonProcess.stdout.on('data', (data) => { output += data.toString(); });
             pythonProcess.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
+            pythonProcess.on('error', (err) => {
+                reject(new Error(`Failed to start extractor (${cmd}): ${err.message}`));
+            });
+
             pythonProcess.on('close', (code) => {
                 if (code !== 0) {
-                    reject(new Error(`Python script failed: ${errorOutput}`));
+                    reject(new Error(`Extractor failed with code ${code}:\n${errorOutput}`));
                 } else {
                     resolve(output.trim());
                 }

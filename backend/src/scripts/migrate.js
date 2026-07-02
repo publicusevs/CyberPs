@@ -78,10 +78,70 @@ async function migrate() {
         END
     `);
 
-    // ── 3. Seed global_variables defaults ────────────────────────────────────
+    // ── 3. Seed global_variables defaults & CUSTOM USER SEEDS ───────────────
     logger.info('[MIGRATE] Seeding global_variables defaults...');
     const VariablesRepository = require('../modules/variables/variables.repository');
     await VariablesRepository.ensureDefaults();
+
+    logger.info('[MIGRATE] Checking for seed_data.json to restore user templates...');
+    const fs = require('fs');
+    const path = require('path');
+    const isPkg = typeof process.pkg !== 'undefined';
+    const seedPath = isPkg 
+        ? path.join(path.dirname(process.execPath), 'seed_data.json') 
+        : path.join(__dirname, '..', '..', 'seed_data.json');
+    
+    if (fs.existsSync(seedPath)) {
+        try {
+            const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+            const { mssql } = require('../config/db');
+            
+            // Restore Templates
+            if (seedData.notice_templates && seedData.notice_templates.length > 0) {
+                logger.info(`[MIGRATE] Found ${seedData.notice_templates.length} templates to restore.`);
+                for (const tpl of seedData.notice_templates) {
+                    await pool.request()
+                        .input('name', mssql.NVarChar, tpl.template_name)
+                        .input('type', mssql.NVarChar, tpl.template_type)
+                        .input('subject', mssql.NVarChar, tpl.subject_text)
+                        .input('body', mssql.NVarChar, tpl.body_text)
+                        .input('footer', mssql.NVarChar, tpl.footer_text)
+                        .input('json', mssql.NVarChar, tpl.json_data)
+                        .query(`
+                            IF NOT EXISTS (SELECT * FROM notice_templates WHERE template_name = @name)
+                            BEGIN
+                                INSERT INTO notice_templates (template_name, template_type, subject_text, body_text, footer_text, json_data)
+                                VALUES (@name, @type, @subject, @body, @footer, @json)
+                            END
+                        `);
+                }
+            }
+
+            // Restore Variables
+            if (seedData.global_variables && seedData.global_variables.length > 0) {
+                logger.info(`[MIGRATE] Found ${seedData.global_variables.length} variables to restore.`);
+                for (const vr of seedData.global_variables) {
+                    await pool.request()
+                        .input('name', mssql.NVarChar, vr.variable_name)
+                        .input('val', mssql.NVarChar, vr.variable_value)
+                        .input('cat', mssql.NVarChar, vr.category)
+                        .query(`
+                            IF NOT EXISTS (SELECT * FROM global_variables WHERE variable_name = @name)
+                            BEGIN
+                                INSERT INTO global_variables (variable_name, variable_value, category)
+                                VALUES (@name, @val, @cat)
+                            END
+                        `);
+                }
+            }
+            logger.info('[MIGRATE] User seed data restoration complete.');
+        } catch (e) {
+            logger.error('[MIGRATE] Failed to parse/restore seed_data.json: ' + e.message);
+        }
+    } else {
+        logger.info('[MIGRATE] No seed_data.json found. Skipping user template restoration.');
+    }
+
 
     // ── 4. police_stations — add is_active column if missing ──────────────────
     logger.info('[MIGRATE] Checking police_stations.is_active column...');

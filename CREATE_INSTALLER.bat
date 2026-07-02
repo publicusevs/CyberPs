@@ -25,6 +25,14 @@ mkdir "dist_build\frontend\dist"
 mkdir "dist_build\ramail"
 mkdir "dist_installer"
 
+:: ─── EXPORT USER TEMPLATES ─────────────────────────────────────
+echo  [EXPORT] Exporting user templates and variables...
+cd backend
+node src\scripts\export_seed_data.js
+if %errorlevel% neq 0 ( echo [ERROR] Failed to export seed data. & goto :FAIL )
+cd ..
+if exist "backend\seed_data.json" copy "backend\seed_data.json" "dist_build\backend\seed_data.json" /y
+
 :: ─── SANITIZE: ENSURE NO USER DATA IS PACKAGED ───────────────
 echo  [CLEAN] Sanitizing — removing any test/dev case data from source...
 echo  NOTE: Your local uploads are NOT deleted. Only dist_build is cleaned.
@@ -114,6 +122,26 @@ if not exist "dist_build\ramail\ramail.exe" (
     echo  placeholder > "dist_build\ramail\ramail_missing.txt"
 )
 echo  [OK] Ramail compiled.
+echo.
+
+echo  ============================================================
+echo  [STEP 3B/5] Compiling FIR Extractor (Python)...
+echo  ============================================================
+echo.
+mkdir "dist_build\scripts" 2>nul
+pyinstaller --onefile backend\src\scripts\fir_extractor.py ^
+    --name fir_extractor ^
+    --noconfirm ^
+    --clean ^
+    --distpath dist_build\scripts ^
+    --workpath dist_build\fir_extractor_work ^
+    --hidden-import=pdfplumber ^
+    --hidden-import=pytesseract ^
+    --hidden-import=cv2 ^
+    --hidden-import=fitz ^
+    --hidden-import=numpy
+if %errorlevel% neq 0 ( echo [ERROR] FIR Extractor compilation failed. & goto :FAIL )
+echo  [OK] FIR Extractor compiled.
 echo.
 
 echo  ============================================================
