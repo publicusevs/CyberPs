@@ -65,6 +65,7 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
     const [completionRemarks, setCompletionRemarks] = useState('');
     const [genModal, setGenModal] = useState({ show: false, total: 0, generated: 0, remaining: 0, currentBank: '', isComplete: false });
     const [mailModal, setMailModal] = useState({ show: false, total: 0, sent: 0, remaining: 0, currentBank: '', isComplete: false });
+    const [selectedMailTemplateId, setSelectedMailTemplateId] = useState('');
 
     useEffect(() => {
         if (initialTab) setActiveTab(initialTab);
@@ -344,6 +345,10 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                 setEmailRecipients(res.data.data);
                 const valid = res.data.data.filter(r => r.email).map(r => r.bankname);
                 setSelectedRecipients(new Set(valid));
+                const mailTemplates = templates.filter(t => t.template_type === 'Mail');
+                if (mailTemplates.length > 0 && !selectedMailTemplateId) {
+                    setSelectedMailTemplateId(mailTemplates[0].template_id.toString());
+                }
                 setShowEmailModal(true);
                 setStatusOverlay({ show: false, type: 'success', title: '', message: '' });
             }
@@ -386,10 +391,14 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                 setMailModal(prev => ({ ...prev, currentBank: recipient.bankname }));
 
                 try {
+                    const mailTemplate = templates.find(t => t.template_id.toString() === selectedMailTemplateId.toString()) || templates.find(t => t.template_type === 'Mail');
+                    const defaultSubject = 'NOTICE UNDER SECTION 94/106 BNSS 2023 - ' + recipient.bankname + ' [CASE ID: ' + caseId + ']';
+                    const defaultBody = `Respected Nodal Officer,\n\nPlease find attached the legal notice under section 94/106 BNSS 2023 regarding Case ID: ${caseId}.\n\nYou are requested to take immediate action as per the instructions in the attached document.\n\nRegards,\nInvestigation Officer\nCyber Crime Police Station`;
+
                     const payload = {
                         recipients: [recipient],
-                        subject: 'NOTICE UNDER SECTION 94/106 BNSS 2023 - ' + recipient.bankname + ' [CASE ID: ' + caseId + ']',
-                        body: `Respected Nodal Officer,\n\nPlease find attached the legal notice under section 94/106 BNSS 2023 regarding Case ID: ${caseId}.\n\nYou are requested to take immediate action as per the instructions in the attached document.\n\nRegards,\nInvestigation Officer\nCyber Crime Police Station`
+                        subject: mailTemplate?.subject_text || defaultSubject,
+                        body: mailTemplate?.body_text || defaultBody
                     };
 
                     const res = await api.post(`/cases/${caseId}/send-nodal-emails`, payload);
@@ -1114,6 +1123,19 @@ export default function NoticesEngine({ caseId, caseData, onClose, initialTab = 
                                     </div>
                                 ) : (
                                     <>
+                                        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-4">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Select Mail Dispatch Template</label>
+                                            <select 
+                                                value={selectedMailTemplateId}
+                                                onChange={(e) => setSelectedMailTemplateId(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-all shadow-inner"
+                                            >
+                                                <option value="">-- Default Fallback Notice --</option>
+                                                {templates.filter(t => t.template_type === 'Mail').map(t => (
+                                                    <option key={t.template_id} value={t.template_id}>{t.template_name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <div className="flex items-center justify-between p-1 bg-white border border-slate-200 rounded-3xl shadow-sm sticky top-0 z-10">
                                             <div className="flex items-center gap-4 px-6 py-4 cursor-pointer group flex-1" onClick={toggleSelectAll}>
                                                 <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedRecipients.size === emailRecipients.filter(r => r.email).length ? 'bg-blue-600 border-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>

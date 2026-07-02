@@ -540,6 +540,26 @@ const CasesRepository = {
     },
 
     // ── Pool access for operations that need it ───────────────────────────────
+    // 🗑️ Delete Case and all dependencies
+    async deleteCaseAndDependencies(transaction, caseId) {
+        const req = new mssql.Request(transaction);
+        req.input('case_id', mssql.Int, caseId);
+        
+        // Delete from dependent tables first
+        await req.query('DELETE FROM case_status_history WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_victims WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_accused WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_complainants WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_station_mapping WHERE case_id = @case_id');
+        await req.query('DELETE FROM fir_documents WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_evidence WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_notes WHERE case_id = @case_id');
+        await req.query('DELETE FROM case_transactions WHERE case_id = @case_id');
+        
+        // Delete the main case
+        await req.query('DELETE FROM cases WHERE case_id = @case_id');
+    },
+
     async getPool() {
         return poolPromise;
     },

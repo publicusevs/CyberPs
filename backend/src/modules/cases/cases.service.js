@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { poolPromise, mssql } = require('../../config/db');
 const CasesRepository = require('./cases.repository');
+const TemplatesRepository = require('../templates/templates.repository');
 const AppError = require('../../core/AppError');
 const logger = require('../../utils/logger');
 
@@ -215,6 +216,62 @@ const CasesService = {
         } catch (err) {
             await transaction.rollback();
             throw err;
+        }
+    },
+
+    async deleteCase(caseId, policeStationId) {
+        const pool = await poolPromise;
+        const transaction = new mssql.Transaction(pool);
+        
+        try {
+            // Check existence
+            const caseData = await CasesRepository.getById(caseId, policeStationId);
+            if (!caseData) throw new AppError('Case not found or access denied', 404);
+
+            await transaction.begin();
+
+            // Perform DB deletion safely via transaction
+            await CasesRepository.deleteCaseAndDependencies(transaction, caseId);
+            
+            await transaction.commit();
+
+            // Only after successful DB deletion, delete physical files to avoid data loss on rollback
+            const isPkg = typeof process.pkg !== 'undefined';
+            const baseUploadsDir = isPkg
+                ? path.join(path.dirname(process.execPath), '..', 'uploads')
+                : path.join(__dirname, '../../../uploads');
+            
+            // Delete entire notice/artifact directory for this case
+            const caseNoticeDir = path.join(baseUploadsDir, 'notices', String(caseId));
+            if (fs.existsSync(caseNoticeDir)) {
+                fs.rmSync(caseNoticeDir, { recursive: true, force: true });
+            }
+
+            // Delete FIR document if exists and is not inside the notice dir
+            if (caseData.files && caseData.files.length > 0) {
+                caseData.files.forEach(file => {
+                    const fullPath = path.resolve(file.file_path);
+                    if (fs.existsSync(fullPath)) {
+                        try { fs.unlinkSync(fullPath); } catch(e) {}
+                    }
+                });
+            }
+
+            // Delete evidence documents if they exist
+            if (caseData.evidence && caseData.evidence.length > 0) {
+                caseData.evidence.forEach(ev => {
+                    const fullPath = path.resolve(ev.file_path);
+                    if (fs.existsSync(fullPath)) {
+                        try { fs.unlinkSync(fullPath); } catch(e) {}
+                    }
+                });
+            }
+
+            return { success: true, message: 'Case and all associated data permanently deleted' };
+        } catch (error) {
+            if (transaction.isActive) await transaction.rollback();
+            logger.error(`[CASES] Delete Error for Case ${caseId}:`, error);
+            throw new AppError(error.message || 'Failed to delete case', 500);
         }
     },
 
@@ -600,7 +657,50 @@ const CasesService = {
         });
     },
 
-    async sendNodalEmails({ recipients, subject, body }) {
+    async sendNodalEmails({ recipients, subject, body, caseId }) {
+        // Fetch all global variables
+        let globalVariables = [];
+        try {
+            globalVariables = await TemplatesRepository.getAllVariables();
+        } catch (err) {
+            logger.error('[CASES] Failed to fetch global variables for email templates', err);
+        }
+
+        let caseData = {};
+        if (caseId) {
+            try {
+                caseData = await CasesRepository.getCaseById(caseId) || {};
+            } catch (err) {
+                logger.error('[CASES] Failed to fetch case data for email templates', err);
+            }
+        }
+
+        // Replace global variables in text
+        const applyVariables = (text) => {
+            if (!text) return text;
+            let result = text;
+            
+            // Priority 1: Case Specific Data
+            if (result.includes('{FIR_NO}')) {
+                result = result.replace(/\{FIR_NO\}/g, caseData.fir_no || '');
+            }
+            if (result.includes('{FIR_DATE}')) {
+                result = result.replace(/\{FIR_DATE\}/g, caseData.fir_date || '');
+            }
+
+            // Priority 2: Global Variables
+            globalVariables.forEach(v => {
+                const regex = new RegExp(`\\{${v.variable_name}\\}`, 'g');
+                if (result.includes(`{${v.variable_name}}`)) {
+                    result = result.replace(regex, v.variable_value || '');
+                }
+            });
+            return result;
+        };
+
+        const finalSubjectBase = applyVariables(subject);
+        const finalBodyBase = applyVariables(body);
+
         // OPTIMIZATION: Send all emails CONCURRENTLY using Promise.all
         // This reduces total time from N*T to ~T (single email send time)
         const sendSingle = async (recipient) => {
@@ -608,25 +708,31 @@ const CasesService = {
                 if (!recipient.email) {
                     throw new Error('No email address found for this entity');
                 }
-
-                const formattedBody = `
-                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-                        <h3 style="color: #c75a57; border-bottom: 2px solid #c75a57; padding-bottom: 10px;">OFFICIAL INVESTIGATION NOTICE</h3>
-                        <p>Respected Nodal Officer,</p>
-                        <p>Please find attached the legal notice under <b>Section 94/106 BNSS 2023</b> regarding investigative proceedings for <b>Case ID: ${recipient.caseId || recipient.folderPath.split(path.sep).pop()}</b>.</p>
-                        <p>You are requested to take immediate action as per the instructions in the attached document and provide the required information at the earliest.</p>
-                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
-                            <small><b>Entity Name:</b> ${recipient.bankname}</small><br/>
-                            <small><b>Subject:</b> ${subject.replace('{{bankName}}', recipient.bankname)}</small>
-                        </div>
-                        <p>Regards,<br/><b>Investigation Officer</b><br/>Cyber Crime Police Station, Jaipur</p>
-                    </div>
-                `;
-
+                
                 const caseIdVal = String(recipient.caseId || recipient.folderPath.split(path.sep).pop());
+                
+                let formattedBody = finalBodyBase || '';
+                
+                // Fallback to legacy format if no body provided or it's a simple text message
+                if (!formattedBody || !formattedBody.includes('<html') && !formattedBody.includes('<div')) {
+                    formattedBody = `
+                        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                            <h3 style="color: #c75a57; border-bottom: 2px solid #c75a57; padding-bottom: 10px;">OFFICIAL INVESTIGATION NOTICE</h3>
+                            <p>Respected Nodal Officer,</p>
+                            <p>Please find attached the legal notice under <b>Section 94/106 BNSS 2023</b> regarding investigative proceedings for <b>Case ID: ${caseIdVal}</b>.</p>
+                            <p>You are requested to take immediate action as per the instructions in the attached document and provide the required information at the earliest.</p>
+                            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
+                                <small><b>Entity Name:</b> ${recipient.bankname}</small><br/>
+                                <small><b>Subject:</b> ${finalSubjectBase.replace('{{bankName}}', recipient.bankname)}</small>
+                            </div>
+                            <p>Regards,<br/><b>Investigation Officer</b><br/>Cyber Crime Police Station, Jaipur</p>
+                        </div>
+                    `;
+                }
+
                 const payload = {
                     recipients: [recipient.email],
-                    subject_template: subject,
+                    subject_template: finalSubjectBase,
                     body_template: formattedBody,
                     variables: {
                         bankName: recipient.bankname,

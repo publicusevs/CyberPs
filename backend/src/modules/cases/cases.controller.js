@@ -76,7 +76,7 @@ exports.getNodalRecipients = asyncHandler(async (req, res) => {
 });
 
 exports.sendNodalEmails = asyncHandler(async (req, res) => {
-    const result = await CasesService.sendNodalEmails(req.body);
+    const result = await CasesService.sendNodalEmails({ ...req.body, caseId: req.params.id });
     sendSuccess(res, result, 'Mailing process complete');
 });
 
@@ -164,4 +164,10 @@ exports.parseFirPdf = asyncHandler(async (req, res) => {
         console.error(error);
         res.status(500).json({ success: false, message: 'Failed to process PDF', error: error.message });
     }
+});
+
+exports.deleteCase = asyncHandler(async (req, res) => {
+    const policeStationId = req.user.role === 'Station_Admin' ? req.user.police_station_id : null;
+    const result = await CasesService.deleteCase(req.params.id, policeStationId);
+    sendSuccess(res, result, result.message);
 });

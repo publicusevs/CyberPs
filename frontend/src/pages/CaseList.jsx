@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Search, Filter, Eye, ChevronRight, FileText, BadgeAlert, Database } from 'lucide-react';
+import { Search, Filter, Eye, ChevronRight, FileText, BadgeAlert, Database, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -37,6 +37,27 @@ const CaseList = () => {
             setCases(res.data.data);
         } else if (value.length === 0) {
             fetchCases();
+        }
+    };
+
+    const handleDelete = async (caseId, firNo) => {
+        const confirmDelete = window.confirm(`WARNING: You are about to permanently delete Case ${firNo || caseId}.\n\nThis will instantly destroy all related data, artifacts, and legal notices associated with this case from the database and disk. This action CANNOT BE UNDONE.\n\nAre you absolutely sure you want to proceed?`);
+        
+        if (confirmDelete) {
+            try {
+                setLoading(true);
+                const res = await api.delete(`/cases/${caseId}`);
+                if (res.data.success) {
+                    await fetchCases();
+                } else {
+                    alert(res.data.message || 'Failed to delete case.');
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Delete error', err);
+                alert('An error occurred while attempting to delete the case.');
+                setLoading(false);
+            }
         }
     };
 
@@ -110,12 +131,20 @@ const CaseList = () => {
                             <TableCell className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
                                 {new Date(c.created_at).toLocaleDateString()}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right flex items-center justify-end gap-2">
                                 <Link to={`/cases/${c.case_id}`}>
                                     <Button variant="ghost" className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">
                                         <Eye size={18} />
                                     </Button>
                                 </Link>
+                                <Button 
+                                    variant="ghost" 
+                                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all"
+                                    onClick={() => handleDelete(c.case_id, c.fir_no)}
+                                    title="Permanently Delete Case"
+                                >
+                                    <Trash2 size={18} />
+                                </Button>
                             </TableCell>
                         </TableRow>
                     ))}

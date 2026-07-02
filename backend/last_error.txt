@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "D:\Projects\Vij\CyberPs\backend\src\scripts\fir_extractor.py", line 63, in extract_fir_data
+    "phone": safe_search(r"\(j\)\s*Phone number\s*\n\s*\(दूरभाष न\.\):", full_text),
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Projects\Vij\CyberPs\backend\src\scripts\fir_extractor.py", line 13, in safe_search
+    return match.group(group).strip() if match else default
+           ^^^^^^^^^^^^^^^^^^
+IndexError: no such group

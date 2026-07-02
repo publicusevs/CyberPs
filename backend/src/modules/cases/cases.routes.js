@@ -36,4 +36,6 @@ router.get('/:id/nodal-recipients', authenticate, casesController.getNodalRecipi
 router.get('/:id/nodal-recipient', authenticate, casesController.getNodalRecipients); // Fallback
 router.post('/:id/send-nodal-emails', casesController.sendNodalEmails); // Direct access enabled for manual testing
 
+router.delete('/:id', authenticate, casesController.deleteCase);
+
 module.exports = router;

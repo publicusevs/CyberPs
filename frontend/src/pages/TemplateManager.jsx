@@ -526,12 +526,12 @@ const TemplateManager = () => {
                         <TableRow key={t.template_id}>
                             <TableCell>
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${t.template_type === 'FactualReport' ? 'bg-blue-50 border-blue-100 text-blue-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
-                                        {t.template_type === 'FactualReport' ? <FileJson size={18} /> : <Layout size={18} />}
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${t.template_type === 'FactualReport' ? 'bg-blue-50 border-blue-100 text-blue-600' : (t.template_type === 'Mail' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-400')}`}>
+                                        {t.template_type === 'FactualReport' ? <FileJson size={18} /> : (t.template_type === 'Mail' ? <Mail size={18} /> : <Layout size={18} />)}
                                     </div>
                                     <div>
                                         <span className="font-bold text-slate-900 tracking-tight block">{t.template_name}</span>
-                                        <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${t.template_type === 'FactualReport' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                        <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${t.template_type === 'FactualReport' ? 'bg-blue-600 text-white' : (t.template_type === 'Mail' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600')}`}>
                                             {t.template_type || 'Standard'}
                                         </span>
                                     </div>
@@ -592,10 +592,10 @@ const TemplateManager = () => {
                                     </div>
                                     <div>
                                         <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                                            {isEdit ? 'Refine' : 'Initialize'} {templateType === 'FactualReport' ? 'Factual Report' : 'Notice Template'}
+                                            {isEdit ? 'Refine' : 'Initialize'} {templateType === 'FactualReport' ? 'Factual Report' : (templateType === 'Mail' ? 'Mail Template' : 'Notice Template')}
                                         </h2>
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                                            {templateType === 'FactualReport' ? 'Cyber Crime Factual Report Engine' : 'Standard Legal Notice Structure'}
+                                            {templateType === 'FactualReport' ? 'Cyber Crime Factual Report Engine' : (templateType === 'Mail' ? 'Generic Mail Template' : 'Standard Legal Notice Structure')}
                                         </p>
                                     </div>
                                 </div>
@@ -608,6 +608,13 @@ const TemplateManager = () => {
                                                 className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${templateType === 'Standard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                             >
                                                 Standard
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setTemplateType('Mail')}
+                                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${templateType === 'Mail' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                Mail
                                             </button>
                                             <button 
                                                 type="button"
@@ -640,7 +647,7 @@ const TemplateManager = () => {
                                     />
                                 </div>
 
-                                {templateType === 'Standard' ? (
+                                {templateType === 'Standard' || templateType === 'Mail' ? (
                                     <div className="space-y-8">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                             <div className="space-y-6">

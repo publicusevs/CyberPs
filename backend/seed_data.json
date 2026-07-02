@@ -1,0 +1,347 @@
+{
+  "notice_templates": [],
+  "global_variables": [
+    {
+      "variable_id": "0F8244F3-5E5E-4298-9784-08C324416CF5",
+      "variable_name": "District_Name",
+      "variable_value": "Mumbai City",
+      "category": "Department",
+      "created_at": "2026-05-13T12:22:19.607Z",
+      "updated_at": "2026-05-13T12:22:19.607Z",
+      "description": null
+    },
+    {
+      "variable_id": "A8C4E531-6FA2-4FBE-AD3C-0FA8DB3A676D",
+      "variable_name": "ACCUSED_SOCIAL_MEDIA_TYPE",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:58:50.153Z",
+      "updated_at": "2026-06-21T07:58:50.153Z",
+      "description": null
+    },
+    {
+      "variable_id": "C3CEF4D3-565D-4857-8FEA-12DE10816DA5",
+      "variable_name": "IO_Mobile",
+      "variable_value": "9876543210",
+      "category": "Officer",
+      "created_at": "2026-05-13T12:22:22.530Z",
+      "updated_at": "2026-05-13T12:22:22.530Z",
+      "description": null
+    },
+    {
+      "variable_id": "80E00EFF-B9B8-4A72-B5BA-2940A9310987",
+      "variable_name": "BANK_ACCUSEDBANK_NAME",
+      "variable_value": "  ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:00:24.680Z",
+      "updated_at": "2026-06-14T03:00:24.680Z",
+      "description": null
+    },
+    {
+      "variable_id": "AC00DB5C-125A-4D1C-B2E9-3141DB819381",
+      "variable_name": "IO_Contact",
+      "variable_value": "9876543210",
+      "category": "Officer",
+      "created_at": "2026-05-13T12:22:21.950Z",
+      "updated_at": "2026-05-13T12:22:21.950Z",
+      "description": null
+    },
+    {
+      "variable_id": "BE7A5A3E-4C4B-49E6-98ED-3B5A65A8BB1F",
+      "variable_name": "BANK_ACCUSEDBANK_ADDRESS",
+      "variable_value": "  ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:23:24.673Z",
+      "updated_at": "2026-06-14T03:23:24.673Z",
+      "description": null
+    },
+    {
+      "variable_id": "CDFF2631-30B6-4C52-B31A-3B7285A2B75E",
+      "variable_name": "ACCUSED_INSTA",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:52:38.920Z",
+      "updated_at": "2026-06-21T07:52:38.920Z",
+      "description": null
+    },
+    {
+      "variable_id": "D6F02E54-553A-4D86-A396-3EF36727BC27",
+      "variable_name": "Police_Station_Address",
+      "variable_value": "BKC, Bandra East, Mumbai, 400051",
+      "category": "Department",
+      "created_at": "2026-05-13T12:22:18.437Z",
+      "updated_at": "2026-05-13T12:22:18.437Z",
+      "description": null
+    },
+    {
+      "variable_id": "681C2FF7-CD62-4881-BC73-41965AD99AFF",
+      "variable_name": "ACCUSED_GMAIL",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:51:30.007Z",
+      "updated_at": "2026-06-21T07:51:30.007Z",
+      "description": null
+    },
+    {
+      "variable_id": "E98F7130-4293-4B0F-924A-41CDC861EEAA",
+      "variable_name": "Branch_Name",
+      "variable_value": "Main Branch",
+      "category": "Bank",
+      "created_at": "2026-06-14T05:20:28.813Z",
+      "updated_at": "2026-06-14T05:20:28.813Z",
+      "description": null
+    },
+    {
+      "variable_id": "7E451CB5-852B-4A0C-A171-50D37F4D1EB2",
+      "variable_name": "BANK_ACCUSEDBANK_IFSCCODE",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:00:49.757Z",
+      "updated_at": "2026-06-14T03:00:49.757Z",
+      "description": null
+    },
+    {
+      "variable_id": "5158C8FA-C28D-4BB0-A136-52667BCAF0AC",
+      "variable_name": "Bank_Name",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T05:20:28.257Z",
+      "updated_at": "2026-06-21T05:20:07.620Z",
+      "description": null
+    },
+    {
+      "variable_id": "81E5719F-31BA-46EF-BED4-60F31A55BC99",
+      "variable_name": "FIR_DATE",
+      "variable_value": " ",
+      "category": "General",
+      "created_at": "2026-06-21T08:52:20.597Z",
+      "updated_at": "2026-06-21T08:53:28.943Z",
+      "description": null
+    },
+    {
+      "variable_id": "FE04CD18-B9E8-4091-8CAD-71F3F82940A1",
+      "variable_name": "ACCUSED_YOUTUBE",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:53:27.440Z",
+      "updated_at": "2026-06-21T07:53:27.440Z",
+      "description": null
+    },
+    {
+      "variable_id": "8204CF95-E921-4FB6-82A6-77B9F5E9235F",
+      "variable_name": "ACCUSED_TELEGRAM",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:50:58.123Z",
+      "updated_at": "2026-06-21T07:51:55.937Z",
+      "description": null
+    },
+    {
+      "variable_id": "DA095F23-29A4-415E-A9BE-7D4AD0B38412",
+      "variable_name": "NCRP_ACK_NO",
+      "variable_value": " ",
+      "category": "General",
+      "created_at": "2026-06-14T03:21:37.197Z",
+      "updated_at": "2026-06-14T03:21:37.197Z",
+      "description": null
+    },
+    {
+      "variable_id": "6F03DE6B-04D9-4428-BAED-7DF87F3B6263",
+      "variable_name": "ACCUSED_FACEBOOK",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:53:06.710Z",
+      "updated_at": "2026-06-21T07:53:06.710Z",
+      "description": null
+    },
+    {
+      "variable_id": "F1BFFEBE-29D4-43A7-A947-7E80CB731979",
+      "variable_name": "ACCUSED_SNAPCHAT",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T08:03:25.667Z",
+      "updated_at": "2026-06-21T08:03:25.667Z",
+      "description": null
+    },
+    {
+      "variable_id": "D7E31FBD-52A5-4D01-98E8-81D105ABB00D",
+      "variable_name": "Police_Station_Phone",
+      "variable_value": "022-26504000",
+      "category": "Department",
+      "created_at": "2026-05-13T12:22:19.023Z",
+      "updated_at": "2026-05-13T12:22:19.023Z",
+      "description": null
+    },
+    {
+      "variable_id": "E14233F9-7EF8-40F6-8D77-82BE7BE5EC6A",
+      "variable_name": "FIR_SECTIONS",
+      "variable_value": " ",
+      "category": "Legal",
+      "created_at": "2026-06-15T02:57:26.403Z",
+      "updated_at": "2026-06-15T02:57:26.403Z",
+      "description": null
+    },
+    {
+      "variable_id": "A278F671-213D-4888-AEFC-883B44A5E21F",
+      "variable_name": "BANK_ACCUSEDBANK_ACCOUNT",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:18:11.600Z",
+      "updated_at": "2026-06-14T03:18:11.600Z",
+      "description": null
+    },
+    {
+      "variable_id": "625AF177-4D38-466D-AC62-9168FA852274",
+      "variable_name": "IFSC_Code",
+      "variable_value": "SBIN0001234",
+      "category": "Bank",
+      "created_at": "2026-06-14T05:20:29.373Z",
+      "updated_at": "2026-06-14T05:20:29.373Z",
+      "description": null
+    },
+    {
+      "variable_id": "5DF7C74A-5540-4E7B-8386-92AB7A3AD98E",
+      "variable_name": "BANK_VIKTIME_ACCOUNT",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:12:19.933Z",
+      "updated_at": "2026-06-14T03:12:19.933Z",
+      "description": null
+    },
+    {
+      "variable_id": "D4E4ECB3-12E4-4616-8B31-9A87D0BE7040",
+      "variable_name": "State_Name",
+      "variable_value": "Maharashtra",
+      "category": "Department",
+      "created_at": "2026-05-13T12:22:20.190Z",
+      "updated_at": "2026-05-13T12:22:20.190Z",
+      "description": null
+    },
+    {
+      "variable_id": "3924D6A3-AEF4-4AD8-A406-9B65132ABD12",
+      "variable_name": "ACCUSED_NAME",
+      "variable_value": " ",
+      "category": "General",
+      "created_at": "2026-06-21T08:50:47.157Z",
+      "updated_at": "2026-06-21T08:50:47.157Z",
+      "description": null
+    },
+    {
+      "variable_id": "EDE231DD-FD6D-4279-943B-9F74F1FF7C6E",
+      "variable_name": "BANK_VIKTIME_IFSCCODE",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:11:54.853Z",
+      "updated_at": "2026-06-14T03:11:54.853Z",
+      "description": null
+    },
+    {
+      "variable_id": "9DB342D6-C0A9-4D1F-B399-B101A6AC1E54",
+      "variable_name": "Police_Station_Name",
+      "variable_value": "Cyber Crime Police Station",
+      "category": "Department",
+      "created_at": "2026-05-13T12:22:17.853Z",
+      "updated_at": "2026-05-13T12:22:17.853Z",
+      "description": null
+    },
+    {
+      "variable_id": "9392193F-31E7-45B0-B2C5-B47E6AE1AA28",
+      "variable_name": "Investigating_Officer",
+      "variable_value": "Inspector Rajesh Kumar",
+      "category": "Officer",
+      "created_at": "2026-05-13T12:22:20.780Z",
+      "updated_at": "2026-05-13T12:22:20.780Z",
+      "description": null
+    },
+    {
+      "variable_id": "6689DCE7-D160-4B91-9F49-C4A3973A5E5C",
+      "variable_name": "ACCUSED_SOCIAL_MEDIA_ADDRESS",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:59:49.450Z",
+      "updated_at": "2026-06-21T07:59:49.450Z",
+      "description": null
+    },
+    {
+      "variable_id": "DD8A0677-88B5-41E5-98BD-CCD6B3BC6365",
+      "variable_name": "Court_Location",
+      "variable_value": "Esplanade, Mumbai",
+      "category": "Legal",
+      "created_at": "2026-05-13T12:22:25.460Z",
+      "updated_at": "2026-05-13T12:22:25.460Z",
+      "description": null
+    },
+    {
+      "variable_id": "63A767DF-8B27-4EFE-B793-CECE21310E9E",
+      "variable_name": "Court_Name",
+      "variable_value": "Special Cyber Court, Mumbai",
+      "category": "Legal",
+      "created_at": "2026-05-13T12:22:24.863Z",
+      "updated_at": "2026-05-13T12:22:24.863Z",
+      "description": null
+    },
+    {
+      "variable_id": "F9C5C67A-92A7-432F-AE6B-D8F96771DB12",
+      "variable_name": "ACCUSED_X",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:53:45.027Z",
+      "updated_at": "2026-06-21T07:54:20.470Z",
+      "description": null
+    },
+    {
+      "variable_id": "FC5902FD-2AF7-4281-97EB-E49136EF1228",
+      "variable_name": "IO_Designation",
+      "variable_value": "Inspector of Police",
+      "category": "Officer",
+      "created_at": "2026-05-13T12:22:21.367Z",
+      "updated_at": "2026-05-13T12:22:21.367Z",
+      "description": null
+    },
+    {
+      "variable_id": "A9833749-EC31-4645-8CE7-E985C700E222",
+      "variable_name": "ACCUSED_WHATSAPP",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T07:50:37.610Z",
+      "updated_at": "2026-06-21T07:50:37.610Z",
+      "description": null
+    },
+    {
+      "variable_id": "B49B4825-F5D7-4991-A229-F4EA6F889250",
+      "variable_name": "System_Date",
+      "variable_value": "03/07/2026",
+      "category": "System",
+      "created_at": "2026-05-13T11:49:08.623Z",
+      "updated_at": "2026-05-13T11:49:08.623Z",
+      "description": null
+    },
+    {
+      "variable_id": "33968AFF-0DBA-410D-BE41-F66772947CF0",
+      "variable_name": "ACCUSED_SIGNAL",
+      "variable_value": " ",
+      "category": "Social media",
+      "created_at": "2026-06-21T08:03:10.110Z",
+      "updated_at": "2026-06-21T08:03:10.110Z",
+      "description": null
+    },
+    {
+      "variable_id": "D187453F-DFAB-4A2C-AEEA-FCB2890BADF4",
+      "variable_name": "BANK_VIKTIME_BANK",
+      "variable_value": " ",
+      "category": "Bank",
+      "created_at": "2026-06-14T03:19:09.630Z",
+      "updated_at": "2026-06-14T03:23:45.567Z",
+      "description": null
+    },
+    {
+      "variable_id": "D4149CED-EE37-4924-99CF-FD44A6B34E91",
+      "variable_name": "FIR_NO",
+      "variable_value": " ",
+      "category": "General",
+      "created_at": "2026-06-14T03:21:18.573Z",
+      "updated_at": "2026-06-14T03:21:18.573Z",
+      "description": null
+    }
+  ]
+}
