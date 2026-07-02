@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
+const { isPkg, backendRoot } = require('../../utils/appPaths');
 
 // ── Version Utilities ─────────────────────────────────────────────────────────
 
@@ -47,10 +48,9 @@ let _versionConfig = null;
 function getVersionConfig() {
     if (_versionConfig) return _versionConfig;
     try {
-        const isPkg = typeof process.pkg !== 'undefined';
         const versionPath = isPkg
-            ? path.join(path.dirname(process.execPath), '..', '..', 'version.json')
-            : path.join(__dirname, '../../../../version.json');
+            ? path.join(backendRoot, '..', 'version.json')
+            : path.join(backendRoot, '..', 'version.json'); // backendRoot is ../CyberPs/backend in dev mode
         _versionConfig = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
     } catch (err) {
         logger.warn('[UPDATE] Could not read version.json, using defaults.');
@@ -211,11 +211,10 @@ async function checkForUpdates() {
  * Get the temp directory for storing downloaded updates.
  */
 function getUpdateTempDir() {
-    const isPkg = typeof process.pkg !== 'undefined';
-    const baseDir = isPkg
-        ? path.join(path.dirname(process.execPath), '..', 'Temp', 'Updates')
-        : path.join(__dirname, '../../../../Temp/Updates');
-    fs.mkdirSync(baseDir, { recursive: true });
+    const baseDir = path.join(uploadsRoot, '..', 'Temp', 'Updates'); // Next to uploads
+    if (!fs.existsSync(baseDir)) {
+        fs.mkdirSync(baseDir, { recursive: true });
+    }
     return baseDir;
 }
 
