@@ -40,10 +40,15 @@ Thumbs.db
 # Project specific
 temp/
 scratch/
-backend/uploads/excels/*
+# Uploaded case data — NEVER commit user data (FIRs, notices, evidence, excels)
+backend/uploads/fir/*
 backend/uploads/notices/*
-!backend/uploads/excels/.gitkeep
+backend/uploads/excels/*
+backend/uploads/evidence/*
+!backend/uploads/fir/.gitkeep
 !backend/uploads/notices/.gitkeep
+!backend/uploads/excels/.gitkeep
+!backend/uploads/evidence/.gitkeep
 
 # Compiled portable build output
 Portable_CyberPS/

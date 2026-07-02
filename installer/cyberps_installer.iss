@@ -76,18 +76,22 @@ Source: "..\schema.sql"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\installer\env_template.txt"; DestDir: "{app}"; DestName: ".env"; Flags: ignoreversion onlyifdoesntexist
 
 ; Uploads folder placeholder files
-Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\fir"; DestName: ".gitkeep"; Flags: ignoreversion
-Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\notices"; DestName: ".gitkeep"; Flags: ignoreversion
-Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\excels"; DestName: ".gitkeep"; Flags: ignoreversion
-Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\evidence"; DestName: ".gitkeep"; Flags: ignoreversion
+; IMPORTANT: onlyifdoesntexist ensures existing user files (FIRs, notices, evidence) are NEVER overwritten
+Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\fir";      DestName: ".gitkeep"; Flags: onlyifdoesntexist
+Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\notices";  DestName: ".gitkeep"; Flags: onlyifdoesntexist
+Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\excels";   DestName: ".gitkeep"; Flags: onlyifdoesntexist
+Source: "..\installer\placeholder.txt"; DestDir: "{app}\uploads\evidence"; DestName: ".gitkeep"; Flags: onlyifdoesntexist
 
 [Dirs]
+; DATA DIRECTORIES — preserved across updates and uninstall
+; Flags: uninsneveruninstall ensures Inno Setup NEVER deletes these even on full uninstall
+Name: "{app}\uploads\fir";      Flags: uninsneveruninstall
+Name: "{app}\uploads\notices"; Flags: uninsneveruninstall
+Name: "{app}\uploads\excels";  Flags: uninsneveruninstall
+Name: "{app}\uploads\evidence"; Flags: uninsneveruninstall
+; App directories (can be removed on uninstall)
 Name: "{app}\Temp\Updates"
 Name: "{app}\Backup"
-Name: "{app}\uploads\fir"
-Name: "{app}\uploads\notices"
-Name: "{app}\uploads\excels"
-Name: "{app}\uploads\evidence"
 Name: "{app}\logs"
 Name: "{app}\ramail\attachments"
 Name: "{app}\ramail\inbox"
@@ -119,7 +123,27 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // Add bin\Tesseract-OCR and bin\poppler\bin to PATH for this session
-    // (They are bundled so no system-level PATH change needed)
+    // Uploads, notices, and evidence folders are NEVER touched by installer.
+    // They use Flags: uninsneveruninstall so even uninstall preserves case data.
   end;
+end;
+
+//
+// PreventDataLoss — called before uninstall.
+// Shows a warning if uploads folder contains user data.
+//
+function InitializeUninstall(): Boolean;
+var
+  FirCount: Integer;
+  Msg: String;
+begin
+  Result := True;
+  // Warn if user has FIR uploads that will NOT be deleted (they are preserved)
+  Msg := 'CyberPS will be uninstalled.' + #13#10 + #13#10 +
+         'Your case data (uploaded FIRs, notices, evidence files) is stored' + #13#10 +
+         'separately and will NOT be deleted.' + #13#10 + #13#10 +
+         'Database records remain on your SQL Server.' + #13#10 + #13#10 +
+         'Continue with uninstall?';
+  if MsgBox(Msg, mbConfirmation, MB_YESNO) = IDNO then
+    Result := False;
 end;

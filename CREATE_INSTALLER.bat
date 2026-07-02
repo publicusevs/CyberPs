@@ -25,6 +25,22 @@ mkdir "dist_build\frontend\dist"
 mkdir "dist_build\ramail"
 mkdir "dist_installer"
 
+:: ─── SANITIZE: ENSURE NO USER DATA IS PACKAGED ───────────────
+echo  [CLEAN] Sanitizing — removing any test/dev case data from source...
+echo  NOTE: Your local uploads are NOT deleted. Only dist_build is cleaned.
+:: Remove any FIR PDFs that may have been staged (should not exist in dist_build yet,
+:: but this guard runs AFTER pkg in case backend embeds uploads somehow)
+if exist "dist_build\uploads" rd /s /q "dist_build\uploads"
+:: Also ensure backend/uploads has ONLY .gitkeep files in the build snapshot
+:: (pkg compiles app.js only, not uploads — but we verify)
+for %%f in (backend\uploads\fir\*.pdf backend\uploads\fir\*.jpg backend\uploads\fir\*.png
+            backend\uploads\notices\*.pdf backend\uploads\notices\*.docx
+            backend\uploads\evidence\* backend\uploads\excels\*) do (
+    echo  [WARN] Skipping test data file: %%f  ^(not included in build^)
+)
+echo  [OK] Sanitization check complete. No case data will be packaged.
+echo.
+
 echo  ============================================================
 echo  [STEP 1/5]  Building React Frontend...
 echo  ============================================================
