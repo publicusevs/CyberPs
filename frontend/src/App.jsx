@@ -3,7 +3,7 @@
  * Layout (Sidebar, Navbar) lives in src/layouts/AppLayout.jsx
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -29,9 +29,31 @@ import GenerateLetter from './pages/GenerateLetter';
 import MoneyTrailStandalone, { CaseMoneyTrail } from './pages/MoneyTrailAnalyzer';
 import EmailTest from './pages/EmailTest';
 import MailSettings from './pages/MailSettings';
+import UpdateSettings from './pages/UpdateSettings';
+import UpdateDialog from './components/UpdateDialog';
+import { checkForUpdates, getUpdateSettings, getSkippedVersion } from './services/updateService';
 import { Navigate } from 'react-router-dom';
 
 function App() {
+    const [updateInfo, setUpdateInfo] = useState(null);
+
+    // Silent background update check — fires once on mount, after 3s delay
+    useEffect(() => {
+        const settings = getUpdateSettings();
+        if (!settings.autoCheck) return;
+
+        const timer = setTimeout(async () => {
+            try {
+                const result = await checkForUpdates();
+                if (!result?.hasUpdate) return;
+                const skipped = getSkippedVersion();
+                if (skipped && skipped === result.manifest?.version) return;
+                setUpdateInfo(result);
+            } catch { /* silent — never block app */ }
+        }, 3000);
+
+        return () => clearTimeout(timer);
+    }, []);
     return (
         <AuthProvider>
             <ToastProvider>
@@ -61,11 +83,20 @@ function App() {
                                 <Route path="/cases/:id/trail" element={<CaseMoneyTrail />} />
                                 <Route path="/trail" element={<MoneyTrailStandalone />} />
                                 <Route path="/email-test" element={<EmailTest />} />
+                                <Route path="/settings/updates" element={<UpdateSettings />} />
                             </Route>
                         </Routes>
                     </AppLayout>
                 </BrowserRouter>
             </ToastProvider>
+            {/* Global update dialog — rendered outside router so it's always available */}
+            {updateInfo && (
+                <UpdateDialog
+                    updateInfo={updateInfo}
+                    onClose={() => setUpdateInfo(null)}
+                    onSkip={() => setUpdateInfo(null)}
+                />
+            )}
         </AuthProvider>
     );
 }

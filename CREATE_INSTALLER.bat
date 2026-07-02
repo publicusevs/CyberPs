@@ -131,6 +131,19 @@ if %errorlevel% neq 0 ( echo [ERROR] Launcher compilation failed. & goto :FAIL )
 echo  [OK] Launcher CyberPS.exe compiled.
 echo.
 
+echo  Compiling Updater (updater.exe)...
+pyinstaller --onefile installer\updater.py ^
+    --name updater ^
+    --noconfirm ^
+    --clean ^
+    --distpath dist_build ^
+    --workpath dist_build\updater_work ^
+    --hidden-import=pathlib ^
+    --hidden-import=shutil
+if %errorlevel% neq 0 ( echo [ERROR] Updater compilation failed. & goto :FAIL )
+echo  [OK] Updater compiled.
+echo.
+
 echo  ============================================================
 echo  [STEP 5/5]  Building Installer with Inno Setup...
 echo  ============================================================
@@ -161,13 +174,22 @@ echo  [SUCCESS] BUILD COMPLETE!
 echo  ============================================================
 echo.
 
+:: Read version from version.json
+for /f "tokens=2 delims=:,\" %%v in ('findstr "version" version.json') do (
+    set APP_VER=%%~v
+    set APP_VER=!APP_VER: =!
+    goto :got_ver
+)
+:got_ver
+
 :: Create a final release folder for easy copy
 mkdir "CyberPS_Release" 2>nul
-copy /Y "dist_installer\CyberPS_Setup_v2.2.exe" "CyberPS_Release\" >nul
+copy /Y "dist_installer\CyberPS_Setup_v1.0.0.exe" "CyberPS_Release\" >nul
 copy /Y "installer\README_INSTALL.txt" "CyberPS_Release\" >nul
+copy /Y "version.json" "CyberPS_Release\" >nul
 
 echo   Installer ready in folder: CyberPS_Release\
-echo   (File: CyberPS_Setup_v2.2.exe)
+echo   (File: CyberPS_Setup_v1.0.0.exe)
 echo.
 echo   This .exe installer contains:
 echo     - CyberPS.exe (Launcher)

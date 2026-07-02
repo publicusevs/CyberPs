@@ -10,10 +10,29 @@ import time
 import webbrowser
 import threading
 import ctypes
+import json
 from pathlib import Path
 
 APP_NAME = "CyberPS Investigation Hunter"
-APP_VERSION = "2.0"
+
+def _load_version():
+    """Load version from version.json (single source of truth)."""
+    try:
+        # When frozen by PyInstaller, look for version.json relative to install dir
+        if getattr(sys, 'frozen', False):
+            # Packaged: CyberPS.exe is in {install_dir}, version.json is in {install_dir}/../..
+            base = Path(sys.executable).parent.parent.parent
+        else:
+            base = Path(__file__).parent.parent
+        vp = base / 'version.json'
+        if vp.exists():
+            data = json.loads(vp.read_text(encoding='utf-8'))
+            return data.get('version', '1.0.0')
+    except Exception:
+        pass
+    return '1.0.0'
+
+APP_VERSION = _load_version()
 
 def get_install_dir():
     """Get the installation directory (where CyberPS.exe resides)."""

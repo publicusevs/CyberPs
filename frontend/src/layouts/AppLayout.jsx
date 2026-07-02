@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     LayoutDashboard, Briefcase, Search, ShieldCheck, Settings,
     Settings2, FileText, Network, Database,
-    Scan, Mail
+    Scan, Mail, RefreshCw
 } from 'lucide-react';
 import { SidebarLink } from './SidebarLink';
 import Navbar from './Navbar';
@@ -108,7 +108,8 @@ const AppLayout = ({ children }) => {
 
                     <div className="pt-6 border-t border-slate-100 space-y-3">
                         <SidebarLink to="/settings" icon={Settings} label="Protocols" active={location.pathname === '/settings'} collapsed={collapsed && !mobileOpen} />
-                        {(!collapsed || mobileOpen) && <p className="text-[8px] text-center text-slate-300 font-bold tracking-widest uppercase mt-4 italic">v2.4.0 secure_node</p>}
+                        <SidebarLink to="/settings/updates" icon={RefreshCw} label="Software Updates" active={location.pathname === '/settings/updates'} collapsed={collapsed && !mobileOpen} />
+                        {(!collapsed || mobileOpen) && <p className="text-[8px] text-center text-slate-300 font-bold tracking-widest uppercase mt-4 italic">v1.0.0 secure_node</p>}
                     </div>
                 </nav>
             </aside>

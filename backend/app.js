@@ -70,6 +70,7 @@ const variableRoutes = require('./src/modules/variables/variables.routes');
 const trailRoutes = require('./src/modules/trail/trail.routes');
 const emailRoutes = require('./src/modules/email/email.routes');
 const settingsRoutes = require('./src/modules/settings/settings.routes');
+const updateRoutes = require('./src/modules/update/update.routes');
 
 const app = express();
 
@@ -131,6 +132,7 @@ app.use('/api/variables', variableRoutes);
 app.use('/api/trail', trailRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/update', updateRoutes);
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
