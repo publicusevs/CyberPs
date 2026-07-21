@@ -24,4 +24,10 @@ router.get('/progress/:downloadId', controller.getProgress);
 // POST /api/update/install           — launch updater.exe and exit
 router.post('/install', controller.installUpdate);
 
+// GET  /api/update/log/:logType       — read installer/updater log contents
+router.get('/log/:logType', controller.viewLog);
+
+// POST /api/update/open-folder       — open local update temp folder
+router.post('/open-folder', controller.openDownloadFolder);
+
 module.exports = router;

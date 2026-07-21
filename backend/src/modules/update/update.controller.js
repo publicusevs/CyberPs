@@ -156,10 +156,63 @@ async function installUpdate(req, res) {
     }, 500);
 }
 
+/**
+ * POST /api/update/open-folder
+ * Opens the local update downloads directory in Windows Explorer.
+ */
+async function openDownloadFolder(req, res) {
+    try {
+        const path = require('path');
+        const fs = require('fs');
+        const { uploadsRoot } = require('../../utils/appPaths');
+        const folder = path.join(uploadsRoot, '..', 'Temp', 'Updates');
+        if (!fs.existsSync(folder)) {
+            fs.mkdirSync(folder, { recursive: true });
+        }
+        const { exec } = require('child_process');
+        exec(`explorer "${folder}"`);
+        return res.json({ success: true, message: 'Folder opened' });
+    } catch (err) {
+        logger.error('[UPDATE] Failed to open download folder:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+}
+
+/**
+ * GET /api/update/log/:logType
+ * Reads the content of installer.log or updater.log.
+ */
+async function viewLog(req, res) {
+    const { logType } = req.params;
+    try {
+        const path = require('path');
+        const fs = require('fs');
+        const { isPkg, backendRoot } = require('../../utils/appPaths');
+        const logsDir = isPkg 
+            ? path.join(path.dirname(process.execPath), '..', 'logs') 
+            : path.join(backendRoot, '..', 'logs');
+
+        const logFile = logType === 'installer' ? 'installer.log' : 'updater.log';
+        const logPath = path.join(logsDir, logFile);
+
+        if (!fs.existsSync(logPath)) {
+            return res.json({ success: true, content: 'Log file is empty or not yet generated.' });
+        }
+
+        const content = fs.readFileSync(logPath, 'utf8');
+        return res.json({ success: true, content });
+    } catch (err) {
+        logger.error('[UPDATE] Failed to read log:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+}
+
 module.exports = {
     checkUpdate,
     getVersion,
     downloadUpdate,
     getProgress,
     installUpdate,
+    openDownloadFolder,
+    viewLog,
 };

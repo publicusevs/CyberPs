@@ -25,6 +25,12 @@ const CasesRepository = {
      */
     async insertCase(transaction, fields) {
         const req = new mssql.Request(transaction);
+        
+        const toInt = (v) => {
+            const n = parseInt(v, 10);
+            return isNaN(n) ? null : n;
+        };
+
         const result = await req
             .input('fir_no', mssql.NVarChar, fields.fir_no)
             .input('ackn_no', mssql.NVarChar, fields.ackn_no)
@@ -44,15 +50,19 @@ const CasesRepository = {
             .input('sho_name', mssql.NVarChar, fields.sho_details || fields.sho_name || null)
             .input('remarks', mssql.NVarChar, fields.remarks || null)
             .input('sections', mssql.NVarChar, fields.sections || null)
+            .input('police_station_id', mssql.Int, toInt(fields.police_station_id))
+            .input('district_id', mssql.Int, toInt(fields.district_id))
             .query(`INSERT INTO cases 
                 (fir_no, ackn_no, fraud_amount, description, assigned_to, created_by, 
                  whatsapp_no, gmail_id, facebook_id, twitter_id, linkedin_id, insta_id, 
-                 telegram_id, website_url, other_social, sho_name, remarks, sections) 
+                 telegram_id, website_url, other_social, sho_name, remarks, sections,
+                 police_station_id, district_id) 
                 OUTPUT INSERTED.case_id 
                 VALUES 
                 (@fir_no, @ackn_no, @fraud_amount, @description, @assigned_to, @created_by,
                  @whatsapp_no, @gmail_id, @facebook_id, @twitter_id, @linkedin_id, @insta_id,
-                 @telegram_id, @website_url, @other_social, @sho_name, @remarks, @sections)`);
+                 @telegram_id, @website_url, @other_social, @sho_name, @remarks, @sections,
+                 @police_station_id, @district_id)`);
         return result.recordset[0].case_id;
     },
 
@@ -550,7 +560,6 @@ const CasesRepository = {
         await req.query('DELETE FROM case_victims WHERE case_id = @case_id');
         await req.query('DELETE FROM case_accused WHERE case_id = @case_id');
         await req.query('DELETE FROM case_complainants WHERE case_id = @case_id');
-        await req.query('DELETE FROM case_station_mapping WHERE case_id = @case_id');
         await req.query('DELETE FROM fir_documents WHERE case_id = @case_id');
         await req.query('DELETE FROM case_evidence WHERE case_id = @case_id');
         await req.query('DELETE FROM case_notes WHERE case_id = @case_id');

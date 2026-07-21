@@ -6,7 +6,6 @@ const noticesController = require('./notices.controller');
 const { authenticate } = require('../../middleware/auth');
 
 router.post('/', authenticate, noticesController.saveNotice);
-router.post('/generate', authenticate, noticesController.generateNotice);
 router.get('/case/:id', authenticate, noticesController.getNoticesByCase);
 router.get('/dispatch/:caseId', authenticate, noticesController.getDispatchRegister);
 router.get('/:id', authenticate, noticesController.getNoticeDetail);

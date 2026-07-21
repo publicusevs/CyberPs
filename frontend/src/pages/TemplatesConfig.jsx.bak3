@@ -1,0 +1,1448 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+    Plus, Search, Edit3, Trash2, Eye, Copy, 
+    ChevronLeft, Save, Shield, Type, Hash, Database,
+    Table, Layout, CheckCircle2, AlertCircle,
+    Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight,
+    Image as ImageIcon, X, Indent, Outdent, WrapText,
+    Scissors, FileText, Undo, Redo, AlignJustify, ListOrdered, Link as LinkIcon,
+    Minus, Sparkles, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+    ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCcw, Move
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import api from '../services/api';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import RichTextEditor from '../components/ui/RichTextEditor';
+
+const staticSocialVars = [
+    { name: 'whatsapp_no', label: 'WhatsApp Number' },
+    { name: 'gmail_id', label: 'Gmail / Google ID' },
+    { name: 'facebook_id', label: 'Facebook Profile ID/URL' },
+    { name: 'twitter_id', label: 'Twitter/X Handle' },
+    { name: 'linkedin_id', label: 'LinkedIn Profile' },
+    { name: 'insta_id', label: 'Instagram Username' },
+    { name: 'telegram_id', label: 'Telegram Handle' },
+    { name: 'website_url', label: 'Website URL' },
+    { name: 'other_social', label: 'Other Social handle' },
+    { name: 'facebook_address', label: 'Facebook Nodal Address' },
+    { name: 'insta_address', label: 'Instagram Nodal Address' },
+    { name: 'whatsapp_address', label: 'WhatsApp Nodal Address' },
+    { name: 'gmail_address', label: 'Gmail/Google Nodal Address' },
+    { name: 'telegram_address', label: 'Telegram Nodal Address' },
+    { name: 'twitter_address', label: 'Twitter/X Nodal Address' },
+    { name: 'linkedin_address', label: 'LinkedIn Nodal Address' },
+    { name: 'snapchat_address', label: 'Snapchat Nodal Address' }
+];
+
+const TemplatesConfig = () => {
+    const [view, setView] = useState('list'); // 'list' | 'editor'
+    const [templates, setTemplates] = useState([]);
+    const [globalVars, setGlobalVars] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [activeTemplate, setActiveTemplate] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [protocolSearchQuery, setProtocolSearchQuery] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [printMode, setPrintMode] = useState(false);
+    
+    // Modal and Calibration states
+    const [modalConfig, setModalConfig] = useState({ show: false, type: 'field', name: '', defaultValue: '' });
+    const [margins, setMargins] = useState({ top: 50, left: 50, right: 50 }); // in px
+    const [lineSpacing, setLineSpacing] = useState('1.5');
+    const [paragraphSpacing, setParagraphSpacing] = useState('12');
+    const [wordWrap, setWordWrap] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [showLeftPanel, setShowLeftPanel] = useState(true);
+    const [showRightPanel, setShowRightPanel] = useState(true);
+    const [activeRibbonTab, setActiveRibbonTab] = useState('Home');
+    const [zoomValue, setZoomValue] = useState(100);
+    const [placeholderSearch, setPlaceholderSearch] = useState('');
+    const [variableSearch, setVariableSearch] = useState('');
+    const [paperSize, setPaperSize] = useState('A4');
+    const lastSelectionRef = useRef(null);
+
+    const editorRef = useRef(null);
+    const quillRef = useRef(null);
+
+    useEffect(() => {
+        fetchTemplates();
+        fetchGlobalVars();
+    }, []);
+
+
+
+    const fetchGlobalVars = async () => {
+        try {
+            const res = await api.get('/variables');
+            if (res.data.success) {
+                setGlobalVars(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch global variables');
+        }
+    };
+
+    const fetchTemplates = async () => {
+        setLoading(true);
+        try {
+            const res = await api.get('/templates');
+            if (res.data.success) {
+                setTemplates(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch templates');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateNew = () => {
+        setMargins({ top: 50, left: 50, right: 50 });
+        setLineSpacing('1.5');
+        setParagraphSpacing('12');
+        setWordWrap(true);
+        setPaperSize('A4');
+        setActiveTemplate({
+            template_name: '',
+            template_type: 'Bank Notice',
+            subject_text: '',
+            body_text: '',
+            footer_text: '',
+            json_data: {
+                fields: [],
+                table_columns: [],
+                mapping: {},
+                margins: { top: 50, left: 50, right: 50 },
+                lineSpacing: '1.5',
+                paragraphSpacing: '12',
+                wordWrap: true,
+                paperSize: 'A4'
+            }
+        });
+        setPrintMode(false);
+        setView('editor');
+    };
+
+    const handleEdit = (tpl) => {
+        // Parse json_data if it's a string
+        let jsonData = tpl.json_data;
+        if (typeof jsonData === 'string') {
+            try {
+                jsonData = JSON.parse(jsonData);
+            } catch (e) {
+                jsonData = null;
+            }
+        }
+        
+        // Ensure standard structure
+        if (!jsonData || typeof jsonData !== 'object') {
+            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50 }, lineSpacing: '1.5', paragraphSpacing: '12', wordWrap: true, paperSize: 'A4' };
+        } else {
+            jsonData = {
+                fields: jsonData.fields || [],
+                table_columns: jsonData.table_columns || [],
+                mapping: jsonData.mapping || {},
+                margins: jsonData.margins || { top: 50, left: 50, right: 50 },
+                lineSpacing: jsonData.lineSpacing || '1.5',
+                paragraphSpacing: jsonData.paragraphSpacing || '12',
+                wordWrap: jsonData.wordWrap !== undefined ? jsonData.wordWrap : true,
+                paperSize: jsonData.paperSize || 'A4'
+            };
+        }
+        setActiveTemplate({ ...tpl, json_data: jsonData });
+        setMargins(jsonData.margins);
+        setLineSpacing(jsonData.lineSpacing || '1.5');
+        setParagraphSpacing(jsonData.paragraphSpacing || '12');
+        setWordWrap(jsonData.wordWrap !== undefined ? jsonData.wordWrap : true);
+        setPaperSize(jsonData.paperSize || 'A4');
+        setPrintMode(false); // Ensure we start in editor mode
+        setView('editor');
+    };
+
+    const handleDuplicate = async (tpl) => {
+        const newName = prompt('Enter new template name:', `${tpl.template_name} (Copy)`);
+        if (!newName) return;
+
+        const duplicated = { 
+            ...tpl, 
+            template_name: newName,
+            template_id: undefined 
+        };
+        try {
+            await api.post('/templates', duplicated);
+            fetchTemplates();
+        } catch (err) {
+            alert('DUPLICATION_ERROR: Likely name already exists.');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('PERMANENT_ERASURE_PROTOCOL: Are you sure you want to delete this template?')) return;
+        try {
+            await api.delete(`/templates/${id}`);
+            fetchTemplates();
+        } catch (err) {
+            alert('DELETE_ERROR');
+        }
+    };
+
+    const handleSave = async () => {
+        if (!activeTemplate.template_name) {
+            alert('VALIDATION_ERROR: Template name is required.');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current ? editorRef.current.innerHTML : activeTemplate.body_text);
+            const payload = {
+                ...activeTemplate,
+                body_text: currentBody,
+                json_data: {
+                    ...activeTemplate.json_data,
+                    margins: margins,
+                    lineSpacing: lineSpacing,
+                    paragraphSpacing: paragraphSpacing,
+                    wordWrap: wordWrap,
+                    paperSize: paperSize
+                }
+            };
+
+            if (activeTemplate.template_id) {
+                await api.put(`/templates/${activeTemplate.template_id}`, payload);
+            } else {
+                await api.post('/templates', payload);
+            }
+            
+            setShowSuccess(true);
+            setTimeout(() => {
+                setShowSuccess(false);
+                setView('list');
+                fetchTemplates();
+            }, 1500);
+        } catch (err) {
+            alert('SAVE_ERROR: Persistence failure.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const insertPlaceholder = (name) => {
+        const placeholder = `{${name}}`;
+        if (quillRef.current?.getQuill()) {
+            const q = quillRef.current.getQuill();
+            q.focus();
+            const range = q.getSelection();
+            if (range) {
+                q.insertText(range.index, placeholder);
+                q.setSelection(range.index + placeholder.length);
+            } else {
+                const length = q.getLength();
+                q.insertText(length - 1, placeholder);
+                q.setSelection(length - 1 + placeholder.length);
+            }
+        }
+    };
+
+    const openModal = (type) => {
+        setModalConfig({ show: true, type, name: '', defaultValue: '' });
+    };
+
+    const handleModalSubmit = () => {
+        const { type, name, defaultValue } = modalConfig;
+        if (!name) return;
+
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
+
+        if (type === 'field') {
+            const exists = activeTemplate.json_data.fields.some(f => f.name === name);
+            if (exists) return alert('Field already exists.');
+
+            setActiveTemplate(prev => ({
+                ...prev,
+                body_text: currentBody,
+                json_data: {
+                    ...prev.json_data,
+                    fields: [...prev.json_data.fields, { name, type: 'text', defaultValue }]
+                }
+            }));
+        } else {
+            const exists = activeTemplate.json_data.table_columns.includes(name);
+            if (exists) return alert('Column already exists.');
+
+            setActiveTemplate(prev => ({
+                ...prev,
+                body_text: currentBody,
+                json_data: {
+                    ...prev.json_data,
+                    table_columns: [...prev.json_data.table_columns, name]
+                }
+            }));
+        }
+        setModalConfig({ show: false, type: 'field', name: '', defaultValue: '' });
+    };
+
+    const removeField = (name) => {
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
+        setActiveTemplate(prev => ({
+            ...prev,
+            body_text: currentBody,
+            json_data: {
+                ...prev.json_data,
+                fields: prev.json_data.fields.filter(f => f.name !== name)
+            }
+        }));
+    };
+
+    const removeColumn = (name) => {
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
+        setActiveTemplate(prev => ({
+            ...prev,
+            body_text: currentBody,
+            json_data: {
+                ...prev.json_data,
+                table_columns: prev.json_data.table_columns.filter(c => c !== name)
+            }
+        }));
+    };
+
+
+
+    const getProcessedHTML = (html) => {
+        if (!html) return '';
+        let processed = html;
+        
+        // 1. Replace Global Protocol Variables
+        if (globalVars && globalVars.length > 0) {
+            globalVars.forEach(v => {
+                const regex = new RegExp(`\\{${v.variable_name}\\}`, 'g');
+                processed = processed.replace(regex, `<span class="bg-emerald-50 text-emerald-700 px-1 rounded border border-emerald-200 print:bg-transparent print:border-none print:p-0">${v.variable_value || `[${v.variable_name}]`}</span>`);
+            });
+        }
+
+        // 1.5 Replace System / Case Variables with Sample Values (shown in purple)
+        const systemSamples = {
+            'FIR_NO': '184/2024',
+            'FIR_SECTIONS': '66C, 66D IT Act, 419 IPC',
+            'FIR_ACT': '66C, 66D IT Act, 419 IPC',
+            'NCRP_NO': 'NCRP-2024-001234',
+            'NCRP_ACK_NO': 'NCRP-2024-001234',
+            'CASE_ID': '42',
+            'REF_ID': '42/782-JP',
+            'BANK_NAME': 'State Bank of India',
+            'BANK_ADDRESS': 'Main Branch, MI Road, Jaipur',
+            'BANK_ACCUSEDBANK_NAME': 'State Bank of India',
+            'BANK_ACCUSEDBANK_ADDRESS': 'Main Branch, MI Road, Jaipur',
+            'BANK_ACCUSEDBANK_ACCOUNT': '1234567890 (IFSC: SBIN0001234)',
+            'BANK_ACCUSEDBANK_IFSCCODE': 'SBIN0001234',
+            'FRAUD_AMOUNT': 'Rs. 50,000',
+            'TRANSACTION_TABLE': '[Transaction Table will appear here]',
+            'TEST_TRANSACTION_TABLE': '[Transaction Table will appear here]',
+            'COMPLAINANT_NAME': 'Ramesh Kumar',
+            'COMPLAINANT_MOBILE': '+91 9876543210',
+            'COMPLAINANT_EMAIL': 'ramesh@example.com',
+            'COMPLAINANT_ADDRESS': '123, Civil Lines, Jaipur',
+            'VICTIM_NAME': 'Ramesh Kumar',
+            'VICTIM_MOBILE': '+91 9876543210',
+            'ACCUSED_NAME': 'Unknown Suspect',
+            'ACCUSED_MOBILE': '+91 9999999999',
+            'ACCUSED_WHATSAPP': '+91 9999999999',
+            'ACCUSED_FACEBOOK': 'facebook.com/suspect.profile',
+            'ACCUSED_TWITTER': '@suspect_handle',
+            'ACCUSED_INSTAGRAM': '@suspect_instagram',
+            'ACCUSED_TELEGRAM': '@suspect_telegram',
+            'ACCUSED_GMAIL': 'suspect@gmail.com',
+            'ACCUSED_LINKEDIN': 'linkedin.com/in/suspect',
+            'ACCUSED_WEBSITE': 'www.suspect-site.com',
+            'ACCUSED_SOCIAL_MEDIA_TYPE': 'Meta (Facebook)',
+            'ACCUSED_SOCIAL_MEDIA_ID': 'facebook.com/suspect.profile',
+            'ACCUSED_SOCIAL_MEDIA_ADDRESS': 'Meta Platforms (India) Pvt Ltd',
+            'ACCUSED_INSTA': '@suspect_instagram',
+            'ACCUSED_X': '@suspect_x',
+            'ACCUSED_YOUTUBE': 'suspect_youtube_channel',
+            'ACCUSED_SIGNAL': 'suspect_signal_no',
+            'ACCUSED_SNAPCHAT': 'suspect_snapchat',
+        };
+        Object.entries(systemSamples).forEach(([name, sampleVal]) => {
+            const regex = new RegExp(`\\{${name}\\}`, 'g');
+            processed = processed.replace(regex, `<span class="bg-purple-50 text-purple-700 px-1 rounded border border-purple-200 print:bg-transparent print:border-none print:p-0">${sampleVal}</span>`);
+        });
+
+        // 1.6 Replace Social Media Variables with Sample Values
+        const socialSamples = {
+            'whatsapp_no': '+91 9999999999',
+            'gmail_id': 'suspect@gmail.com',
+            'facebook_id': 'facebook.com/suspect.profile',
+            'twitter_id': '@suspect_handle',
+            'linkedin_id': 'linkedin.com/in/suspect',
+            'insta_id': '@suspect_instagram',
+            'telegram_id': '@suspect_telegram',
+            'website_url': 'www.suspect-website.com',
+            'other_social': 'other_social_details',
+            'facebook_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+            'insta_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+            'whatsapp_address': 'WhatsApp LLC, 1601 Willow Road, Menlo Park, California 94025, USA (India Nodal: Mumbai)',
+            'gmail_address': 'Google India Pvt Ltd, Unitech Signature Tower-II, Sector-15, Gurgaon, Haryana-122001',
+            'telegram_address': 'Telegram FZ-LLC, Business Central Towers, Dubai, UAE',
+            'twitter_address': 'Twitter Communications India Pvt. Ltd., DLF Cyber City, Gurgaon, Haryana-122002',
+            'linkedin_address': 'LinkedIn Ireland Unlimited Company, Wilton Plaza, Dublin 2, Ireland',
+            'snapchat_address': 'Snap Inc., 3000 31st Street, Santa Monica, CA 90405, USA'
+        };
+        Object.entries(socialSamples).forEach(([name, sampleVal]) => {
+            const regex = new RegExp(`\\{${name}\\}`, 'g');
+            processed = processed.replace(regex, `<span class="bg-blue-50 text-blue-700 px-1 rounded border border-blue-200 print:bg-transparent print:border-none print:p-0">${sampleVal}</span>`);
+        });
+
+        // 2. Replace Local Template Fields
+        if (activeTemplate?.json_data?.fields) {
+            activeTemplate.json_data.fields.forEach(field => {
+                const regex = new RegExp(`\\{${field.name}\\}`, 'g');
+                processed = processed.replace(regex, `<span class="bg-blue-50 text-blue-700 px-1 rounded border border-blue-200 print:bg-transparent print:border-none print:p-0">${field.defaultValue || `[${field.name}]`}</span>`);
+            });
+        }
+
+        // 3. Replace Table Columns
+        if (activeTemplate?.json_data?.table_columns) {
+            activeTemplate.json_data.table_columns.forEach(col => {
+                const regex = new RegExp(`\\{${col}\\}`, 'g');
+                processed = processed.replace(regex, `<span class="bg-emerald-50 text-emerald-700 px-1 rounded border border-emerald-200 print:bg-transparent print:border-none print:p-0">[${col}]</span>`);
+            });
+        }
+        return processed;
+    };
+
+    const filteredTemplates = templates.filter(t => 
+        t.template_name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (view === 'list') {
+        return (
+            <div className="space-y-8 pb-20">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">
+                            Templates <span className="text-blue-600">Config</span>
+                        </h1>
+                        <p className="text-slate-400 text-[10px] font-black tracking-widest uppercase mt-2 italic flex items-center gap-2">
+                            <Shield size={12} className="text-blue-500" /> ADMIN_TERMINAL // DOC_AUTOMATION_V2
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-80 group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={18} />
+                            <input 
+                                type="text" 
+                                placeholder="SEARCH_TEMPLATES..." 
+                                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black tracking-widest outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <Button 
+                            onClick={handleCreateNew}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-blue-100 flex items-center gap-3 active:scale-95"
+                        >
+                            <Plus size={20} /> <span className="font-black text-xs tracking-widest uppercase italic">Create Template</span>
+                        </Button>
+                    </div>
+                </div>
+
+                <Card className="border-none shadow-2xl shadow-slate-200/50 overflow-hidden bg-white/80 backdrop-blur-xl">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/50 border-b border-slate-100">
+                                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Template Details</th>
+                                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Created Date</th>
+                                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Updated</th>
+                                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-8 py-20 text-center animate-pulse">
+                                            <div className="flex flex-col items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin"></div>
+                                                <p className="font-black text-[10px] text-slate-400 tracking-[0.3em] uppercase italic">Syncing Template Registry...</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : filteredTemplates.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-8 py-20 text-center">
+                                            <p className="font-black text-slate-300 tracking-widest uppercase italic">No templates found in active dossier.</p>
+                                        </td>
+                                    </tr>
+                                ) : filteredTemplates.map(tpl => (
+                                    <tr key={tpl.template_id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="px-8 py-6">
+                                            <div>
+                                                <p className="text-sm font-black text-slate-900 uppercase italic group-hover:text-blue-600 transition-colors">{tpl.template_name}</p>
+                                                <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">ID: {tpl.template_id}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-black uppercase italic border border-blue-100">
+                                                {tpl.template_type}
+                                            </span>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">{new Date(tpl.created_at).toLocaleDateString()}</p>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">{new Date(tpl.updated_at).toLocaleDateString()}</p>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => handleEdit(tpl)} className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-2 px-4" title="View / Edit">
+                                                    <Eye size={16} /> <span className="text-[9px] font-black uppercase italic">View / Edit</span>
+                                                </button>
+                                                <button onClick={() => { handleEdit(tpl); setPrintMode(true); }} className="p-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl transition-all shadow-lg flex items-center gap-2 px-4" title="Final Print View">
+                                                    <ImageIcon size={16} /> <span className="text-[9px] font-black uppercase italic">Final Print</span>
+                                                </button>
+                                                <button onClick={() => handleDuplicate(tpl)} className="p-2.5 bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 rounded-xl transition-all" title="Duplicate"><Copy size={16} /></button>
+                                                <button onClick={() => handleDelete(tpl.template_id)} className="p-2.5 bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-all" title="Delete"><Trash2 size={16} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    const handleEnterPrintMode = () => {
+        // Sync editor content to state first
+        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
+        setActiveTemplate(prev => ({ ...prev, body_text: currentBody }));
+        setPrintMode(true);
+    };
+
+    const placeholderCategories = [
+        {
+            title: 'Case Details',
+            items: [
+                { label: 'Case Number', value: 'CASE_ID' },
+                { label: 'FIR Number', value: 'FIR_NO' },
+                { label: 'Police Station', value: 'BANK_NAME' },
+                { label: 'District', value: 'BANK_ADDRESS' },
+                { label: 'Case Type', value: 'template_type' },
+                { label: 'Registration Date', value: 'date' },
+                { label: 'Incident Date', value: 'startDate' },
+            ]
+        },
+        {
+            title: 'Complainant Details',
+            items: [
+                { label: 'Complainant Name', value: 'COMPLAINANT_NAME' },
+                { label: 'Complainant Address', value: 'COMPLAINANT_ADDRESS' },
+                { label: 'Complainant Mobile', value: 'COMPLAINANT_MOBILE' },
+            ]
+        },
+        {
+            title: 'Accused Details',
+            items: [
+                { label: 'Accused Name', value: 'ACCUSED_NAME' },
+                { label: 'Accused Address', value: 'ACCUSED_WEBSITE' },
+                { label: 'Accused Age', value: 'ACCUSED_MOBILE' },
+            ]
+        },
+        {
+            title: 'Investigating Officer',
+            items: [
+                { label: 'IO Name', value: 'IO_NAME' },
+                { label: 'IO Rank', value: 'IO_RANK' },
+                { label: 'IO Badge Number', value: 'IO_BADGE' },
+            ]
+        },
+        {
+            title: 'Court Details',
+            items: [
+                { label: 'Court Name', value: 'COURT_NAME' },
+            ]
+        }
+    ];
+
+    const variablesList = [
+        { label: 'CurrentDate', value: 'date', preview: '12/06/2025' },
+        { label: 'CurrentTime', value: 'CurrentTime', preview: '11:45 AM' },
+        { label: 'LoggedInUser', value: 'LoggedInUser', preview: '{{UserName}}' },
+        { label: 'DepartmentName', value: 'DepartmentName', preview: 'Crime Branch' },
+        { label: 'CourtName', value: 'CourtName', preview: '{{Court}}' },
+        { label: 'TodayDate', value: 'TodayDate', preview: '12/06/2025' },
+    ];
+
+    const dynamicTablesList = [
+        {
+            title: 'Accused Details Table',
+            placeholder: 'TRANSACTION_TABLE',
+            headers: ['S.No.', 'Name', 'Father Name', 'Age', 'Address'],
+            cols: ['1', '{{Accused Name}}', '{{Father Name}}', '{{Age}}', '{{Address}}']
+        },
+        {
+            title: 'Seized Articles Table',
+            placeholder: 'SEIZED_ARTICLES_TABLE',
+            headers: ['S.No.', 'Article', 'Quantity', 'Description'],
+            cols: ['1', '{{Article}}', '{{Quantity}}', '{{Description}}']
+        }
+    ];
+
+    const paperSizes = {
+        A4: { width: '794px', height: '1123px', label: 'A4' },
+        Letter: { width: '816px', height: '1056px', label: 'Letter' },
+        Legal: { width: '816px', height: '1344px', label: 'Legal' },
+    };
+
+    const formatText = (command, val = null) => {
+        if (quillRef.current?.getQuill()) {
+            quillRef.current.getQuill().format(command, val);
+        }
+    };
+
+    const handleCopyText = (text) => {
+        navigator.clipboard.writeText(`{{${text}}}`);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col font-sans -mx-6 -my-8 select-none">
+            {/* Top Workspace Header */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm no-print">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => { setView('list'); setPrintMode(false); }} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-500">
+                        <ChevronLeft size={20} />
+                    </button>
+                    <div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                            <span>Home</span>
+                            <span>&gt;</span>
+                            <span>Templates</span>
+                            <span>&gt;</span>
+                            <span className="text-blue-600">Templates Config</span>
+                        </div>
+                        <h1 className="text-xl font-extrabold text-slate-900 mt-1">Templates Config</h1>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {/* Panel toggle buttons */}
+                    <button
+                        onClick={() => setShowLeftPanel(v => !v)}
+                        title={showLeftPanel ? 'Hide Placeholders Panel' : 'Show Placeholders Panel'}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    >
+                        {showLeftPanel ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+                        <span className="hidden sm:inline">{showLeftPanel ? 'Hide Left' : 'Show Left'}</span>
+                    </button>
+                    <button
+                        onClick={() => setShowRightPanel(v => !v)}
+                        title={showRightPanel ? 'Hide Variables Panel' : 'Show Variables Panel'}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    >
+                        {showRightPanel ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+                        <span className="hidden sm:inline">{showRightPanel ? 'Hide Right' : 'Show Right'}</span>
+                    </button>
+                    <button 
+                        onClick={handleEnterPrintMode} 
+                        className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    >
+                        <Eye size={15} /> Preview
+                    </button>
+                    <button 
+                        onClick={handleSave} 
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-500/10"
+                    >
+                        <Save size={15} /> {saving ? 'Saving...' : 'Save Template'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Workspace */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* 1. Left Sidebar: PLACEHOLDERS */}
+                {!printMode && showLeftPanel && (
+                    <div className="w-[280px] bg-white border-r border-slate-200 flex flex-col overflow-hidden no-print">
+                        <div className="p-4 border-b border-slate-200">
+                            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-3">Placeholders</h2>
+                            <div className="relative group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search placeholders..." 
+                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-all font-semibold"
+                                    value={placeholderSearch}
+                                    onChange={(e) => setPlaceholderSearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                            {placeholderCategories.map(cat => {
+                                const filteredItems = cat.items.filter(item => 
+                                    item.label.toLowerCase().includes(placeholderSearch.toLowerCase()) ||
+                                    item.value.toLowerCase().includes(placeholderSearch.toLowerCase())
+                                );
+                                if (filteredItems.length === 0) return null;
+                                return (
+                                    <div key={cat.title} className="space-y-2">
+                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-1">{cat.title}</h3>
+                                        <div className="space-y-1.5">
+                                            {filteredItems.map(item => (
+                                                <div 
+                                                    key={item.label} 
+                                                    onClick={() => insertPlaceholder(item.value)}
+                                                    className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 hover:border-blue-200 rounded-xl group cursor-pointer transition-all hover:bg-blue-50/30"
+                                                >
+                                                    <span className="text-[11px] font-bold text-slate-700">{"{{" + item.label + "}}"}</span>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleCopyText(item.label); }}
+                                                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 rounded transition-all"
+                                                        title="Copy placeholder"
+                                                    >
+                                                        <Copy size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. Middle Column: Ribbon + Rulers + A4 Editor Page */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-slate-100 relative">
+                    
+                    {/* Ribbon Controls Container */}
+                    {!printMode && (
+                        <div className="bg-white border-b border-slate-200 flex flex-col no-print shadow-sm z-30">
+                            {/* Tabs Navigation */}
+                            <div className="flex items-center border-b border-slate-100 px-6 pt-2 bg-slate-50/50">
+                                {['File', 'Home', 'Insert', 'Layout', 'Table', 'View', 'Tools'].map(tab => (
+                                    <button 
+                                        key={tab}
+                                        onClick={() => setActiveRibbonTab(tab)}
+                                        className={`px-4 py-2 text-xs font-bold transition-all border-b-2 -mb-[1px] ${activeRibbonTab === tab ? 'text-blue-600 border-blue-600 font-extrabold' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Ribbon Body */}
+                            <div className="px-6 py-3 flex items-center gap-6 overflow-x-auto min-h-[92px]">
+                                {activeRibbonTab === 'Home' && (
+                                    <>
+                                        {/* Clipboard Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button onClick={() => formatText('paste')} className="flex flex-col items-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all shrink-0">
+                                                <FileText size={20} className="text-slate-500" />
+                                                <span className="text-[9px] font-bold mt-1 text-slate-500">Paste</span>
+                                            </button>
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={() => formatText('cut')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Scissors size={12} /> Cut</button>
+                                                <button onClick={() => formatText('copy')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Copy size={12} /> Copy</button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Clipboard</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Undo/Redo Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button onClick={() => formatText('undo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Undo"><Undo size={16} /></button>
+                                            <button onClick={() => formatText('redo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Redo"><Redo size={16} /></button>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">History</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Font Styling Group */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <select className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px]">
+                                                        <option>Times New Roman</option>
+                                                        <option>Arial</option>
+                                                        <option>Georgia</option>
+                                                        <option>Calibri</option>
+                                                    </select>
+                                                    <select 
+                                                        onChange={(e) => formatText('size', `${e.target.value}px`)}
+                                                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                        defaultValue="16"
+                                                    >
+                                                        {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(s => (
+                                                            <option key={s} value={s}>{s}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => formatText('bold')} className="p-1 hover:bg-slate-100 rounded text-slate-700 font-extrabold text-xs" title="Bold">B</button>
+                                                    <button onClick={() => formatText('italic')} className="p-1 hover:bg-slate-100 rounded text-slate-700 italic text-xs px-2" title="Italic">I</button>
+                                                    <button onClick={() => formatText('underline')} className="p-1 hover:bg-slate-100 rounded text-slate-700 underline text-xs" title="Underline">U</button>
+                                                    <button onClick={() => formatText('strike')} className="p-1 hover:bg-slate-100 rounded text-slate-700 line-through text-xs" title="Strikethrough">S</button>
+                                                    <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                                    <button onClick={() => formatText('color', '#ef4444')} className="p-1 hover:bg-slate-100 rounded text-red-500 font-bold text-xs" title="Font Color">A</button>
+                                                </div>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Font</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Paragraph Alignment & Spacing */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1.5 justify-center">
+                                                <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded">
+                                                    <button onClick={() => formatText('align', false)} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Left"><AlignLeft size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'center')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Center"><AlignCenter size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'right')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Right"><AlignRight size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'justify')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Justify"><AlignJustify size={14} /></button>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button onClick={() => formatText('list', 'bullet')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Bullet List"><List size={14} /></button>
+                                                    <button onClick={() => formatText('list', 'ordered')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Numbered List"><ListOrdered size={14} /></button>
+                                                    <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                                    <button onClick={() => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left - 10) }))} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Decrease Indent"><Outdent size={14} /></button>
+                                                    <button onClick={() => setMargins(prev => ({ ...prev, left: Math.min(200, prev.left + 10) }))} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Increase Indent"><Indent size={14} /></button>
+                                                </div>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Paragraph</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Styles Presets */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <button className="border border-blue-500 bg-blue-50/20 text-blue-600 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-bold">AaBbCc</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">Normal</span>
+                                                </button>
+                                                <button className="border border-slate-200 hover:bg-slate-50 text-slate-500 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-semibold">AaBbCc</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">No Spacing</span>
+                                                </button>
+                                                <button className="border border-slate-200 hover:bg-slate-50 text-slate-500 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-extrabold text-blue-900">Heading 1</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">Title</span>
+                                                </button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Styles</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Editing Group */}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={() => alert('Search initiated')} className="flex items-center gap-1 px-3 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Search size={11} /> Find</button>
+                                                <button onClick={() => alert('Replace initiated')} className="flex items-center gap-1 px-3 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Sparkles size={11} /> Replace</button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Editing</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {activeRibbonTab === 'Insert' && (
+                                    <div className="flex items-center gap-4">
+                                        {/* Picture & Media Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                            <label className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 cursor-pointer transition-all" title="Insert Picture">
+                                                <ImageIcon size={22} className="text-blue-500" />
+                                                <span className="text-[9px] font-bold mt-1">Picture</span>
+                                                <input 
+                                                    type="file" 
+                                                    className="hidden" 
+                                                    accept="image/*" 
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file && quillRef.current?.getQuill()) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (event) => {
+                                                                quillRef.current.getQuill().insertEmbed(0, 'image', event.target.result);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                            <button 
+                                                onClick={() => {
+                                                    const r = parseInt(prompt("Enter rows:", "3"), 10) || 3;
+                                                    const c = parseInt(prompt("Enter columns:", "3"), 10) || 3;
+                                                    if (quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().getModule('table').insertTable(r, c);
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Insert Table"
+                                            >
+                                                <Table size={22} className="text-emerald-500" />
+                                                <span className="text-[9px] font-bold mt-1">Table</span>
+                                            </button>
+                                        </div>
+
+                                        {/* MS Word Style Text Wrapping Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <WrapText size={10} /> Text Wrap
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageWrap', 'inline')} 
+                                                        className="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded text-[10px] font-bold"
+                                                        title="Inline with Text"
+                                                    >
+                                                        Inline
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageWrap', 'left')} 
+                                                        className="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded text-[10px] font-bold"
+                                                        title="Wrap Left"
+                                                    >
+                                                        Wrap Left
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageWrap', 'right')} 
+                                                        className="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded text-[10px] font-bold"
+                                                        title="Wrap Right"
+                                                    >
+                                                        Wrap Right
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageWrap', 'center')} 
+                                                        className="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded text-[10px] font-bold"
+                                                        title="Center Image"
+                                                    >
+                                                        Center
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Picture Position & Nudge Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <Move size={10} /> Pixel Move
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: -2, dy: 0 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Left (2px)"
+                                                    >
+                                                        <ArrowLeft size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 2, dy: 0 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Right (2px)"
+                                                    >
+                                                        <ArrowRight size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 0, dy: -2 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Up (2px)"
+                                                    >
+                                                        <ArrowUp size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 0, dy: 2 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Down (2px)"
+                                                    >
+                                                        <ArrowDown size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageResetPos')} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1"
+                                                        title="Reset Position"
+                                                    >
+                                                        <RotateCcw size={12} /> Reset
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Links & Extras */}
+                                        <div className="flex items-center gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    const url = prompt("Enter URL:");
+                                                    if (url && quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().insertText(0, url);
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Hyperlink"
+                                            >
+                                                <LinkIcon size={22} className="text-purple-500" />
+                                                <span className="text-[9px] font-bold mt-1">Hyperlink</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if (quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().insertText(0, '---');
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Horizontal Line"
+                                            >
+                                                <Minus size={22} className="text-slate-400" />
+                                                <span className="text-[9px] font-bold mt-1">Line</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeRibbonTab === 'Layout' && (
+                                    <div className="flex items-center gap-6">
+                                        {/* Orientation Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button 
+                                                type="button"
+                                                onClick={() => alert("Orientation changed to Portrait")} 
+                                                className="flex flex-col items-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all"
+                                            >
+                                                <Globe size={20} className="text-slate-500" />
+                                                <span className="text-[9px] font-bold mt-1">Portrait</span>
+                                            </button>
+                                        </div>
+                                        {/* Paper Size Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Size</span>
+                                                <select 
+                                                    value={paperSize} 
+                                                    onChange={(e) => setPaperSize(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px] cursor-pointer"
+                                                >
+                                                    <option value="A4">A4 (210 x 297 mm)</option>
+                                                    <option value="Letter">Letter (8.5 x 11 in)</option>
+                                                    <option value="Legal">Legal (8.5 x 14 in)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        {/* Page Margins Group */}
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Top Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.top} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, top: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Left Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.left} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, left: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Right Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.right} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, right: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeRibbonTab !== 'Home' && activeRibbonTab !== 'Insert' && activeRibbonTab !== 'Layout' && (
+                                    <div className="flex items-center justify-center w-full py-2">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider italic">Ribbon tools for {activeRibbonTab} tab loaded</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Ruler Guide */}
+                    {!printMode && (
+                        <div className="bg-white border-b border-slate-200 h-6 flex items-center px-4 relative select-none no-print">
+                            <div 
+                                style={{ width: paperSizes[paperSize]?.width || '794px' }}
+                                className="absolute left-[calc(50%-397px)] h-full flex items-end pb-1 border-x border-slate-200"
+                            >
+                                {/* Horizontal scale values */}
+                                {[...Array(17).keys()].map(i => (
+                                    <div key={i} className="flex-1 flex flex-col items-center justify-end relative h-full">
+                                        <span className="text-[8px] font-extrabold text-slate-400 leading-none">{i}</span>
+                                        <div className="w-[1px] h-1.5 bg-slate-300 absolute bottom-0"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scrollable Document Container */}
+                    <div className="flex-1 overflow-y-auto p-8 flex justify-center items-start custom-scrollbar">
+                        <div 
+                            className={`bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200 relative flex flex-col ${printMode ? 'print:shadow-none print:border-none print:p-0' : ''}`}
+                            style={{ 
+                                width: paperSizes[paperSize]?.width || '794px',
+                                minHeight: paperSizes[paperSize]?.height || '1123px',
+                                zoom: zoomValue / 100 
+                            }}
+                        >
+                            {/* Header Guide */}
+                            {!printMode && (
+                                <div className="absolute top-2 left-6 right-6 border-b border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Header</div>
+                            )}
+
+                            {/* Editor Body */}
+                            <div className="flex-1 p-0">
+                                {printMode ? (
+                                    <div 
+                                        key={(activeTemplate?.template_id || 'new') + '_print'}
+                                        style={{
+                                            paddingTop: `${margins.top}px`,
+                                            paddingLeft: `${margins.left}px`,
+                                            paddingRight: `${margins.right}px`,
+                                            lineHeight: lineSpacing,
+                                            whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                            overflowX: wordWrap ? 'visible' : 'auto',
+                                            width: 'auto',
+                                            minWidth: 'auto',
+                                            maxWidth: 'auto',
+                                            minHeight: paperSizes[paperSize]?.height || '1123px'
+                                        }}
+                                        className="bg-white rounded-xl prose prose-slate max-w-none text-slate-800 print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style"
+                                        dangerouslySetInnerHTML={{ __html: getProcessedHTML(activeTemplate?.body_text) }}
+                                    />
+                                ) : (
+                                    <RichTextEditor
+                                        key={(activeTemplate?.template_id || 'new') + '_edit'}
+                                        ref={quillRef}
+                                        id="template-editor"
+                                        value={activeTemplate?.body_text || ''}
+                                        onChange={(html) => setActiveTemplate(p => p ? { ...p, body_text: html } : p)}
+                                        margins={margins}
+                                        lineSpacing={lineSpacing}
+                                        paragraphSpacing={paragraphSpacing}
+                                        wordWrap={wordWrap}
+                                        printMode={printMode}
+                                        hideToolbar={true}
+                                        onWordWrapChange={setWordWrap}
+                                        onLineSpacingChange={setLineSpacing}
+                                        onParagraphSpacingChange={setParagraphSpacing}
+                                        editorContainerClassName="min-h-[1123px]"
+                                        style={{
+                                            width: paperSizes[paperSize]?.width || '794px',
+                                            minWidth: paperSizes[paperSize]?.width || '794px',
+                                            maxWidth: paperSizes[paperSize]?.width || '794px'
+                                        }}
+                                        className="outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all cursor-text mx-auto custom-editor-style ql-editor-wrapper"
+                                    />
+                                )}
+                            </div>
+
+                            {/* Footer Guide */}
+                            {!printMode && (
+                                <div className="absolute bottom-2 left-6 right-6 border-t border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Footer</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Bottom Status Bar */}
+                    {!printMode && (
+                        <div className="bg-white border-t border-slate-200 h-9 px-6 flex items-center justify-between text-xs text-slate-500 font-semibold no-print z-20 shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <span>Page 1 of 1</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>Words: {((activeTemplate?.body_text || '').replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length) || 0}</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>Characters: {((activeTemplate?.body_text || '').replace(/<[^>]*>/g, '').length) || 0}</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>English (India)</span>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setZoomValue(z => Math.max(30, z - 10))} className="p-1 hover:bg-slate-100 rounded text-slate-600">-</button>
+                                <span>{zoomValue}%</span>
+                                <button onClick={() => setZoomValue(z => Math.min(150, z + 10))} className="p-1 hover:bg-slate-100 rounded text-slate-600">+</button>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <button onClick={() => setZoomValue(100)} className="hover:text-blue-600 transition-colors uppercase text-[9px] font-extrabold">Reset</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 3. Right Sidebar: DYNAMIC TABLES & VARIABLES */}
+                {!printMode && showRightPanel && (
+                    <div className="w-[300px] bg-white border-l border-slate-200 flex flex-col overflow-hidden no-print">
+                        
+                        {/* Dynamic Tables Section */}
+                        <div className="p-4 border-b border-slate-200">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Dynamic Tables</h3>
+                                <button 
+                                    onClick={() => {
+                                        const tblName = prompt("Enter new table placeholder name:", "New_Table");
+                                        if (tblName) {
+                                            setActiveTemplate(prev => ({
+                                                ...prev,
+                                                json_data: {
+                                                    ...prev.json_data,
+                                                    table_columns: [...(prev.json_data.table_columns || []), tblName]
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-black rounded-lg transition-all"
+                                >
+                                    <Plus size={12} /> Add Table
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {dynamicTablesList.map(table => (
+                                    <div key={table.title} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                        <div 
+                                            onClick={() => insertPlaceholder(table.placeholder)}
+                                            className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-blue-50/20 group"
+                                        >
+                                            <span className="text-[10px] font-black text-slate-700 uppercase">{table.title}</span>
+                                            <div className="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-all">
+                                                <Edit3 size={11} className="text-slate-500" />
+                                                <Trash2 size={11} className="text-slate-500" />
+                                            </div>
+                                        </div>
+                                        <div className="p-2 overflow-x-auto bg-white">
+                                            <table className="w-full text-left text-[9px] border-collapse min-w-[200px]">
+                                                <thead>
+                                                    <tr className="bg-slate-50 text-slate-500 font-extrabold border-b border-slate-200">
+                                                        {table.headers.map(h => <th key={h} className="p-1.5 border border-slate-100">{h}</th>)}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr className="text-slate-700 font-semibold bg-white">
+                                                        {table.cols.map((c, i) => <td key={i} className="p-1.5 border border-slate-100 font-bold">{c}</td>)}
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Variables Section */}
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-slate-200">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-3">Variables</h3>
+                                <div className="relative group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={14} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search variables..." 
+                                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-all font-semibold"
+                                        value={variableSearch}
+                                        onChange={(e) => setVariableSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar bg-slate-50/30">
+                                {variablesList.filter(v => 
+                                    v.label.toLowerCase().includes(variableSearch.toLowerCase()) ||
+                                    v.value.toLowerCase().includes(variableSearch.toLowerCase())
+                                ).map(variable => (
+                                    <div 
+                                        key={variable.label}
+                                        onClick={() => insertPlaceholder(variable.value)}
+                                        className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl group cursor-pointer hover:border-blue-300 transition-all"
+                                    >
+                                        <div>
+                                            <p className="text-[11px] font-black text-slate-700">{"{{" + variable.label + "}}"}</p>
+                                            <p className="text-[9px] text-slate-400 font-semibold mt-1">{variable.preview}</p>
+                                        </div>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleCopyText(variable.label); }}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-600 rounded transition-all"
+                                            title="Copy variable"
+                                        >
+                                            <Copy size={13} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <AnimatePresence>
+                {modalConfig.show && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+                        >
+                            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-2xl ${modalConfig.type === 'field' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+                                        {modalConfig.type === 'field' ? <Type size={20} /> : <Table size={20} />}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black uppercase italic tracking-tight">Add {modalConfig.type}</h3>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Unique Identifier Protocol</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setModalConfig({ ...modalConfig, show: false })} className="text-slate-400 hover:text-white"><X size={24} /></button>
+                            </div>
+                            <div className="p-8 space-y-6">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Identifier Name</label>
+                                    <input 
+                                        autoFocus
+                                        type="text"
+                                        placeholder={`e.g. ${modalConfig.type === 'field' ? 'Customer_Name' : 'Amount'}`}
+                                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black italic outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
+                                        value={modalConfig.name}
+                                        onChange={(e) => setModalConfig({ ...modalConfig, name: e.target.value.replace(/\s+/g, '_') })}
+                                    />
+                                    <p className="text-[9px] text-slate-400 italic px-1">* Spaces will be converted to underscores automatically.</p>
+                                </div>
+
+                                {modalConfig.type === 'field' && (
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Default / Sample Value</label>
+                                        <input 
+                                            type="text"
+                                            placeholder="e.g. John Doe"
+                                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black italic outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
+                                            value={modalConfig.defaultValue}
+                                            onChange={(e) => setModalConfig({ ...modalConfig, defaultValue: e.target.value })}
+                                        />
+                                    </div>
+                                )}
+                                <Button 
+                                    onClick={handleModalSubmit}
+                                    className={`w-full py-5 rounded-2xl text-white font-black uppercase tracking-widest italic shadow-xl ${modalConfig.type === 'field' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    Confirm Addition
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {showSuccess && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+                    >
+                        <Card className="p-12 bg-white border-none shadow-2xl text-center space-y-6 max-w-sm mx-auto">
+                            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                                <CheckCircle2 size={40} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic">Sync Success</h3>
+                                <p className="text-slate-500 text-sm font-bold mt-2">Template protocol permanently committed to unit registry.</p>
+                            </div>
+                        </Card>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+                [contenteditable] { caret-color: #3b82f6; }
+                .prose p { margin-bottom: 1em; }
+                .prose img { 
+                    display: block; 
+                    max-width: 100%; 
+                    height: auto; 
+                    border-radius: 8px; 
+                    margin: 15px 0;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                }
+                .ql-editor table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                }
+                .ql-editor td, .ql-editor th {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                }
+                .prose table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                }
+                .prose td, .prose th {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                }
+                .ql-container.ql-snow {
+                    border: none !important;
+                    font-family: inherit;
+                    font-size: inherit;
+                }
+                .ql-editor {
+                    min-height: 1123px !important;
+                    outline: none;
+                }
+                @media print {
+                    .no-print { display: none !important; }
+                    body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                    .prose { max-width: 100% !important; }
+                    main { margin: 0 !important; padding: 0 !important; }
+                    aside { display: none !important; }
+                    header { display: none !important; }
+                    .bg-white.rounded-3xl.outline-none { 
+                        padding-top: ${margins.top}px !important; 
+                        padding-left: ${margins.left}px !important; 
+                        padding-right: ${margins.right}px !important; 
+                        border: none !important;
+                        box-shadow: none !important;
+                        min-height: auto !important;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default TemplatesConfig;

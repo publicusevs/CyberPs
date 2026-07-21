@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-    Plus, Search, Edit3, Trash2, Eye, Copy, 
-    ChevronLeft, Save, Shield, Type, Hash, Database,
+    Plus, Search, Edit3, Trash2, Eye, EyeOff, Copy, 
+    ChevronLeft, Save, Shield, Type, Hash, Database, ChevronDown, ChevronUp,
     Table, Layout, CheckCircle2, AlertCircle,
     Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight,
-    Image as ImageIcon, X, Indent, Outdent, WrapText
+    Image as ImageIcon, X, Indent, Outdent, WrapText,
+    Scissors, FileText, Undo, Redo, AlignJustify, ListOrdered, Link as LinkIcon,
+    Minus, Sparkles, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+    ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCcw, Move, SlidersHorizontal, Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
@@ -46,12 +49,44 @@ const TemplatesConfig = () => {
     
     // Modal and Calibration states
     const [modalConfig, setModalConfig] = useState({ show: false, type: 'field', name: '', defaultValue: '' });
-    const [margins, setMargins] = useState({ top: 50, left: 50, right: 50 }); // in px
+    const [margins, setMargins] = useState({ top: 50, left: 50, right: 50, bottom: 50 }); // in px
     const [lineSpacing, setLineSpacing] = useState('1.5');
     const [paragraphSpacing, setParagraphSpacing] = useState('12');
+    const [paragraphSpacingBefore, setParagraphSpacingBefore] = useState('0');
+    const [specialIndent, setSpecialIndent] = useState('none');
+    const [showParagraphModal, setShowParagraphModal] = useState(false);
+    const [showWrapDropdown, setShowWrapDropdown] = useState(false);
+    const wrapDropdownRef = useRef(null);
+    const [paraDialogActiveTab, setParaDialogActiveTab] = useState('indents');
+    const [tempParaConfig, setTempParaConfig] = useState({
+        alignment: 'left',
+        leftIndent: '0',
+        rightIndent: '0',
+        special: 'none',
+        specialValue: '0.5 in',
+        beforeSpacing: '0',
+        afterSpacing: '12',
+        lineSpacing: '1.5',
+        lineSpacingAt: '1.5',
+        dontAddSpace: false,
+    });
     const [wordWrap, setWordWrap] = useState(true);
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [showLeftPanel, setShowLeftPanel] = useState(true);
+    const [showRightPanel, setShowRightPanel] = useState(true);
+    const [showRibbon, setShowRibbon] = useState(true);
+    const [activeRibbonTab, setActiveRibbonTab] = useState('Home');
+    const [zoomValue, setZoomValue] = useState(100);
+    const [placeholderSearch, setPlaceholderSearch] = useState('');
+    const [variableSearch, setVariableSearch] = useState('');
+    const [paperSize, setPaperSize] = useState('A4');
     const lastSelectionRef = useRef(null);
+
+    useEffect(() => {
+        const handleOutsideClick = () => setShowWrapDropdown(false);
+        window.addEventListener('click', handleOutsideClick);
+        return () => window.removeEventListener('click', handleOutsideClick);
+    }, []);
 
     const editorRef = useRef(null);
     const quillRef = useRef(null);
@@ -78,21 +113,25 @@ const TemplatesConfig = () => {
         setLoading(true);
         try {
             const res = await api.get('/templates');
-            if (res.data.success) {
+            if (res.data?.success && Array.isArray(res.data.data)) {
                 setTemplates(res.data.data);
+            } else if (Array.isArray(res.data)) {
+                setTemplates(res.data);
             }
         } catch (err) {
-            console.error('Failed to fetch templates');
+            console.error('Failed to fetch templates', err);
         } finally {
             setLoading(false);
         }
     };
 
     const handleCreateNew = () => {
-        setMargins({ top: 50, left: 50, right: 50 });
+        setMargins({ top: 50, left: 50, right: 50, bottom: 50 });
         setLineSpacing('1.5');
         setParagraphSpacing('12');
+        setParagraphSpacingBefore('0');
         setWordWrap(true);
+        setPaperSize('A4');
         setActiveTemplate({
             template_name: '',
             template_type: 'Bank Notice',
@@ -103,10 +142,12 @@ const TemplatesConfig = () => {
                 fields: [],
                 table_columns: [],
                 mapping: {},
-                margins: { top: 50, left: 50, right: 50 },
+                margins: { top: 50, left: 50, right: 50, bottom: 50 },
                 lineSpacing: '1.5',
                 paragraphSpacing: '12',
-                wordWrap: true
+                paragraphSpacingBefore: '0',
+                wordWrap: true,
+                paperSize: 'A4'
             }
         });
         setPrintMode(false);
@@ -126,23 +167,27 @@ const TemplatesConfig = () => {
         
         // Ensure standard structure
         if (!jsonData || typeof jsonData !== 'object') {
-            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50 }, lineSpacing: '1.5', paragraphSpacing: '12', wordWrap: true };
+            jsonData = { fields: [], table_columns: [], mapping: {}, margins: { top: 50, left: 50, right: 50, bottom: 50 }, lineSpacing: '1.5', paragraphSpacing: '12', paragraphSpacingBefore: '0', wordWrap: true, paperSize: 'A4' };
         } else {
             jsonData = {
                 fields: jsonData.fields || [],
                 table_columns: jsonData.table_columns || [],
                 mapping: jsonData.mapping || {},
-                margins: jsonData.margins || { top: 50, left: 50, right: 50 },
+                margins: { top: 50, left: 50, right: 50, bottom: 50, ...(jsonData.margins || {}) },
                 lineSpacing: jsonData.lineSpacing || '1.5',
                 paragraphSpacing: jsonData.paragraphSpacing || '12',
-                wordWrap: jsonData.wordWrap !== undefined ? jsonData.wordWrap : true
+                paragraphSpacingBefore: jsonData.paragraphSpacingBefore || '0',
+                wordWrap: jsonData.wordWrap !== undefined ? jsonData.wordWrap : true,
+                paperSize: jsonData.paperSize || 'A4'
             };
         }
         setActiveTemplate({ ...tpl, json_data: jsonData });
         setMargins(jsonData.margins);
         setLineSpacing(jsonData.lineSpacing || '1.5');
         setParagraphSpacing(jsonData.paragraphSpacing || '12');
+        setParagraphSpacingBefore(jsonData.paragraphSpacingBefore || '0');
         setWordWrap(jsonData.wordWrap !== undefined ? jsonData.wordWrap : true);
+        setPaperSize(jsonData.paperSize || 'A4');
         setPrintMode(false); // Ensure we start in editor mode
         setView('editor');
     };
@@ -191,7 +236,9 @@ const TemplatesConfig = () => {
                     margins: margins,
                     lineSpacing: lineSpacing,
                     paragraphSpacing: paragraphSpacing,
-                    wordWrap: wordWrap
+                    paragraphSpacingBefore: paragraphSpacingBefore,
+                    wordWrap: wordWrap,
+                    paperSize: paperSize
                 }
             };
 
@@ -398,8 +445,8 @@ const TemplatesConfig = () => {
         return processed;
     };
 
-    const filteredTemplates = templates.filter(t => 
-        t.template_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredTemplates = (Array.isArray(templates) ? templates : []).filter(t => 
+        (t?.template_name || '').toLowerCase().includes((searchQuery || '').toLowerCase())
     );
 
     if (view === 'list') {
@@ -504,348 +551,1080 @@ const TemplatesConfig = () => {
     }
 
     const handleEnterPrintMode = () => {
-        // Sync editor content to state first
-        const currentBody = quillRef.current?.getQuill() ? quillRef.current.getQuill().root.innerHTML : (editorRef.current?.innerHTML || activeTemplate.body_text);
+        const currentBody = quillRef.current?.getEditor ? quillRef.current.getEditor().getHTML() : (quillRef.current?.getQuill ? quillRef.current.getQuill().root.innerHTML : activeTemplate.body_text);
         setActiveTemplate(prev => ({ ...prev, body_text: currentBody }));
-        setPrintMode(true);
+        setPrintMode(prev => !prev);
+    };
+
+    const handleExportPDF = () => {
+        if (!printMode) {
+            handleEnterPrintMode();
+        }
+        setTimeout(() => {
+            window.print();
+        }, 400);
+    };
+
+    const handleExportWord = () => {
+        const currentBody = quillRef.current?.getEditor ? quillRef.current.getEditor().getHTML() : (quillRef.current?.getQuill ? quillRef.current.getQuill().root.innerHTML : activeTemplate.body_text);
+        const w = paperSizes[paperSize]?.width || '794px';
+        const h = paperSizes[paperSize]?.height || '1123px';
+        const topMargin = `${margins.top || 50}px`;
+        const leftMargin = `${margins.left || 50}px`;
+        const rightMargin = `${margins.right || 50}px`;
+        const bottomMargin = `${margins.bottom || margins.top || 50}px`;
+
+        const fullHtml = `
+            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+            <head>
+                <meta charset='utf-8'>
+                <title>${activeTemplate.template_name || 'Document'}</title>
+                <!--[if gte mso 9]>
+                <xml>
+                <w:WordDocument>
+                <w:View>Print</w:View>
+                <w:Zoom>100</w:Zoom>
+                <w:DoNotOptimizeForBrowser/>
+                </w:WordDocument>
+                </xml>
+                <![endif]-->
+                <style>
+                    @page WordSection1 {
+                        size: ${w} ${h};
+                        margin: ${topMargin} ${rightMargin} ${bottomMargin} ${leftMargin};
+                        mso-header-margin: 0.5in;
+                        mso-footer-margin: 0.5in;
+                        mso-paper-source: 0;
+                    }
+                    div.WordSection1 { page: WordSection1; }
+                    body { font-family: 'Calibri', 'Segoe UI', sans-serif; margin: 0; color: #1e293b; }
+                    p { margin-top: ${paragraphSpacingBefore || 0}px; margin-bottom: ${paragraphSpacing || 0}px; line-height: ${lineSpacing || '1.5'}; }
+                    img { max-width: 100%; height: auto; }
+                    table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+                    td, th { border: 1px solid #cbd5e1; padding: 8px 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="WordSection1">
+                    ${getProcessedHTML(currentBody)}
+                </div>
+            </body>
+            </html>
+        `;
+        const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeTemplate.template_name || 'Template'}_${new Date().toISOString().slice(0, 10)}.doc`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const placeholderCategories = [
+        {
+            title: 'Case Details',
+            items: [
+                { label: 'Case Number', value: 'CASE_ID' },
+                { label: 'FIR Number', value: 'FIR_NO' },
+                { label: 'Police Station', value: 'BANK_NAME' },
+                { label: 'District', value: 'BANK_ADDRESS' },
+                { label: 'Case Type', value: 'template_type' },
+                { label: 'Registration Date', value: 'date' },
+                { label: 'Incident Date', value: 'startDate' },
+            ]
+        },
+        {
+            title: 'Complainant Details',
+            items: [
+                { label: 'Complainant Name', value: 'COMPLAINANT_NAME' },
+                { label: 'Complainant Address', value: 'COMPLAINANT_ADDRESS' },
+                { label: 'Complainant Mobile', value: 'COMPLAINANT_MOBILE' },
+            ]
+        },
+        {
+            title: 'Accused Details',
+            items: [
+                { label: 'Accused Name', value: 'ACCUSED_NAME' },
+                { label: 'Accused Address', value: 'ACCUSED_WEBSITE' },
+                { label: 'Accused Age', value: 'ACCUSED_MOBILE' },
+            ]
+        },
+        {
+            title: 'Investigating Officer',
+            items: [
+                { label: 'IO Name', value: 'IO_NAME' },
+                { label: 'IO Rank', value: 'IO_RANK' },
+                { label: 'IO Badge Number', value: 'IO_BADGE' },
+            ]
+        },
+        {
+            title: 'Court Details',
+            items: [
+                { label: 'Court Name', value: 'COURT_NAME' },
+            ]
+        }
+    ];
+
+    const variablesList = [
+        { label: 'CurrentDate', value: 'date', preview: '12/06/2025' },
+        { label: 'CurrentTime', value: 'CurrentTime', preview: '11:45 AM' },
+        { label: 'LoggedInUser', value: 'LoggedInUser', preview: '{{UserName}}' },
+        { label: 'DepartmentName', value: 'DepartmentName', preview: 'Crime Branch' },
+        { label: 'CourtName', value: 'CourtName', preview: '{{Court}}' },
+        { label: 'TodayDate', value: 'TodayDate', preview: '12/06/2025' },
+    ];
+
+    const dynamicTablesList = [
+        {
+            title: 'Accused Details Table',
+            placeholder: 'TRANSACTION_TABLE',
+            headers: ['S.No.', 'Name', 'Father Name', 'Age', 'Address'],
+            cols: ['1', '{{Accused Name}}', '{{Father Name}}', '{{Age}}', '{{Address}}']
+        },
+        {
+            title: 'Seized Articles Table',
+            placeholder: 'SEIZED_ARTICLES_TABLE',
+            headers: ['S.No.', 'Article', 'Quantity', 'Description'],
+            cols: ['1', '{{Article}}', '{{Quantity}}', '{{Description}}']
+        }
+    ];
+
+    const paperSizes = {
+        A4: { width: '794px', height: '1123px', label: 'A4' },
+        Letter: { width: '816px', height: '1056px', label: 'Letter' },
+        Legal: { width: '816px', height: '1344px', label: 'Legal' },
+    };
+
+    const formatText = (command, val = null) => {
+        if (quillRef.current?.getQuill()) {
+            quillRef.current.getQuill().format(command, val);
+        }
+    };
+
+    const handleCopyText = (text) => {
+        navigator.clipboard.writeText(`{{${text}}}`);
     };
 
     return (
-        <div className="space-y-10 pb-20">
-            {/* Editor Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div className="flex items-center gap-5">
-                    <button onClick={() => { setView('list'); setPrintMode(false); }} className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-slate-900 hover:text-white transition-all text-slate-400 shadow-sm">
+        <div className="h-screen overflow-hidden flex flex-col font-sans -mx-6 -my-8 select-none">
+            {/* Top Workspace Header */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm no-print shrink-0 sticky top-0 z-30">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => { setView('list'); setPrintMode(false); }} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-500">
                         <ChevronLeft size={20} />
                     </button>
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic underline decoration-blue-500 underline-offset-8">
-                            {printMode ? 'Final Print' : (activeTemplate?.template_id ? 'Edit' : 'Create')} <span className="text-blue-600">Template</span>
-                        </h1>
-                        <p className="text-slate-400 text-[10px] font-black tracking-widest uppercase mt-4 italic flex items-center gap-2">
-                            {printMode ? <ImageIcon size={12} className="text-blue-500" /> : <Edit3 size={12} className="text-blue-500" />} 
-                            MODE: {printMode ? 'FINAL_PRINT_CALIBRATION' : 'ARCHITECT_STUDIO'} // TARGET: {activeTemplate?.template_name || 'NEW_PROTOCOL'}
-                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                            <span>Home</span>
+                            <span>&gt;</span>
+                            <span>Templates</span>
+                            <span>&gt;</span>
+                            <span className="text-blue-600">Templates Config</span>
+                        </div>
+                        <h1 className="text-xl font-extrabold text-slate-900 mt-1">Templates Config</h1>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3">
-                    {!printMode && (
-                        <button 
-                            onClick={() => setSidebarOpen(!sidebarOpen)}
-                            className="flex items-center gap-3 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition-all shadow-sm active:scale-95"
-                            title={sidebarOpen ? "Minimize Registry Column" : "Show Registry Column"}
-                        >
-                            <Layout size={18} /> {sidebarOpen ? 'Hide Registry' : 'Show Registry'}
-                        </button>
-                    )}
-                    {!printMode && (
-                        <button 
-                            onClick={handleEnterPrintMode}
-                            className="flex items-center gap-3 px-8 py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95"
-                        >
-                            <Eye size={18} /> Print Preview
-                        </button>
-                    )}
-                    {printMode && (
-                        <button 
-                            onClick={() => setPrintMode(false)}
-                            className="flex items-center gap-3 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition-all shadow-sm active:scale-95"
-                        >
-                            <Edit3 size={18} /> Back to Edit
-                        </button>
-                    )}
-                    {printMode && (
-                        <button 
-                            onClick={() => window.print()}
-                            className="flex items-center gap-3 px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-50 transition-all shadow-sm active:scale-95"
-                        >
-                            <ImageIcon size={18} /> Print Document
-                        </button>
-                    )}
-                    <button 
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-3 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-2xl shadow-slate-200 active:scale-95 disabled:opacity-50"
+                    {/* Panel toggle buttons */}
+                    <button
+                        onClick={() => setShowLeftPanel(v => !v)}
+                        title={showLeftPanel ? 'Hide Placeholders Panel' : 'Show Placeholders Panel'}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
                     >
-                        {saving ? 'SYNCING...' : <><Save size={18} /> {activeTemplate?.template_id ? 'UPDATE_TEMPLATE' : 'COMMIT_CHANGES'}</>}
+                        {showLeftPanel ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+                        <span className="hidden sm:inline">{showLeftPanel ? 'Hide Left' : 'Show Left'}</span>
+                    </button>
+                    <button
+                        onClick={() => setShowRightPanel(v => !v)}
+                        title={showRightPanel ? 'Hide Variables Panel' : 'Show Variables Panel'}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    >
+                        {showRightPanel ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+                        <span className="hidden sm:inline">{showRightPanel ? 'Hide Right' : 'Show Right'}</span>
+                    </button>
+                    <button
+                        onClick={() => setShowRibbon(v => !v)}
+                        title={showRibbon ? 'Hide Ribbon Toolbar' : 'Show Ribbon Toolbar'}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    >
+                        {showRibbon ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        <span className="hidden sm:inline">{showRibbon ? 'Hide Ribbon' : 'Show Ribbon'}</span>
+                    </button>
+                    <button 
+                        onClick={handleEnterPrintMode} 
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${printMode ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 shadow-sm border border-amber-300' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                    >
+                        {printMode ? <EyeOff size={15} /> : <Eye size={15} />} {printMode ? 'Exit Preview' : 'Preview'}
+                    </button>
+                    <button 
+                        onClick={handleSave} 
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-500/10"
+                    >
+                        <Save size={15} /> {saving ? 'Saving...' : 'Save Template'}
                     </button>
                 </div>
             </div>
 
-            <div className={`grid grid-cols-1 ${printMode ? 'lg:grid-cols-1' : 'lg:grid-cols-12'} gap-10`}>
-                {/* Left Side: Editor Core */}
-                <div className={`${printMode ? 'lg:col-span-1 max-w-4xl mx-auto w-full' : (sidebarOpen ? 'lg:col-span-8' : 'lg:col-span-12')} space-y-8 no-print`}>
-                    <Card className={`overflow-visible border-slate-200 shadow-2xl transition-all duration-500 ${printMode ? 'bg-slate-50 border-none shadow-none p-0' : 'bg-white p-0'}`}>
-
-
-                        <div className={`${printMode ? 'p-0' : 'p-10'} space-y-8`}>
-                            {!printMode && (
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic flex items-center gap-2">
-                                        <Shield size={12} className="text-blue-500" /> Template Identity Mapping
-                                    </label>
-                                    <input 
-                                        type="text"
-                                        placeholder="ENTER_TEMPLATE_NAME (e.g. Cyber Bank Notice)"
-                                        className="w-full px-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-3xl text-sm font-black italic focus:border-blue-500/50 focus:bg-white outline-none transition-all shadow-inner"
-                                        value={activeTemplate?.template_name}
-                                        onChange={(e) => setActiveTemplate(p => ({ ...p, template_name: e.target.value }))}
-                                    />
-                                </div>
-                            )}
-
-                            {!printMode && (
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic flex items-center gap-2">
-                                        <Shield size={12} className="text-blue-500" /> Notice Category / Type
-                                    </label>
-                                    <select
-                                        value={activeTemplate?.template_type || 'Bank Notice'}
-                                        onChange={(e) => setActiveTemplate(p => ({ ...p, template_type: e.target.value }))}
-                                        className="w-full px-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-3xl text-sm font-black italic focus:border-blue-500/50 focus:bg-white outline-none transition-all shadow-inner cursor-pointer"
-                                    >
-                                        <option value="Bank Notice">Bank Notice</option>
-                                        <option value="Telecom Notice">Telecom Notice</option>
-                                        <option value="Social Media">Social Media</option>
-                                        <option value="Court Notice">Court Notice</option>
-                                        <option value="Govt Notice">Govt Notice</option>
-                                        <option value="Others">Others</option>
-                                    </select>
-                                </div>
-                            )}
-
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between px-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">{printMode ? 'Final Document Stream' : 'Document Content Matrix'}</label>
-                                </div>
-                                
-                                <div className="w-full overflow-x-auto custom-scrollbar pb-4">
-                                    <div 
-                                        className={`relative ${printMode ? 'bg-white p-0' : 'bg-slate-100/30 p-10 rounded-[40px] border-2 border-dashed border-slate-200 shadow-inner'}`}
-                                        style={printMode ? {} : { width: '874px', minWidth: '874px', maxWidth: '874px', marginLeft: 'auto', marginRight: 'auto' }}
-                                    >
-                                        <style>{`
-                                            .custom-editor-style p {
-                                                margin-bottom: ${paragraphSpacing}px !important;
-                                                margin-top: 0px !important;
-                                            }
-                                        `}</style>
-                                        {!printMode && (
-                                            <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-                                                <Shield size={400} />
-                                            </div>
-                                        )}
-                                        {printMode ? (
-                                            <div 
-                                                key={(activeTemplate?.template_id || 'new') + '_print'}
-                                                style={{
-                                                    paddingTop: `${margins.top}px`,
-                                                    paddingLeft: `${margins.left}px`,
-                                                    paddingRight: `${margins.right}px`,
-                                                    lineHeight: lineSpacing,
-                                                    whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-                                                    overflowX: wordWrap ? 'visible' : 'auto',
-                                                    width: 'auto',
-                                                    minWidth: 'auto',
-                                                    maxWidth: 'auto'
-                                                }}
-                                                className="min-h-[1123px] shadow-2xl border border-slate-100 bg-white rounded-xl prose prose-slate max-w-none text-slate-800 print:shadow-none print:p-0 print:m-0 print:border-none cursor-text mx-auto custom-editor-style"
-                                                dangerouslySetInnerHTML={{ __html: getProcessedHTML(activeTemplate?.body_text) }}
-                                            />
-                                        ) : (
-                                            <RichTextEditor
-                                                key={(activeTemplate?.template_id || 'new') + '_edit'}
-                                                ref={quillRef}
-                                                id="template-editor"
-                                                value={activeTemplate?.body_text || ''}
-                                                onChange={(html) => setActiveTemplate(p => p ? { ...p, body_text: html } : p)}
-                                                margins={margins}
-                                                lineSpacing={lineSpacing}
-                                                paragraphSpacing={paragraphSpacing}
-                                                wordWrap={wordWrap}
-                                                printMode={printMode}
-                                                onWordWrapChange={setWordWrap}
-                                                onLineSpacingChange={setLineSpacing}
-                                                onParagraphSpacingChange={setParagraphSpacing}
-                                                editorContainerClassName="min-h-[1123px]"
-                                                style={{
-                                                    width: '794px',
-                                                    minWidth: '794px',
-                                                    maxWidth: '794px'
-                                                }}
-                                                className="shadow-2xl border border-slate-200 bg-white rounded-xl outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all cursor-text mx-auto custom-editor-style ql-editor-wrapper"
-                                            />
-                                        )}
-
-                                    {/* Margin Controls */}
-                                    {!printMode && (
-                                        <>
-                                            {/* Top Margin Handle */}
-                                            <motion.div 
-                                                drag="y"
-                                                dragConstraints={{ top: 0, bottom: 200 }}
-                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, top: Math.max(0, prev.top + info.delta.y) }))}
-                                                className="absolute left-10 right-10 h-1 bg-blue-500/20 hover:bg-blue-500 cursor-ns-resize z-20 group"
-                                                style={{ top: `${margins.top + 40}px` }}
-                                            >
-                                                <div className="absolute left-1/2 -translate-x-1/2 -top-6 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Top: {Math.round(margins.top)}px</div>
-                                            </motion.div>
-
-                                            {/* Left Margin Handle */}
-                                            <motion.div 
-                                                drag="x"
-                                                dragConstraints={{ left: 0, right: 200 }}
-                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left + info.delta.x) }))}
-                                                className="absolute top-10 bottom-10 w-1 bg-blue-500/20 hover:bg-blue-500 cursor-ew-resize z-20 group"
-                                                style={{ left: `${margins.left + 40}px` }}
-                                            >
-                                                <div className="absolute top-1/2 -translate-y-1/2 -left-20 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase origin-center -rotate-90">Margin Left: {Math.round(margins.left)}px</div>
-                                            </motion.div>
-
-                                            {/* Right Margin Handle */}
-                                            <motion.div 
-                                                drag="x"
-                                                dragConstraints={{ left: -200, right: 0 }}
-                                                onDrag={(e, info) => setMargins(prev => ({ ...prev, right: Math.max(0, prev.right - info.delta.x) }))}
-                                                className="absolute top-10 bottom-10 w-1 bg-blue-500/20 hover:bg-blue-500 cursor-ew-resize z-20 group"
-                                                style={{ right: `${margins.right + 40}px` }}
-                                            >
-                                                <div className="absolute top-1/2 -translate-y-1/2 -right-20 bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase origin-center rotate-90">Margin Right: {Math.round(margins.right)}px</div>
-                                            </motion.div>
-                                        </>
-                                    )}
-                                    </div>
-                                </div>
+            {/* Main Workspace */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* 1. Left Sidebar: PLACEHOLDERS */}
+                {!printMode && showLeftPanel && (
+                    <div className="w-[280px] bg-white border-r border-slate-200 flex flex-col overflow-hidden no-print">
+                        <div className="p-4 border-b border-slate-200">
+                            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-3">Placeholders</h2>
+                            <div className="relative group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search placeholders..." 
+                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-all font-semibold"
+                                    value={placeholderSearch}
+                                    onChange={(e) => setPlaceholderSearch(e.target.value)}
+                                />
                             </div>
                         </div>
-                    </Card>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                            {placeholderCategories.map(cat => {
+                                const filteredItems = cat.items.filter(item => 
+                                    item.label.toLowerCase().includes(placeholderSearch.toLowerCase()) ||
+                                    item.value.toLowerCase().includes(placeholderSearch.toLowerCase())
+                                );
+                                if (filteredItems.length === 0) return null;
+                                return (
+                                    <div key={cat.title} className="space-y-2">
+                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-1">{cat.title}</h3>
+                                        <div className="space-y-1.5">
+                                            {filteredItems.map(item => (
+                                                <div 
+                                                    key={item.label} 
+                                                    onClick={() => insertPlaceholder(item.value)}
+                                                    className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 hover:border-blue-200 rounded-xl group cursor-pointer transition-all hover:bg-blue-50/30"
+                                                >
+                                                    <span className="text-[11px] font-bold text-slate-700">{"{{" + item.label + "}}"}</span>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleCopyText(item.label); }}
+                                                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 rounded transition-all"
+                                                        title="Copy placeholder"
+                                                    >
+                                                        <Copy size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. Middle Column: Ribbon + Rulers + A4 Editor Page */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-slate-100 relative min-h-0">
+                    
+                    {/* Ribbon Controls Container */}
+                    {!printMode && showRibbon && (
+                        <div className="bg-white border-b border-slate-200 flex flex-col no-print shadow-sm z-30 shrink-0">
+                            {/* Tabs Navigation */}
+                            <div className="flex items-center border-b border-slate-100 px-6 pt-2 bg-slate-50/50">
+                                {['File', 'Home', 'Insert', 'Layout', 'Table', 'View', 'Tools'].map(tab => (
+                                    <button 
+                                        key={tab}
+                                        onClick={() => setActiveRibbonTab(tab)}
+                                        className={`px-4 py-2 text-xs font-bold transition-all border-b-2 -mb-[1px] ${activeRibbonTab === tab ? 'text-blue-600 border-blue-600 font-extrabold' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Ribbon Body */}
+                            <div className="px-6 py-3 flex items-center gap-6 overflow-y-visible min-h-[92px] relative z-40">
+                                {activeRibbonTab === 'Home' && (
+                                    <>
+                                        {/* Clipboard Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button onClick={() => formatText('paste')} className="flex flex-col items-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all shrink-0">
+                                                <FileText size={20} className="text-slate-500" />
+                                                <span className="text-[9px] font-bold mt-1 text-slate-500">Paste</span>
+                                            </button>
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={() => formatText('cut')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Scissors size={12} /> Cut</button>
+                                                <button onClick={() => formatText('copy')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Copy size={12} /> Copy</button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Clipboard</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Undo/Redo Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button onClick={() => formatText('undo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Undo"><Undo size={16} /></button>
+                                            <button onClick={() => formatText('redo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Redo"><Redo size={16} /></button>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">History</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Font Styling Group */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <select className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px]">
+                                                        <option>Times New Roman</option>
+                                                        <option>Arial</option>
+                                                        <option>Georgia</option>
+                                                        <option>Calibri</option>
+                                                    </select>
+                                                    <select 
+                                                        onChange={(e) => formatText('size', `${e.target.value}px`)}
+                                                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                        defaultValue="16"
+                                                    >
+                                                        {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(s => (
+                                                            <option key={s} value={s}>{s}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => formatText('bold')} className="p-1 hover:bg-slate-100 rounded text-slate-700 font-extrabold text-xs" title="Bold">B</button>
+                                                    <button onClick={() => formatText('italic')} className="p-1 hover:bg-slate-100 rounded text-slate-700 italic text-xs px-2" title="Italic">I</button>
+                                                    <button onClick={() => formatText('underline')} className="p-1 hover:bg-slate-100 rounded text-slate-700 underline text-xs" title="Underline">U</button>
+                                                    <button onClick={() => formatText('strike')} className="p-1 hover:bg-slate-100 rounded text-slate-700 line-through text-xs" title="Strikethrough">S</button>
+                                                    <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                                    <button onClick={() => formatText('color', '#ef4444')} className="p-1 hover:bg-slate-100 rounded text-red-500 font-bold text-xs" title="Font Color">A</button>
+                                                </div>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Font</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Paragraph Alignment & Spacing */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1.5 justify-center">
+                                                <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded">
+                                                    <button onClick={() => formatText('align', false)} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Left"><AlignLeft size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'center')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Center"><AlignCenter size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'right')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Align Right"><AlignRight size={14} /></button>
+                                                    <button onClick={() => formatText('align', 'justify')} className="p-1 hover:bg-slate-200 rounded text-slate-600" title="Justify"><AlignJustify size={14} /></button>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button onClick={() => formatText('list', 'bullet')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Bullet List"><List size={14} /></button>
+                                                    <button onClick={() => formatText('list', 'ordered')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Numbered List"><ListOrdered size={14} /></button>
+                                                    <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                                    <button onClick={() => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left - 10) }))} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Decrease Indent"><Outdent size={14} /></button>
+                                                    <button onClick={() => setMargins(prev => ({ ...prev, left: Math.min(200, prev.left + 10) }))} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Increase Indent"><Indent size={14} /></button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTempParaConfig({
+                                                                alignment: 'left',
+                                                                leftIndent: '0',
+                                                                rightIndent: '0',
+                                                                special: specialIndent,
+                                                                specialValue: '0.5 in',
+                                                                beforeSpacing: paragraphSpacingBefore,
+                                                                afterSpacing: paragraphSpacing,
+                                                                lineSpacing: lineSpacing,
+                                                                lineSpacingAt: lineSpacing,
+                                                                dontAddSpace: false,
+                                                            });
+                                                            setShowParagraphModal(true);
+                                                        }} 
+                                                        className="p-1 hover:bg-blue-50 text-blue-600 rounded" 
+                                                        title="Paragraph Options (MS Word)"
+                                                    >
+                                                        <SlidersHorizontal size={14} />
+                                                    </button>
+                                                    <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                                    <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 p-0.5 rounded" title="Adjust Gap Step-by-Step">
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setLineSpacing(prev => Math.max(0.7, (parseFloat(prev || 1.5) - 0.1)).toFixed(1));
+                                                                setParagraphSpacing(prev => Math.max(0, (parseInt(prev || 0, 10) - 2)).toString());
+                                                                setParagraphSpacingBefore(prev => Math.max(0, (parseInt(prev || 0, 10) - 2)).toString());
+                                                            }}
+                                                            className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95"
+                                                            title="Reduce Line & Paragraph Gap (Move Lines Closer ↑)"
+                                                        >
+                                                            <ArrowUp size={13} />
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setLineSpacing(prev => Math.min(3.0, (parseFloat(prev || 1.5) + 0.1)).toFixed(1));
+                                                                setParagraphSpacing(prev => (parseInt(prev || 0, 10) + 2).toString());
+                                                            }}
+                                                            className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95"
+                                                            title="Increase Line & Paragraph Gap (Move Lines Further ↓)"
+                                                        >
+                                                            <ArrowDown size={13} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Paragraph</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Styles Presets */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <button className="border border-blue-500 bg-blue-50/20 text-blue-600 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-bold">AaBbCc</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">Normal</span>
+                                                </button>
+                                                <button className="border border-slate-200 hover:bg-slate-50 text-slate-500 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-semibold">AaBbCc</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">No Spacing</span>
+                                                </button>
+                                                <button className="border border-slate-200 hover:bg-slate-50 text-slate-500 rounded p-1.5 px-3 flex flex-col items-center">
+                                                    <span className="text-xs font-extrabold text-blue-900">Heading 1</span>
+                                                    <span className="text-[8px] font-bold uppercase mt-0.5">Title</span>
+                                                </button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Styles</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Editing Group */}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={() => alert('Search initiated')} className="flex items-center gap-1 px-3 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Search size={11} /> Find</button>
+                                                <button onClick={() => alert('Replace initiated')} className="flex items-center gap-1 px-3 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Sparkles size={11} /> Replace</button>
+                                            </div>
+                                            <div className="self-stretch flex flex-col justify-end text-center mt-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Editing</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {activeRibbonTab === 'Insert' && (
+                                    <div className="flex items-center gap-4">
+                                        {/* Picture & Media Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                            <label className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 cursor-pointer transition-all" title="Insert Picture">
+                                                <ImageIcon size={22} className="text-blue-500" />
+                                                <span className="text-[9px] font-bold mt-1">Picture</span>
+                                                <input 
+                                                    type="file" 
+                                                    className="hidden" 
+                                                    accept="image/*" 
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (event) => {
+                                                                const base64 = event.target.result;
+                                                                const editorInst = quillRef.current?.getEditor ? quillRef.current.getEditor() : null;
+                                                                if (editorInst) {
+                                                                    editorInst.chain().focus().setImage({ src: base64 }).run();
+                                                                } else if (quillRef.current?.getQuill()) {
+                                                                    quillRef.current.getQuill().insertEmbed(undefined, 'image', base64);
+                                                                }
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                            e.target.value = '';
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                            <button 
+                                                onClick={() => {
+                                                    const r = parseInt(prompt("Enter rows:", "3"), 10) || 3;
+                                                    const c = parseInt(prompt("Enter columns:", "3"), 10) || 3;
+                                                    if (quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().getModule('table').insertTable(r, c);
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Insert Table"
+                                            >
+                                                <Table size={22} className="text-emerald-500" />
+                                                <span className="text-[9px] font-bold mt-1">Table</span>
+                                            </button>
+                                        </div>
+
+                                        {/* MS Word Style Text Wrapping Dropdown Group */}
+                                        <div ref={wrapDropdownRef} className="flex items-center gap-2 border-r border-slate-200 pr-4 relative">
+                                            <div className="flex flex-col items-center">
+                                                <button 
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setShowWrapDropdown(p => !p);
+                                                    }}
+                                                    className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-700 transition-all group"
+                                                    title="Wrap Text Options (MS Word)"
+                                                >
+                                                    <WrapText size={22} className="text-indigo-600 group-hover:scale-105 transition-transform" />
+                                                    <span className="text-[9px] font-bold mt-1 flex items-center gap-1 text-slate-700">
+                                                        Wrap Text <ChevronDown size={10} className={`transition-transform duration-200 ${showWrapDropdown ? 'rotate-180' : ''}`} />
+                                                    </span>
+                                                </button>
+
+                                                {/* MS Word Floating Dropdown Menu */}
+                                                {showWrapDropdown && (
+                                                    <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 shadow-xl rounded-xl py-1.5 z-[500] text-slate-700 text-xs font-sans">
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'inline'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font.medium"
+                                                        >
+                                                            <span>📄</span> In Line with Text
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'square'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>🔳</span> Square
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'tight'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>📐</span> Tight
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'through'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>↔️</span> Through
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'top-bottom'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>⬆️</span> Top and Bottom
+                                                        </button>
+                                                        <div className="my-1 border-t border-slate-100"></div>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'behind'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>📑</span> Behind Text
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { quillRef.current?.getQuill()?.format('imageWrap', 'front'); setShowWrapDropdown(false); }}
+                                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium"
+                                                        >
+                                                            <span>🖼️</span> In Front of Text
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Picture Position & Nudge Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <Move size={10} /> Pixel Move
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: -2, dy: 0 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Left (2px)"
+                                                    >
+                                                        <ArrowLeft size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 2, dy: 0 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Right (2px)"
+                                                    >
+                                                        <ArrowRight size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 0, dy: -2 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Up (2px)"
+                                                    >
+                                                        <ArrowUp size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageNudge', { dx: 0, dy: 2 })} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 rounded"
+                                                        title="Nudge Down (2px)"
+                                                    >
+                                                        <ArrowDown size={12} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => quillRef.current?.getQuill()?.format('imageResetPos')} 
+                                                        className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 rounded text-[9px] font-bold flex items-center gap-1"
+                                                        title="Reset Position"
+                                                    >
+                                                        <RotateCcw size={12} /> Reset
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Links & Extras */}
+                                        <div className="flex items-center gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    const url = prompt("Enter URL:");
+                                                    if (url && quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().insertText(0, url);
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Hyperlink"
+                                            >
+                                                <LinkIcon size={22} className="text-purple-500" />
+                                                <span className="text-[9px] font-bold mt-1">Hyperlink</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if (quillRef.current?.getQuill()) {
+                                                        quillRef.current.getQuill().insertText(0, '---');
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                                title="Horizontal Line"
+                                            >
+                                                <Minus size={22} className="text-slate-400" />
+                                                <span className="text-[9px] font-bold mt-1">Line</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeRibbonTab === 'Layout' && (
+                                    <div className="flex items-center gap-6">
+                                        {/* Orientation Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button 
+                                                type="button"
+                                                onClick={() => alert("Orientation changed to Portrait")} 
+                                                className="flex flex-col items-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all"
+                                            >
+                                                <Globe size={20} className="text-slate-500" />
+                                                <span className="text-[9px] font-bold mt-1">Portrait</span>
+                                            </button>
+                                        </div>
+                                        {/* Paper Size Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Size</span>
+                                                <select 
+                                                    value={paperSize} 
+                                                    onChange={(e) => setPaperSize(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px] cursor-pointer"
+                                                >
+                                                    <option value="A4">A4 (210 x 297 mm)</option>
+                                                    <option value="Letter">Letter (8.5 x 11 in)</option>
+                                                    <option value="Legal">Legal (8.5 x 14 in)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        {/* Page Margins Group */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Top Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.top} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, top: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bottom Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.bottom ?? 50} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, bottom: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Left Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.left} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, left: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Right Margin (px)</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={margins.right} 
+                                                    onChange={(e) => setMargins(prev => ({ ...prev, right: parseInt(e.target.value) || 0 }))}
+                                                    className="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Paragraph Spacing & Formatting Group */}
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Line Spacing</span>
+                                                <select 
+                                                    value={lineSpacing} 
+                                                    onChange={(e) => setLineSpacing(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                                >
+                                                    <option value="1.0">1.0 Single</option>
+                                                    <option value="1.15">1.15</option>
+                                                    <option value="1.25">1.25</option>
+                                                    <option value="1.5">1.5 1.5 Lines</option>
+                                                    <option value="2.0">2.0 Double</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Space Before (pt)</span>
+                                                <select 
+                                                    value={paragraphSpacingBefore} 
+                                                    onChange={(e) => setParagraphSpacingBefore(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                                >
+                                                    <option value="0">0 pt</option>
+                                                    <option value="4">4 pt</option>
+                                                    <option value="6">6 pt</option>
+                                                    <option value="8">8 pt</option>
+                                                    <option value="12">12 pt</option>
+                                                    <option value="18">18 pt</option>
+                                                    <option value="24">24 pt</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Space After (pt)</span>
+                                                <select 
+                                                    value={paragraphSpacing} 
+                                                    onChange={(e) => setParagraphSpacing(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                                >
+                                                    <option value="0">0 pt</option>
+                                                    <option value="4">4 pt</option>
+                                                    <option value="6">6 pt</option>
+                                                    <option value="8">8 pt</option>
+                                                    <option value="12">12 pt</option>
+                                                    <option value="18">18 pt</option>
+                                                    <option value="24">24 pt</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Special Indent</span>
+                                                <select 
+                                                    value={specialIndent} 
+                                                    onChange={(e) => setSpecialIndent(e.target.value)}
+                                                    className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                                >
+                                                    <option value="none">(none)</option>
+                                                    <option value="first-line">First Line</option>
+                                                    <option value="hanging">Hanging</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Adjust Gap</span>
+                                                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setLineSpacing(prev => Math.max(0.7, (parseFloat(prev || 1.5) - 0.1)).toFixed(1));
+                                                            setParagraphSpacing(prev => Math.max(0, (parseInt(prev || 0, 10) - 2)).toString());
+                                                            setParagraphSpacingBefore(prev => Math.max(0, (parseInt(prev || 0, 10) - 2)).toString());
+                                                        }}
+                                                        className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95 flex items-center gap-1 text-[10px] font-bold"
+                                                        title="Reduce Line & Paragraph Gap (Move Lines Closer ↑)"
+                                                    >
+                                                        <ArrowUp size={13} /> Tighten
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setLineSpacing(prev => Math.min(3.0, (parseFloat(prev || 1.5) + 0.1)).toFixed(1));
+                                                            setParagraphSpacing(prev => (parseInt(prev || 0, 10) + 2).toString());
+                                                        }}
+                                                        className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95 flex items-center gap-1 text-[10px] font-bold"
+                                                        title="Increase Line & Paragraph Gap (Move Lines Further ↓)"
+                                                    >
+                                                        <ArrowDown size={13} /> Expand
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={() => {
+                                                    setTempParaConfig({
+                                                        alignment: 'left',
+                                                        leftIndent: '0',
+                                                        rightIndent: '0',
+                                                        special: specialIndent,
+                                                        specialValue: '0.5 in',
+                                                        beforeSpacing: paragraphSpacingBefore,
+                                                        afterSpacing: paragraphSpacing,
+                                                        lineSpacing: lineSpacing,
+                                                        lineSpacingAt: lineSpacing,
+                                                        dontAddSpace: false,
+                                                    });
+                                                    setShowParagraphModal(true);
+                                                }}
+                                                className="mt-4 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-bold flex items-center gap-1"
+                                                title="Paragraph Formatting Options (MS Word)"
+                                            >
+                                                <SlidersHorizontal size={13} /> Paragraph Dialog
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeRibbonTab === 'File' && (
+                                    <div className="flex items-center gap-6">
+                                        {/* Save Group */}
+                                        <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                            <button 
+                                                onClick={handleSave} 
+                                                disabled={saving}
+                                                className="flex flex-col items-center p-2 rounded-xl hover:bg-blue-50 text-blue-600 transition-all cursor-pointer"
+                                                title="Save Template"
+                                            >
+                                                <Save size={22} className="text-blue-600" />
+                                                <span className="text-[9px] font-bold mt-1">{saving ? 'Saving...' : 'Save Template'}</span>
+                                            </button>
+                                        </div>
+
+                                        {/* Export Group */}
+                                        <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Export Options</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button 
+                                                        onClick={handleExportPDF}
+                                                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                                        title="Export as PDF"
+                                                    >
+                                                        <FileText size={14} className="text-rose-600" /> Export PDF
+                                                    </button>
+                                                    <button 
+                                                        onClick={handleExportWord}
+                                                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                                        title="Export as MS Word / DOCX"
+                                                    >
+                                                        <FileText size={14} className="text-blue-600" /> Export DOCX
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeRibbonTab !== 'Home' && activeRibbonTab !== 'Insert' && activeRibbonTab !== 'Layout' && activeRibbonTab !== 'File' && (
+                                    <div className="flex items-center justify-center w-full py-2">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider italic">Ribbon tools for {activeRibbonTab} tab loaded</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Ruler Guide */}
+                    {!printMode && (
+                        <div className="bg-white border-b border-slate-200 h-6 flex items-center px-4 relative select-none no-print shrink-0 z-20">
+                            <div 
+                                style={{ width: paperSizes[paperSize]?.width || '794px' }}
+                                className="absolute left-[calc(50%-397px)] h-full flex items-end pb-1 border-x border-slate-200"
+                            >
+                                {/* Horizontal scale values */}
+                                {[...Array(17).keys()].map(i => (
+                                    <div key={i} className="flex-1 flex flex-col items-center justify-end relative h-full">
+                                        <span className="text-[8px] font-extrabold text-slate-400 leading-none">{i}</span>
+                                        <div className="w-[1px] h-1.5 bg-slate-300 absolute bottom-0"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scrollable Document Container */}
+                    <div className="flex-1 overflow-y-auto p-8 flex justify-center items-start custom-scrollbar min-h-0 h-full relative">
+                        <div 
+                            className={`bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200 relative flex flex-col ${printMode ? 'print:shadow-none print:border-none print:p-0' : ''}`}
+                            style={{ 
+                                width: paperSizes[paperSize]?.width || '794px',
+                                minHeight: paperSizes[paperSize]?.height || '1123px',
+                                zoom: zoomValue / 100 
+                            }}
+                        >
+                            {/* Header Guide */}
+                            {!printMode && (
+                                <div className="absolute top-2 left-6 right-6 border-b border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Header</div>
+                            )}
+
+                            {/* Editor Body */}
+                            <div className="flex-1 p-0">
+                                <RichTextEditor
+                                    key={(activeTemplate?.template_id || 'new') + '_' + (printMode ? 'preview' : 'edit')}
+                                    ref={quillRef}
+                                    id="template-editor"
+                                    value={printMode ? getProcessedHTML(activeTemplate?.body_text || '') : (activeTemplate?.body_text || '')}
+                                    onChange={(html) => {
+                                        if (!printMode) {
+                                            setActiveTemplate(p => p ? { ...p, body_text: html } : p);
+                                        }
+                                    }}
+                                    margins={margins}
+                                    lineSpacing={lineSpacing}
+                                    paragraphSpacing={paragraphSpacing}
+                                    paragraphSpacingBefore={paragraphSpacingBefore}
+                                    specialIndent={specialIndent}
+                                    wordWrap={wordWrap}
+                                    printMode={printMode}
+                                    hideToolbar={true}
+                                    onWordWrapChange={setWordWrap}
+                                    onLineSpacingChange={setLineSpacing}
+                                    onParagraphSpacingChange={setParagraphSpacing}
+                                    editorContainerClassName="min-h-[1123px]"
+                                    style={{
+                                        width: paperSizes[paperSize]?.width || '794px',
+                                        minWidth: paperSizes[paperSize]?.width || '794px',
+                                        maxWidth: paperSizes[paperSize]?.width || '794px'
+                                    }}
+                                    className="outline-none prose prose-slate max-w-none text-slate-800 focus:ring-0 transition-all cursor-text mx-auto custom-editor-style ql-editor-wrapper"
+                                />
+                            </div>
+
+                            {/* Footer Guide */}
+                            {!printMode && (
+                                <div className="absolute bottom-2 left-6 right-6 border-t border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Footer</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Bottom Status Bar */}
+                    {!printMode && (
+                        <div className="bg-white border-t border-slate-200 h-9 px-6 flex items-center justify-between text-xs text-slate-500 font-semibold no-print z-20 shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <span>Page 1 of 1</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>Words: {((activeTemplate?.body_text || '').replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length) || 0}</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>Characters: {((activeTemplate?.body_text || '').replace(/<[^>]*>/g, '').length) || 0}</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span>English (India)</span>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setZoomValue(z => Math.max(30, z - 10))} className="p-1 hover:bg-slate-100 rounded text-slate-600">-</button>
+                                <span>{zoomValue}%</span>
+                                <button onClick={() => setZoomValue(z => Math.min(150, z + 10))} className="p-1 hover:bg-slate-100 rounded text-slate-600">+</button>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <button onClick={() => setZoomValue(100)} className="hover:text-blue-600 transition-colors uppercase text-[9px] font-extrabold">Reset</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Right Side: Field & Column Manager */}
-                {!printMode && sidebarOpen && (
-                    <div className="lg:col-span-4 space-y-8 no-print">
-                        <Card className="p-8 border-slate-200 shadow-xl bg-slate-900 text-white">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-600 rounded-lg"><Database size={18} /></div>
-                                <h3 className="text-xs font-black uppercase tracking-widest italic">Protocol Registry</h3>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-emerald-400 shadow-lg" title="View All Variables"><Eye size={16} /></button>
-                                <button onClick={() => window.open('/global-variables', '_blank')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400 shadow-lg" title="Add New Variable"><Plus size={16} /></button>
-                                <button onClick={() => setSidebarOpen(false)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-rose-400 shadow-lg" title="Minimize Registry"><X size={16} /></button>
-                            </div>
-                        </div>
-
-                        <div className="mb-6 relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" size={14} />
-                            <input 
-                                type="text"
-                                placeholder="SEARCH_PROTOCOLS..."
-                                className="w-full pl-9 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] text-white placeholder:text-slate-500 font-black tracking-widest outline-none focus:border-emerald-500/50 focus:bg-white/10 transition-all shadow-inner uppercase"
-                                value={protocolSearchQuery}
-                                onChange={(e) => setProtocolSearchQuery(e.target.value)}
-                            />
-                        </div>
+                {/* 3. Right Sidebar: DYNAMIC TABLES & VARIABLES */}
+                {!printMode && showRightPanel && (
+                    <div className="w-[300px] bg-white border-l border-slate-200 flex flex-col overflow-hidden no-print">
                         
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mb-12">
-                            {staticSocialVars.filter(v => 
-                                v.name.toLowerCase().includes(protocolSearchQuery.toLowerCase()) ||
-                                v.label.toLowerCase().includes(protocolSearchQuery.toLowerCase())
-                            ).map(v => (
-                                <div key={v.name} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-blue-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(v.name)}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></div>
-                                        <div>
-                                            <p className="text-[10px] font-black italic text-blue-400">{"{" + v.name + "}"}</p>
-                                            <p className="text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate max-w-[150px]">{v.label}</p>
-                                        </div>
-                                    </div>
-                                    <div className="opacity-0 group-hover:opacity-100 p-1.5 text-white/20"><Plus size={14} /></div>
-                                </div>
-                            ))}
-
-                            {globalVars.length > 0 && (
-                                <div className="border-t border-white/10 my-4 pt-4">
-                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">Custom Protocol Variables</p>
-                                </div>
-                            )}
-
-                            {globalVars.filter(v => 
-                                v.variable_name.toLowerCase().includes(protocolSearchQuery.toLowerCase()) || 
-                                (v.variable_value && v.variable_value.toLowerCase().includes(protocolSearchQuery.toLowerCase()))
-                            ).map(v => (
-                                <div key={v.variable_id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-emerald-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(v.variable_name)}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></div>
-                                            <div>
-                                                <p className="text-[10px] font-black italic text-emerald-400">{"{" + v.variable_name + "}"}</p>
-                                                <p className="text-[8px] text-slate-300 font-bold mt-1 uppercase truncate max-w-[150px]">Value: {v.variable_value}</p>
-                                            </div>
-                                    </div>
-                                    <div className="opacity-0 group-hover:opacity-100 p-1.5 text-white/20"><Plus size={14} /></div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="flex items-center justify-between mb-8">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-600 rounded-lg"><Type size={18} /></div>
-                                <h3 className="text-xs font-black uppercase tracking-widest italic">Template Fields</h3>
-                            </div>
-                            <button onClick={() => openModal('field')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-blue-400"><Plus size={16} /></button>
-                        </div>
-                        
-                        <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
-                            {(!activeTemplate?.json_data?.fields || activeTemplate.json_data.fields.length === 0) ? (
-                                <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No custom fields defined</p>
-                            ) : activeTemplate.json_data.fields.map(field => (
-                                <div key={field.name} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-blue-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(field.name)}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></div>
-                                            <div>
-                                                <p className="text-[10px] font-black italic text-blue-400">{"{" + field.name + "}"}</p>
-                                                <p className="text-[8px] text-slate-300 font-bold mt-1 uppercase truncate max-w-[150px]">Value: {field.defaultValue || 'DYN_DATA'}</p>
-                                            </div>
-                                    </div>
-                                    <button onClick={(e) => { e.stopPropagation(); removeField(field.name); }} className="opacity-0 group-hover:opacity-100 p-1.5 hover:text-rose-400 transition-all"><Trash2 size={14} /></button>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-12">
-                            <div className="flex items-center justify-between mb-8">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-emerald-600 rounded-lg"><Table size={18} /></div>
-                                    <h3 className="text-xs font-black uppercase tracking-widest italic">Table Columns</h3>
-                                </div>
-                                <button onClick={() => openModal('column')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-emerald-400"><Plus size={16} /></button>
+                        {/* Dynamic Tables Section */}
+                        <div className="p-4 border-b border-slate-200">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Dynamic Tables</h3>
+                                <button 
+                                    onClick={() => {
+                                        const tblName = prompt("Enter new table placeholder name:", "New_Table");
+                                        if (tblName) {
+                                            setActiveTemplate(prev => ({
+                                                ...prev,
+                                                json_data: {
+                                                    ...prev.json_data,
+                                                    table_columns: [...(prev.json_data.table_columns || []), tblName]
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-black rounded-lg transition-all"
+                                >
+                                    <Plus size={12} /> Add Table
+                                </button>
                             </div>
 
-                            <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
-                                {(!activeTemplate?.json_data?.table_columns || activeTemplate.json_data.table_columns.length === 0) ? (
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase italic text-center py-6 border border-dashed border-white/10 rounded-xl">No dynamic columns defined</p>
-                                ) : activeTemplate.json_data.table_columns.map(col => (
-                                    <div key={col} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 group hover:border-emerald-500/50 transition-all cursor-pointer" onClick={() => insertPlaceholder(col)}>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></div>
-                                            <p className="text-[10px] font-black italic text-emerald-400">{"{" + col + "}"}</p>
+                            <div className="space-y-4">
+                                {dynamicTablesList.map(table => (
+                                    <div key={table.title} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                        <div 
+                                            onClick={() => insertPlaceholder(table.placeholder)}
+                                            className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-blue-50/20 group"
+                                        >
+                                            <span className="text-[10px] font-black text-slate-700 uppercase">{table.title}</span>
+                                            <div className="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-all">
+                                                <Edit3 size={11} className="text-slate-500" />
+                                                <Trash2 size={11} className="text-slate-500" />
+                                            </div>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); removeColumn(col); }} className="opacity-0 group-hover:opacity-100 p-1.5 hover:text-rose-400 transition-all"><Trash2 size={14} /></button>
+                                        <div className="p-2 overflow-x-auto bg-white">
+                                            <table className="w-full text-left text-[9px] border-collapse min-w-[200px]">
+                                                <thead>
+                                                    <tr className="bg-slate-50 text-slate-500 font-extrabold border-b border-slate-200">
+                                                        {table.headers.map(h => <th key={h} className="p-1.5 border border-slate-100">{h}</th>)}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr className="text-slate-700 font-semibold bg-white">
+                                                        {table.cols.map((c, i) => <td key={i} className="p-1.5 border border-slate-100 font-bold">{c}</td>)}
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        <div className="mt-12 p-5 bg-blue-600/10 rounded-2xl border border-blue-600/20">
-                            <div className="flex gap-4">
-                                <AlertCircle size={18} className="text-blue-400 shrink-0" />
-                                <p className="text-[9px] font-bold text-slate-300 leading-relaxed uppercase tracking-wider">
-                                    Click on a field or column placeholder to insert it into the editor at the current cursor position.
-                                </p>
+                        {/* Variables Section */}
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-slate-200">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-3">Variables</h3>
+                                <div className="relative group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={14} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search variables..." 
+                                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-all font-semibold"
+                                        value={variableSearch}
+                                        onChange={(e) => setVariableSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar bg-slate-50/30">
+                                {variablesList.filter(v => 
+                                    v.label.toLowerCase().includes(variableSearch.toLowerCase()) ||
+                                    v.value.toLowerCase().includes(variableSearch.toLowerCase())
+                                ).map(variable => (
+                                    <div 
+                                        key={variable.label}
+                                        onClick={() => insertPlaceholder(variable.value)}
+                                        className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl group cursor-pointer hover:border-blue-300 transition-all"
+                                    >
+                                        <div>
+                                            <p className="text-[11px] font-black text-slate-700">{"{{" + variable.label + "}}"}</p>
+                                            <p className="text-[9px] text-slate-400 font-semibold mt-1">{variable.preview}</p>
+                                        </div>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleCopyText(variable.label); }}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-600 rounded transition-all"
+                                            title="Copy variable"
+                                        >
+                                            <Copy size={13} />
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    </Card>
                     </div>
                 )}
             </div>
@@ -930,22 +1709,271 @@ const TemplatesConfig = () => {
                         </Card>
                     </motion.div>
                 )}
+
+                {showParagraphModal && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 font-sans select-none"
+                    >
+                        <div className="w-[540px] bg-[#f0f0f0] border border-[#707070] shadow-2xl rounded text-slate-800 text-xs overflow-hidden flex flex-col">
+                            {/* Title Bar */}
+                            <div className="bg-[#f0f0f0] px-3 py-1.5 flex justify-between items-center border-b border-[#d9d9d9]">
+                                <span className="text-[12px] font-semibold text-slate-800">Paragraph</span>
+                                <button 
+                                    onClick={() => setShowParagraphModal(false)}
+                                    className="text-slate-500 hover:bg-rose-500 hover:text-white px-2 py-0.5 rounded text-xs"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            {/* Content Container */}
+                            <div className="p-4 space-y-4 bg-[#f0f0f0]">
+                                {/* Tabs */}
+                                <div className="flex border-b border-[#c0c0c0] gap-1">
+                                    <button 
+                                        onClick={() => setParaDialogActiveTab('indents')}
+                                        className={`px-3 py-1 text-xs border-t border-x rounded-t -mb-[1px] ${paraDialogActiveTab === 'indents' ? 'bg-[#f0f0f0] border-[#c0c0c0] font-semibold text-slate-900' : 'bg-[#e1e1e1] border-transparent text-slate-600 hover:bg-[#e8e8e8]'}`}
+                                    >
+                                        Indents and Spacing
+                                    </button>
+                                    <button 
+                                        onClick={() => setParaDialogActiveTab('breaks')}
+                                        className={`px-3 py-1 text-xs border-t border-x rounded-t -mb-[1px] ${paraDialogActiveTab === 'breaks' ? 'bg-[#f0f0f0] border-[#c0c0c0] font-semibold text-slate-900' : 'bg-[#e1e1e1] border-transparent text-slate-600 hover:bg-[#e8e8e8]'}`}
+                                    >
+                                        Line and Page Breaks
+                                    </button>
+                                </div>
+
+                                {paraDialogActiveTab === 'indents' && (
+                                    <div className="space-y-4 pt-1">
+                                        {/* General Section */}
+                                        <fieldset className="border border-[#d0d0d0] p-3 rounded">
+                                            <legend className="text-[11px] text-slate-600 px-1 font-semibold">General</legend>
+                                            <div className="grid grid-cols-2 gap-4 items-center">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[11px]">Alignment:</label>
+                                                    <select 
+                                                        value={tempParaConfig.alignment}
+                                                        onChange={(e) => setTempParaConfig({ ...tempParaConfig, alignment: e.target.value })}
+                                                        className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-28 outline-none"
+                                                    >
+                                                        <option value="left">Left</option>
+                                                        <option value="center">Center</option>
+                                                        <option value="right">Right</option>
+                                                        <option value="justify">Justified</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[11px]">Outline level:</label>
+                                                    <select className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-28 outline-none">
+                                                        <option>Body Text</option>
+                                                        <option>Level 1</option>
+                                                        <option>Level 2</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </fieldset>
+
+                                        {/* Indentation Section */}
+                                        <fieldset className="border border-[#d0d0d0] p-3 rounded">
+                                            <legend className="text-[11px] text-slate-600 px-1 font-semibold">Indentation</legend>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">Left:</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={tempParaConfig.leftIndent + ' cm'}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, leftIndent: e.target.value.replace(/[^0-9.]/g, '') })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-0.5 text-[11px] w-24 text-right outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">Right:</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={tempParaConfig.rightIndent + ' cm'}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, rightIndent: e.target.value.replace(/[^0-9.]/g, '') })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-0.5 text-[11px] w-24 text-right outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">Special:</label>
+                                                        <select 
+                                                            value={tempParaConfig.special}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, special: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-24 outline-none"
+                                                        >
+                                                            <option value="none">(none)</option>
+                                                            <option value="first-line">First line</option>
+                                                            <option value="hanging">Hanging</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">By:</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={tempParaConfig.specialValue}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, specialValue: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-0.5 text-[11px] w-24 text-right outline-none"
+                                                            disabled={tempParaConfig.special === 'none'}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </fieldset>
+
+                                        {/* Spacing Section */}
+                                        <fieldset className="border border-[#d0d0d0] p-3 rounded">
+                                            <legend className="text-[11px] text-slate-600 px-1 font-semibold">Spacing</legend>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">Before:</label>
+                                                        <select 
+                                                            value={tempParaConfig.beforeSpacing}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, beforeSpacing: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-24 outline-none"
+                                                        >
+                                                            <option value="0">0 pt</option>
+                                                            <option value="4">4 pt</option>
+                                                            <option value="6">6 pt</option>
+                                                            <option value="8">8 pt</option>
+                                                            <option value="12">12 pt</option>
+                                                            <option value="18">18 pt</option>
+                                                            <option value="24">24 pt</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">After:</label>
+                                                        <select 
+                                                            value={tempParaConfig.afterSpacing}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, afterSpacing: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-24 outline-none"
+                                                        >
+                                                            <option value="0">0 pt</option>
+                                                            <option value="4">4 pt</option>
+                                                            <option value="6">6 pt</option>
+                                                            <option value="8">8 pt</option>
+                                                            <option value="12">12 pt</option>
+                                                            <option value="18">18 pt</option>
+                                                            <option value="24">24 pt</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">Line spacing:</label>
+                                                        <select 
+                                                            value={tempParaConfig.lineSpacing}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, lineSpacing: e.target.value, lineSpacingAt: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-1 text-[11px] w-24 outline-none"
+                                                        >
+                                                            <option value="1.0">Single</option>
+                                                            <option value="1.15">1.15</option>
+                                                            <option value="1.5">1.5 lines</option>
+                                                            <option value="2.0">Double</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[11px]">At:</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={tempParaConfig.lineSpacingAt}
+                                                            onChange={(e) => setTempParaConfig({ ...tempParaConfig, lineSpacingAt: e.target.value })}
+                                                            className="bg-white border border-[#a0a0a0] rounded px-2 py-0.5 text-[11px] w-24 text-right outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </fieldset>
+
+                                        {/* Live Preview Section */}
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-semibold text-slate-700">Preview</label>
+                                            <div className="border border-[#b0b0b0] bg-white p-3 rounded h-28 overflow-hidden text-[9px] text-slate-800 leading-tight space-y-1">
+                                                <p className="text-slate-400">Previous Paragraph Previous Paragraph Previous Paragraph Previous Paragraph</p>
+                                                <p style={{
+                                                    textAlign: tempParaConfig.alignment,
+                                                    lineHeight: tempParaConfig.lineSpacing,
+                                                    marginTop: `${tempParaConfig.beforeSpacing / 2}px`,
+                                                    marginBottom: `${tempParaConfig.afterSpacing / 2}px`,
+                                                    textIndent: tempParaConfig.special === 'first-line' ? '16px' : '0px',
+                                                    paddingLeft: tempParaConfig.special === 'hanging' ? '16px' : '0px',
+                                                }} className="font-semibold text-slate-900 border-x border-blue-200 bg-blue-50/30 p-1">
+                                                    Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text Sample Text
+                                                </p>
+                                                <p className="text-slate-400">Following Paragraph Following Paragraph Following Paragraph Following Paragraph</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {paraDialogActiveTab === 'breaks' && (
+                                    <div className="p-4 text-center text-slate-500 space-y-2">
+                                        <p className="text-xs font-semibold">Pagination and Line Break rules are managed by template printer layout engine.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer Buttons */}
+                            <div className="bg-[#f0f0f0] px-4 py-3 border-t border-[#d9d9d9] flex justify-between items-center">
+                                <button className="px-3 py-1 bg-[#e1e1e1] hover:bg-[#d8d8d8] border border-[#adadad] rounded text-xs">Tabs...</button>
+                                <div className="flex gap-2">
+                                    <button className="px-3 py-1 bg-[#e1e1e1] hover:bg-[#d8d8d8] border border-[#adadad] rounded text-xs">Set As Default</button>
+                                    <button 
+                                        onClick={() => {
+                                            setLineSpacing(tempParaConfig.lineSpacing);
+                                            setParagraphSpacingBefore(tempParaConfig.beforeSpacing);
+                                            setParagraphSpacing(tempParaConfig.afterSpacing);
+                                            setSpecialIndent(tempParaConfig.special);
+                                            if (tempParaConfig.alignment && quillRef.current?.getQuill()) {
+                                                quillRef.current.getQuill().format('align', tempParaConfig.alignment === 'left' ? false : tempParaConfig.alignment);
+                                            }
+                                            setShowParagraphModal(false);
+                                        }}
+                                        className="px-4 py-1 bg-[#0078d4] hover:bg-[#106ebe] text-white rounded text-xs font-semibold"
+                                    >
+                                        OK
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowParagraphModal(false)}
+                                        className="px-4 py-1 bg-[#e1e1e1] hover:bg-[#d8d8d8] border border-[#adadad] rounded text-xs"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
             </AnimatePresence>
 
             <style>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+                .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
                 [contenteditable] { caret-color: #3b82f6; }
-                .prose p { margin-bottom: 1em; }
-                .prose img { 
+                .prose :not(.ProseMirror) img { 
                     display: block; 
                     max-width: 100%; 
                     height: auto; 
                     border-radius: 8px; 
                     margin: 15px 0;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                }
+                .ProseMirror img {
+                    max-width: 100%;
+                    height: auto;
+                    margin: 0 !important;
+                    display: block !important;
+                    position: static !important;
                 }
                 .ql-editor table {
                     border-collapse: collapse;
@@ -971,35 +1999,43 @@ const TemplatesConfig = () => {
                     padding: 8px 12px;
                     min-width: 50px;
                 }
-                /* Quill overrides to preserve A4 page layout */
                 .ql-container.ql-snow {
                     border: none !important;
                     font-family: inherit;
                     font-size: inherit;
                 }
                 .ql-editor {
-                    min-height: 1123px !important;
+                    min-height: ${paperSizes[paperSize]?.height || '1123px'} !important;
                     outline: none;
                 }
-                #quill-toolbar button.ql-active {
-                    color: #34d399 !important; /* emerald-400 */
-                    background-color: rgba(255, 255, 255, 0.1);
-                }
                 @media print {
+                    @page {
+                        size: ${paperSize === 'Legal' ? 'legal' : paperSize === 'Letter' ? 'letter' : 'a4'};
+                        margin: 0;
+                    }
                     .no-print { display: none !important; }
                     body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    .prose { max-width: 100% !important; }
                     main { margin: 0 !important; padding: 0 !important; }
-                    aside { display: none !important; }
-                    header { display: none !important; }
-                    .bg-white.rounded-3xl.outline-none { 
-                        padding-top: ${margins.top}px !important; 
-                        padding-left: ${margins.left}px !important; 
-                        padding-right: ${margins.right}px !important; 
+                    aside, header, nav { display: none !important; }
+                    .ql-editor, .ProseMirror {
+                        padding-top: ${margins.top || 50}px !important;
+                        padding-left: ${margins.left || 50}px !important;
+                        padding-right: ${margins.right || 50}px !important;
+                        line-height: ${lineSpacing || '1.5'} !important;
                         border: none !important;
                         box-shadow: none !important;
-                        min-height: auto !important;
                     }
+                    .ql-editor p, .ProseMirror p, .ql-editor h1, .ProseMirror h1, .ql-editor h2, .ProseMirror h2, .ql-editor h3, .ProseMirror h3 {
+                        margin-top: ${paragraphSpacingBefore || 0}px !important;
+                        margin-bottom: ${paragraphSpacing || 0}px !important;
+                    }
+                    .ql-editor img, .ProseMirror img, img {
+                        display: inline-block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        max-width: 100% !important;
+                    }
+                    [data-resize-handle], .move-handle { display: none !important; }
                 }
             `}</style>
         </div>

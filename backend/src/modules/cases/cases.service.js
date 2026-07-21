@@ -51,9 +51,15 @@ const CasesService = {
 
         const combineDateTime = (dateStr, timeStr) => {
             if (!dateStr) return null;
-            const clean = dateStr.trim();
-            if (!timeStr) return new Date(clean);
-            return new Date(`${clean}T${timeStr.trim()}`);
+            let cleanDate = dateStr.trim();
+            // Convert DD/MM/YYYY to YYYY-MM-DD
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanDate)) {
+                const [dd, mm, yyyy] = cleanDate.split('/');
+                cleanDate = `${yyyy}-${mm}-${dd}`;
+            }
+            // Validate the date
+            const parsed = new Date(timeStr ? `${cleanDate}T${timeStr.trim()}` : cleanDate);
+            return isNaN(parsed.getTime()) ? null : parsed;
         };
 
         const toInt = (v) => {
@@ -168,15 +174,9 @@ const CasesService = {
             const caseId = await CasesRepository.insertCase(transaction, {
                 ...data,
                 created_by: user.user_id,
+                police_station_id: user.police_station_id || data.police_station_id || data.police_station,
+                district_id: data.district_id || data.district,
             });
-
-            // 2. Map to Police Station
-            if (user.police_station_id) {
-                await CasesRepository.insertStationMapping(transaction, {
-                    caseId,
-                    policeStationId: user.police_station_id,
-                });
-            }
 
             // 3. Insert Victim
             await CasesRepository.insertVictim(transaction, {
@@ -269,7 +269,11 @@ const CasesService = {
 
             return { success: true, message: 'Case and all associated data permanently deleted' };
         } catch (error) {
-            if (transaction.isActive) await transaction.rollback();
+            try {
+                await transaction.rollback();
+            } catch (rollbackErr) {
+                // Ignore rollback errors if transaction was not started or already rolled back
+            }
             logger.error(`[CASES] Delete Error for Case ${caseId}:`, error);
             throw new AppError(error.message || 'Failed to delete case', 500);
         }
@@ -669,7 +673,8 @@ const CasesService = {
         let caseData = {};
         if (caseId) {
             try {
-                caseData = await CasesRepository.getCaseById(caseId) || {};
+                const caseResult = await CasesRepository.getById(caseId) || {};
+                caseData = caseResult.case || {};
             } catch (err) {
                 logger.error('[CASES] Failed to fetch case data for email templates', err);
             }

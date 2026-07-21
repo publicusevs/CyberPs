@@ -21,6 +21,7 @@ if exist "%~dp0.env" (
 if not defined BACKEND_PORT set BACKEND_PORT=5174
 if not defined FRONTEND_PORT set FRONTEND_PORT=5173
 if not defined RAMAIL_PORT set RAMAIL_PORT=8000
+set PYTHON_EXE=C:\Users\HP\AppData\Local\Programs\Python\Python314\python.exe
 
 :: ── Pre-flight checks ───────────────────────────────────────────
 echo  [1/5] Checking Node.js...
@@ -62,11 +63,11 @@ if %errorlevel% neq 0 (
 cd ..
 
 echo  [5/5] Checking Ramail Python dependencies...
-python -c "import fastapi, uvicorn, exchangelib, pdfplumber, pytesseract, openai, sqlalchemy" >nul 2>&1
+"%PYTHON_EXE%" -c "import fastapi, uvicorn" >nul 2>&1
 if %errorlevel% neq 0 (
     echo         Installing Ramail Python packages, please wait...
     cd ramail
-    pip install -r requirements.txt
+    "%PYTHON_EXE%" -m pip install -r requirements.txt
     cd ..
 ) else (
     echo         Ramail Python packages verified.
@@ -81,7 +82,7 @@ start "CyberPS Backend  ^| Port !BACKEND_PORT!" cmd /k "cd /d %~dp0backend && co
 timeout /t 2 /nobreak >nul
 start "CyberPS Frontend ^| Port !FRONTEND_PORT!" cmd /k "cd /d %~dp0frontend && color 0B && echo  [FRONTEND] Starting... && npm run dev"
 timeout /t 2 /nobreak >nul
-start "CyberPS Ramail API ^| Port !RAMAIL_PORT!" cmd /k "cd /d %~dp0ramail && color 0C && echo  [RAMAIL] Starting API Service... && python main.py api"
+start "CyberPS Ramail API ^| Port !RAMAIL_PORT!" cmd /k "cd /d %~dp0ramail && color 0C && echo  [RAMAIL] Starting API Service... && "%PYTHON_EXE%" main.py api"
 
 :: ── Status output ─────────────────────────────────────────────────
 echo.

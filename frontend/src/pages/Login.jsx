@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Lock, User, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Shield, Lock, User, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, Download, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { getBackendUrl } from '../services/api';
+import { checkForUpdates, startDownload, getDownloadProgress, installUpdate, formatBytes } from '../services/updateService';
 
 const Login = () => {
     const [identifier, setIdentifier] = useState('');
@@ -16,6 +17,12 @@ const Login = () => {
     const navigate = useNavigate();
 
     const [status, setStatus] = useState({ database: false, internet: false });
+    
+    // Auto-update states
+    const [updateStatus, setUpdateStatus] = useState('idle'); // idle | checking | downloading | ready | installing | error
+    const [updateProgress, setUpdateProgress] = useState({ percent: 0, downloaded: 0, total: 0 });
+    const [newVersion, setNewVersion] = useState('');
+    const [updateError, setUpdateError] = useState('');
 
     React.useEffect(() => {
         const checkStatus = async () => {
@@ -33,6 +40,47 @@ const Login = () => {
         checkStatus();
         const interval = setInterval(checkStatus, 10000);
         return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        const autoCheckUpdate = async () => {
+            try {
+                setUpdateStatus('checking');
+                const res = await checkForUpdates();
+                if (res && res.hasUpdate && res.manifest) {
+                    setNewVersion(res.manifest.version);
+                    setUpdateStatus('downloading');
+                    const dlId = await startDownload(res.manifest);
+                    if (!dlId) {
+                        setUpdateStatus('error');
+                        setUpdateError('Auto-download failed to start.');
+                        return;
+                    }
+                    
+                    const poll = setInterval(async () => {
+                        const prog = await getDownloadProgress(dlId);
+                        if (!prog) return;
+                        if (prog.status === 'downloading') {
+                            setUpdateProgress({ percent: prog.percent, downloaded: prog.downloaded, total: prog.total });
+                        } else if (prog.status === 'ready') {
+                            clearInterval(poll);
+                            setUpdateProgress({ percent: 100, downloaded: prog.total, total: prog.total });
+                            setUpdateStatus('installing');
+                            await installUpdate(dlId);
+                        } else if (prog.status === 'error') {
+                            clearInterval(poll);
+                            setUpdateStatus('error');
+                            setUpdateError(prog.error || 'Failed to download update.');
+                        }
+                    }, 1000);
+                } else {
+                    setUpdateStatus('idle');
+                }
+            } catch (err) {
+                setUpdateStatus('idle'); // fail silently to allow login
+            }
+        };
+        autoCheckUpdate();
     }, []);
 
     const handleSubmit = async (e) => {
@@ -66,6 +114,71 @@ const Login = () => {
                 <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/5 blur-[120px] rounded-full"></div>
                 <div className="absolute inset-0 opacity-[0.4]" style={{ backgroundImage: 'radial-gradient(#e2e8f0 1.5px, transparent 0)', backgroundSize: '30px 30px' }}></div>
             </div>
+
+            {/* Pre-login auto-update overlay */}
+            {updateStatus !== 'idle' && (
+                <div className="absolute inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-6">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-[2.5rem] border border-slate-200 p-10 max-w-md w-full shadow-2xl text-center space-y-6"
+                    >
+                        <div className="inline-flex p-4 rounded-3xl bg-blue-600 shadow-xl shadow-blue-200">
+                            <Shield className="w-10 h-10 text-white animate-pulse" />
+                        </div>
+                        
+                        <h2 className="text-2xl font-black text-slate-950 uppercase italic leading-none">
+                            System <span className="text-blue-600">Integrity Check</span>
+                        </h2>
+
+                        {updateStatus === 'checking' && (
+                            <div className="space-y-4">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+                                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Checking for system updates...</p>
+                            </div>
+                        )}
+
+                        {updateStatus === 'downloading' && (
+                            <div className="space-y-4">
+                                <div className="text-sm font-extrabold text-slate-800">Downloading Update v{newVersion}</div>
+                                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-600 rounded-full transition-all duration-300" style={{ width: `${updateProgress.percent}%` }}></div>
+                                </div>
+                                <div className="text-[10px] text-slate-400 flex justify-between uppercase font-bold tracking-wider">
+                                    <span>{formatBytes(updateProgress.downloaded)} / {formatBytes(updateProgress.total)}</span>
+                                    <span>{updateProgress.percent}%</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {updateStatus === 'installing' && (
+                            <div className="space-y-4">
+                                <Zap className="w-8 h-8 text-indigo-600 animate-bounce mx-auto" />
+                                <div className="text-sm font-extrabold text-slate-800">Applying Update...</div>
+                                <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-wider font-bold">
+                                    CyberPS is restarting. Do not shutdown.
+                                </p>
+                            </div>
+                        )}
+
+                        {updateStatus === 'error' && (
+                            <div className="space-y-4">
+                                <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                                <div className="text-sm font-extrabold text-rose-600">Update Check Aborted</div>
+                                <p className="text-[10px] text-slate-400 leading-relaxed font-bold uppercase tracking-wide">
+                                    {updateError || 'Connection to distribution server timed out.'}
+                                </p>
+                                <button
+                                    onClick={() => setUpdateStatus('idle')}
+                                    className="w-full py-3 bg-slate-800 text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-900 transition-all"
+                                >
+                                    Bypass &amp; Continue Login
+                                </button>
+                            </div>
+                        )}
+                    </motion.div>
+                </div>
+            )}
 
             <motion.div 
                 initial={{ opacity: 0, y: 20 }}

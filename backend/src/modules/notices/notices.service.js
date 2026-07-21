@@ -54,51 +54,8 @@ const NoticesService = {
      * @param {object} user    - JWT user object ({ user_id, name, police_station_id })
      * @returns {Array} Array of { dispatch_no, bank_name, notice_id }
      */
-    async generateBankNotices(payload, user) {
-        const { case_id, notice_category = 'BANK', notice_type_code, banks } = payload;
-        if (!banks || banks.length === 0) throw new AppError('No banks selected', 400);
-        if (!notice_type_code) throw new AppError('Notice type is required', 400);
-
-        const year = new Date().getFullYear();
-        const psId = user.police_station_id || 0;
-        const issuedBy = user.name || 'System';
-        const results = [];
-
-        for (const bank of banks) {
-            // Get unique sequential dispatch number per station per year
-            const seq = await NoticesRepository.getNextDispatchSeq(year, psId);
-            const dispatchNo = `CYB/${year}/${psId}/${String(seq).padStart(6, '0')}`;
-
-            let finalContent = bank.content || '';
-            if (finalContent) {
-                finalContent = finalContent
-                    .replace(/\{BANK_NAME\}/g, bank.name)
-                    .replace(/\{ACCOUNT_NO\}/g, (bank.accounts || []).map(a => a.account).join(', '))
-                    .replace(/\{DISPATCH_NO\}/g, dispatchNo)
-                    .replace(/\{DATE\}/g, new Date().toLocaleDateString('en-GB'));
-            }
-
-            const noticeId = await NoticesRepository.insertWithDispatch({
-                caseId: case_id,
-                policeStationId: psId,
-                bankName: bank.name,
-                noticeTypeCode: notice_type_code,
-                noticeCategory: notice_category,
-                issuedBy,
-                dispatchNo,
-                selectedAccounts: bank.accounts || [],
-                status: 'Generated',
-                content: finalContent
-            });
-
-            results.push({ dispatch_no: dispatchNo, bank_name: bank.name, notice_id: noticeId, notice_content: finalContent });
-        }
-
-        return results;
-    },
-
     /**
-     * Get the dispatch register for a case — all engine-generated notices.
+     * Get the dispatch register for a case – all engine-generated notices.
      */
     async getDispatchRegister(caseId) {
         const rows = await NoticesRepository.getDispatchByCaseId(caseId);

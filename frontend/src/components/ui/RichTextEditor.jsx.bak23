@@ -1,0 +1,1684 @@
+/**
+ * RichTextEditor.jsx — TipTap-powered Rich Text Editor
+ *
+ * DROP-IN REPLACEMENT for the previous Quill-based editor.
+ *
+ * External API (props + ref) is 100% identical to the old Quill version:
+ *   - All props unchanged
+ *   - ref.getQuill() returns a duck-typed proxy matching the Quill API
+ *     so LetterPreview.jsx and TemplatesConfig.jsx need ZERO changes.
+ *
+ * CSS: .ql-editor class is preserved on the editor container
+ *       so letterGenerator.js print/PDF CSS remains fully compatible.
+ */
+
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import { StarterKit } from '@tiptap/starter-kit';
+import { Underline } from '@tiptap/extension-underline';
+import { TextAlign } from '@tiptap/extension-text-align';
+import { FontFamily } from '@tiptap/extension-font-family';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import { Image as BaseImage } from '@tiptap/extension-image';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { Link } from '@tiptap/extension-link';
+import { Extension, ResizableNodeView, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+
+import {
+    Plus, Search, Edit3, Trash2, Eye, EyeOff, Copy, 
+    ChevronLeft, Save, Shield, Type, Hash, Database, ChevronDown, ChevronUp,
+    Table as TableIcon, Layout as LayoutIcon, CheckCircle2, AlertCircle,
+    Bold, Italic, Underline as UnderlineIcon, List, AlignLeft, AlignCenter, AlignRight,
+    Image as ImageIcon, X, Indent, Outdent, WrapText,
+    Scissors, FileText, Undo, Redo, Strikethrough, AlignJustify, ListOrdered, Link as LinkIcon,
+    Minus, Sparkles, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+    ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCcw, Move, SlidersHorizontal, Globe
+} from 'lucide-react';
+
+// ─────────────────────────────────────────────────────────────────
+// Custom FontSize Extension
+// ─────────────────────────────────────────────────────────────────
+const FontSize = Extension.create({
+    name: 'fontSize',
+    addOptions() {
+        return {
+            types: ['textStyle'],
+        };
+    },
+    addGlobalAttributes() {
+        return [
+            {
+                types: this.options.types,
+                attributes: {
+                    fontSize: {
+                        default: null,
+                        parseHTML: element => element.style.fontSize?.replace(/['"]+/g, '') || null,
+                        renderHTML: attributes => {
+                            if (!attributes.fontSize) {
+                                return {};
+                            }
+                            return {
+                                style: `font-size: ${attributes.fontSize}`,
+                            };
+                        },
+                    },
+                },
+            },
+        ];
+    },
+    addCommands() {
+        return {
+            setFontSize: fontSize => ({ chain }) => {
+                return chain().setMark('textStyle', { fontSize }).run();
+            },
+            unsetFontSize: () => ({ chain }) => {
+                return chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run();
+            },
+        };
+    },
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Custom Image Extension with fixed base64 complete/onload logic
+// ─────────────────────────────────────────────────────────────────
+const CustomImage = BaseImage.extend({
+    addAttributes() {
+        return {
+            ...this.parent?.(),
+            x: {
+                default: 0,
+                parseHTML: element => {
+                    const val = element.style.left || element.getAttribute('data-x');
+                    return val ? parseInt(val, 10) || 0 : 0;
+                },
+                renderHTML: attributes => {
+                    const styles = [];
+                    if (attributes.width) styles.push(`width: ${typeof attributes.width === 'number' ? attributes.width + 'px' : attributes.width}`);
+                    if (attributes.height) styles.push(`height: ${typeof attributes.height === 'number' ? attributes.height + 'px' : attributes.height}`);
+                    
+                    const w = attributes.wrap || 'inline';
+                    if (w === 'square' || w === 'left') {
+                        styles.push('float: left', 'display: block', 'margin: 4px 15px 15px 0', 'clear: none', 'z-index: 1');
+                    } else if (w === 'tight' || w === 'through') {
+                        styles.push('float: left', 'display: block', 'margin: 2px 8px 8px 0', 'clear: none', 'z-index: 1');
+                    } else if (w === 'right') {
+                        styles.push('float: right', 'display: block', 'margin: 0 0 15px 15px', 'clear: none', 'z-index: 1');
+                    } else if (w === 'center') {
+                        styles.push('float: none', 'display: block', 'margin: 15px auto', 'clear: both', 'z-index: 1');
+                    } else if (w === 'top-bottom') {
+                        styles.push('float: none', 'display: block', 'margin: 15px 0', 'clear: both', 'z-index: 1');
+                    } else if (w === 'behind') {
+                        styles.push('float: none', 'display: inline-block', 'margin: 0', 'clear: none', 'z-index: 0', 'opacity: 0.88');
+                    } else if (w === 'front') {
+                        styles.push('float: none', 'display: inline-block', 'margin: 0', 'clear: none', 'z-index: 50', 'opacity: 1');
+                    } else {
+                        styles.push('float: none', 'display: inline-block', 'margin: 0', 'clear: none', 'z-index: 1');
+                    }
+
+                    if (attributes.x || attributes.y) {
+                        styles.push('position: relative');
+                        if (attributes.x) styles.push(`left: ${attributes.x}px`);
+                        if (attributes.y) styles.push(`top: ${attributes.y}px`);
+                    }
+                    return {
+                        'data-x': attributes.x || 0,
+                        'data-y': attributes.y || 0,
+                        'data-wrap': attributes.wrap || 'inline',
+                        style: styles.length ? styles.join('; ') : undefined,
+                    };
+                },
+            },
+            y: {
+                default: 0,
+                parseHTML: element => {
+                    const val = element.style.top || element.getAttribute('data-y');
+                    return val ? parseInt(val, 10) || 0 : 0;
+                },
+                renderHTML: attributes => {
+                    return {};
+                },
+            },
+            wrap: {
+                default: 'inline',
+                parseHTML: element => {
+                    const val = element.getAttribute('data-wrap') || element.style.float;
+                    if (['inline', 'square', 'tight', 'through', 'top-bottom', 'behind', 'front', 'left', 'right', 'center'].includes(val)) return val;
+                    return 'inline';
+                },
+                renderHTML: attributes => {
+                    return {};
+                },
+            },
+        };
+    },
+
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('imageKeyboardNudge'),
+                props: {
+                    handleKeyDown: (view, event) => {
+                        const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+                        if (!keys.includes(event.key)) return false;
+
+                        const { state } = view;
+                        const { selection } = state;
+                        if (!selection) return false;
+
+                        let node = null;
+                        let pos = null;
+
+                        if (selection.node && (selection.node.type.name === 'image' || selection.node.type.name === this.name)) {
+                            node = selection.node;
+                            pos = selection.from;
+                        } else if (this.editor.isActive('image')) {
+                            pos = selection.from;
+                            node = state.doc.nodeAt(pos);
+                        }
+
+                        if (!node || (node.type.name !== 'image' && node.type.name !== this.name)) {
+                            return false;
+                        }
+
+                        const step = event.shiftKey ? 10 : 2;
+                        let dx = 0;
+                        let dy = 0;
+                        if (event.key === 'ArrowLeft') dx = -step;
+                        if (event.key === 'ArrowRight') dx = step;
+                        if (event.key === 'ArrowUp') dy = -step;
+                        if (event.key === 'ArrowDown') dy = step;
+
+                        const currentX = parseInt(node.attrs.x, 10) || 0;
+                        const currentY = parseInt(node.attrs.y, 10) || 0;
+                        const newX = currentX + dx;
+                        const newY = currentY + dy;
+
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        this.editor
+                            .chain()
+                            .focus()
+                            .setNodeSelection(pos)
+                            .updateAttributes(node.type.name, { x: newX, y: newY })
+                            .run();
+
+                        return true;
+                    },
+                },
+            }),
+        ];
+    },
+
+    addKeyboardShortcuts() {
+        const nudge = (dx, dy, event) => {
+            const { state } = this.editor;
+            const { selection } = state;
+            if (!selection) return false;
+
+            let node = null;
+            let pos = null;
+
+            if (selection.node && (selection.node.type.name === 'image' || selection.node.type.name === this.name)) {
+                node = selection.node;
+                pos = selection.from;
+            } else if (this.editor.isActive('image')) {
+                pos = selection.from;
+                node = state.doc.nodeAt(pos);
+            }
+
+            if (!node || (node.type.name !== 'image' && node.type.name !== this.name)) {
+                return false;
+            }
+
+            const step = event.shiftKey ? 10 : 2;
+            const currentX = parseInt(node.attrs.x, 10) || 0;
+            const currentY = parseInt(node.attrs.y, 10) || 0;
+
+            const newX = currentX + (dx * step);
+            const newY = currentY + (dy * step);
+
+            this.editor
+                .chain()
+                .focus()
+                .setNodeSelection(pos)
+                .updateAttributes(node.type.name, { x: newX, y: newY })
+                .run();
+
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            return true;
+        };
+
+        return {
+            'ArrowLeft': ({ event }) => nudge(-1, 0, event),
+            'ArrowRight': ({ event }) => nudge(1, 0, event),
+            'ArrowUp': ({ event }) => nudge(0, -1, event),
+            'ArrowDown': ({ event }) => nudge(0, 1, event),
+            'Shift-ArrowLeft': ({ event }) => nudge(-1, 0, event),
+            'Shift-ArrowRight': ({ event }) => nudge(1, 0, event),
+            'Shift-ArrowUp': ({ event }) => nudge(0, -1, event),
+            'Shift-ArrowDown': ({ event }) => nudge(0, 1, event),
+        };
+    },
+
+    addNodeView() {
+        if (!this.options.resize || !this.options.resize.enabled || typeof document === 'undefined') {
+            return null;
+        }
+
+        const { directions, minWidth, minHeight, alwaysPreserveAspectRatio } = this.options.resize;
+
+        const applyWrapAndPos = (targetDom, attrs) => {
+            targetDom.style.position = 'relative';
+            targetDom.style.left = `${attrs.x || 0}px`;
+            targetDom.style.top = `${attrs.y || 0}px`;
+            
+            const w = attrs.wrap || 'inline';
+            if (w === 'square' || w === 'left') {
+                targetDom.style.float = 'left';
+                targetDom.style.display = 'block';
+                targetDom.style.margin = '4px 15px 15px 0';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            } else if (w === 'tight' || w === 'through') {
+                targetDom.style.float = 'left';
+                targetDom.style.display = 'block';
+                targetDom.style.margin = '2px 8px 8px 0';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            } else if (w === 'right') {
+                targetDom.style.float = 'right';
+                targetDom.style.display = 'block';
+                targetDom.style.margin = '0 0 15px 15px';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            } else if (w === 'center') {
+                targetDom.style.float = 'none';
+                targetDom.style.display = 'block';
+                targetDom.style.margin = '15px auto';
+                targetDom.style.clear = 'both';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            } else if (w === 'top-bottom') {
+                targetDom.style.float = 'none';
+                targetDom.style.display = 'block';
+                targetDom.style.margin = '15px 0';
+                targetDom.style.clear = 'both';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            } else if (w === 'behind') {
+                targetDom.style.float = 'none';
+                targetDom.style.display = 'inline-block';
+                targetDom.style.margin = '0';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '0';
+                targetDom.style.opacity = '0.88';
+            } else if (w === 'front') {
+                targetDom.style.float = 'none';
+                targetDom.style.display = 'inline-block';
+                targetDom.style.margin = '0';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '50';
+                targetDom.style.opacity = '1';
+            } else {
+                targetDom.style.float = 'none';
+                targetDom.style.display = 'inline-block';
+                targetDom.style.margin = '0';
+                targetDom.style.clear = 'none';
+                targetDom.style.zIndex = '1';
+                targetDom.style.opacity = '1';
+            }
+        };
+
+        return ({ node, getPos, HTMLAttributes, editor }) => {
+            const el = document.createElement('img');
+            el.draggable = false; // Prevent native browser ghost drag interfering with mouse cursor move
+            el.style.position = 'static';
+            el.style.left = '0px';
+            el.style.top = '0px';
+            el.style.margin = '0px';
+            el.style.display = 'block';
+            el.style.boxSizing = 'border-box';
+
+            const mergedAttributes = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+
+            Object.entries(mergedAttributes).forEach(([key, value]) => {
+                if (value != null) {
+                    switch (key) {
+                        case 'width':
+                        case 'height':
+                            break;
+                        default:
+                            el.setAttribute(key, value);
+                            break;
+                    }
+                }
+            });
+
+            if (mergedAttributes.src !== null) {
+                el.src = mergedAttributes.src;
+            }
+
+            const nodeView = new ResizableNodeView({
+                element: el,
+                editor,
+                node,
+                getPos,
+                onResize: (width, height) => {
+                    el.style.width = `${width}px`;
+                    el.style.height = `${height}px`;
+                },
+                onCommit: (width, height) => {
+                    const pos = getPos();
+                    if (pos === undefined) {
+                        return;
+                    }
+
+                    this.editor
+                        .chain()
+                        .setNodeSelection(pos)
+                        .updateAttributes(this.name, {
+                            width,
+                            height,
+                        })
+                        .run();
+                },
+                onUpdate: (updatedNode, _decorations, _innerDecorations) => {
+                    if (updatedNode.type !== node.type) {
+                        return false;
+                    }
+                    node = updatedNode;
+                    applyWrapAndPos(dom, updatedNode.attrs);
+                    return true;
+                },
+                options: {
+                    directions,
+                    min: {
+                        width: minWidth,
+                        height: minHeight,
+                    },
+                    preserveAspectRatio: alwaysPreserveAspectRatio === true,
+                },
+            });
+
+            const dom = nodeView.dom;
+            dom.setAttribute('tabindex', '0');
+            dom.style.outline = 'none';
+            applyWrapAndPos(dom, node.attrs);
+
+            // Direct KeyDown listener on dom container for reliable Arrow key moving
+            dom.addEventListener('keydown', (e) => {
+                const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+                if (!keys.includes(e.key)) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                const step = e.shiftKey ? 10 : 2;
+                let dx = 0, dy = 0;
+                if (e.key === 'ArrowLeft') dx = -step;
+                if (e.key === 'ArrowRight') dx = step;
+                if (e.key === 'ArrowUp') dy = -step;
+                if (e.key === 'ArrowDown') dy = step;
+
+                const currentDomLeft = parseInt(dom.style.left, 10);
+                const currentDomTop = parseInt(dom.style.top, 10);
+                const curX = !isNaN(currentDomLeft) ? currentDomLeft : (parseInt(node.attrs.x, 10) || 0);
+                const curY = !isNaN(currentDomTop) ? currentDomTop : (parseInt(node.attrs.y, 10) || 0);
+                const finalX = curX + dx;
+                const finalY = curY + dy;
+
+                dom.style.left = `${finalX}px`;
+                dom.style.top = `${finalY}px`;
+
+                const pos = getPos();
+                if (pos !== undefined) {
+                    editor.chain().focus().setNodeSelection(pos).updateAttributes(node.type.name, { x: finalX, y: finalY }).run();
+                }
+            });
+
+            // ── Single Click Selection & Smooth Mouse Drag Positioning ───────
+            const onMouseDown = (e) => {
+                if (e.button !== 0) return; // Only primary (left) click
+                if (e.target.hasAttribute('data-resize-handle')) return;
+
+                e.preventDefault(); // Stop text selection & native browser drag
+
+                const pos = getPos();
+                if (pos !== undefined) {
+                    editor.chain().focus().setNodeSelection(pos).run();
+                }
+
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const currentDomLeft = parseInt(dom.style.left, 10);
+                const currentDomTop = parseInt(dom.style.top, 10);
+                const initialX = !isNaN(currentDomLeft) ? currentDomLeft : (parseInt(node.attrs.x, 10) || 0);
+                const initialY = !isNaN(currentDomTop) ? currentDomTop : (parseInt(node.attrs.y, 10) || 0);
+
+                let hasMoved = false;
+
+                const onMouseMove = (moveEvent) => {
+                    const dx = moveEvent.clientX - startX;
+                    const dy = moveEvent.clientY - startY;
+
+                    if (!hasMoved && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+                        hasMoved = true;
+                        document.body.style.cursor = 'grabbing';
+                        el.style.cursor = 'grabbing';
+                    }
+
+                    if (hasMoved) {
+                        dom.style.left = `${initialX + dx}px`;
+                        dom.style.top = `${initialY + dy}px`;
+                    }
+                };
+
+                const onMouseUp = (upEvent) => {
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    document.body.style.cursor = '';
+                    el.style.cursor = 'move';
+
+                    if (hasMoved) {
+                        const dx = upEvent.clientX - startX;
+                        const dy = upEvent.clientY - startY;
+                        const finalX = initialX + dx;
+                        const finalY = initialY + dy;
+
+                        const curPos = getPos();
+                        if (curPos !== undefined) {
+                            editor.chain().focus().setNodeSelection(curPos).updateAttributes(node.type.name, { x: finalX, y: finalY }).run();
+                        }
+                    }
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            };
+
+            el.addEventListener('mousedown', onMouseDown);
+            el.style.cursor = 'move';
+
+            // ── Move Handle overlay ──────
+            const moveHandle = document.createElement('div');
+            moveHandle.className = 'move-handle';
+            moveHandle.draggable = true;
+            moveHandle.title = 'Drag to move image, or click & use Arrow keys to adjust pixel by pixel';
+            moveHandle.style.cssText = [
+                'position:absolute',
+                'top:4px',
+                'left:4px',
+                'background:rgba(59,130,246,0.88)',
+                'color:#fff',
+                'border-radius:5px',
+                'padding:2px 8px',
+                'font-size:9px',
+                'font-weight:900',
+                'cursor:grab',
+                'user-select:none',
+                'z-index:300',
+                'display:none',
+                'pointer-events:all',
+                'white-space:nowrap',
+                'box-shadow:0 1px 4px rgba(0,0,0,0.3)',
+                'letter-spacing:0.05em',
+                'line-height:1.6',
+            ].join(';');
+            moveHandle.textContent = '\u283f Move';
+
+            dom.appendChild(moveHandle);
+
+            dom.addEventListener('mouseenter', () => {
+                moveHandle.style.display = 'block';
+            });
+            dom.addEventListener('mouseleave', (e) => {
+                if (!dom.contains(/** @type {Node|null} */(e.relatedTarget))) {
+                    moveHandle.style.display = 'none';
+                }
+            });
+
+            moveHandle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const pos = getPos();
+                if (pos !== undefined) {
+                    editor.chain().focus().setNodeSelection(pos).run();
+                }
+            });
+
+            let _imgMoveFromPos = null;
+
+            moveHandle.addEventListener('dragstart', (e) => {
+                const pos = getPos();
+                if (pos === undefined) { _imgMoveFromPos = null; return; }
+                _imgMoveFromPos = pos;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(pos));
+                }
+                moveHandle.style.cursor = 'grabbing';
+            });
+
+            moveHandle.addEventListener('dragend', (e) => {
+                moveHandle.style.cursor = 'grab';
+                moveHandle.style.display = 'none';
+
+                const fromPos = _imgMoveFromPos;
+                _imgMoveFromPos = null;
+                if (fromPos === null || fromPos === undefined) return;
+
+                const resolved = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+                if (!resolved) return;
+
+                const { state } = editor;
+                const imgNode = state.doc.nodeAt(fromPos);
+                if (!imgNode) return;
+
+                const nodeEnd = fromPos + imgNode.nodeSize;
+                let insertAt = resolved.pos;
+
+                if (insertAt >= fromPos && insertAt <= nodeEnd) return;
+
+                if (insertAt > nodeEnd) {
+                    insertAt -= imgNode.nodeSize;
+                }
+                if (insertAt < 0) insertAt = 0;
+
+                try {
+                    editor.view.dispatch(
+                        state.tr.delete(fromPos, nodeEnd).insert(insertAt, imgNode)
+                    );
+                } catch (_) {
+                }
+            });
+
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const pos = getPos();
+                if (pos !== undefined) {
+                    editor.chain().focus().setNodeSelection(pos).run();
+                }
+            });
+
+            dom.style.visibility = '';
+            dom.style.pointerEvents = '';
+
+            return nodeView;
+        };
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Custom extension: preserve {PLACEHOLDER} tokens as plain text
+// (TipTap does not escape them — this is just a no-op guard)
+// ─────────────────────────────────────────────────────────────────
+const PlaceholderPreserver = Extension.create({
+    name: 'placeholderPreserver',
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────────
+const RichTextEditor = forwardRef(({
+    id = "tiptap-editor",
+    value = undefined,
+    defaultValue = "",
+    onChange,
+    onSelectionChange,
+    margins = { top: 50, left: 50, right: 50, bottom: 50 },
+    lineSpacing = "1.5",
+    paragraphSpacing = "12",
+    paragraphSpacingBefore = "0",
+    specialIndent = "none",
+    wordWrap = true,
+    printMode = false,
+    onWordWrapChange,
+    onLineSpacingChange,
+    onParagraphSpacingChange,
+    onParagraphSpacingBeforeChange,
+    onMarginsChange,
+    paperSize = "A4",
+    onPaperSizeChange,
+    onSave,
+    onExportPDF,
+    onExportWord,
+    style = {},
+    className = "",
+    editorContainerClassName = "",
+    toolbarSticky = true,
+    toolbarTop = "0px",
+    hideToolbar = false
+}, ref) => {
+
+    const isLocalUpdate = useRef(false);
+    const savedSelection = useRef(null);
+    const imageInputRef = useRef(null);
+    const wrapDropdownRef = useRef(null);
+
+    const [activeRibbonTab, setActiveRibbonTab] = useState('Home');
+    const [showWrapDropdown, setShowWrapDropdown] = useState(false);
+    const [showParagraphModal, setShowParagraphModal] = useState(false);
+    const [tempParaConfig, setTempParaConfig] = useState({
+        alignment: 'left',
+        leftIndent: '0',
+        rightIndent: '0',
+        special: 'none',
+        specialValue: '0.5 in',
+        beforeSpacing: '0',
+        afterSpacing: '12',
+        lineSpacing: '1.5',
+        lineSpacingAt: '1.5',
+        dontAddSpace: false,
+    });
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (wrapDropdownRef.current && !wrapDropdownRef.current.contains(e.target)) {
+                setShowWrapDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // ── TipTap Editor Instance ────────────────────────────────────
+    const editor = useEditor({
+        extensions: [
+            StarterKit.configure({
+                history: {
+                    depth: 100,
+                },
+            }),
+            Underline,
+            TextAlign.configure({
+                types: ['heading', 'paragraph'],
+                alignments: ['left', 'center', 'right', 'justify'],
+                defaultAlignment: 'left',
+            }),
+            TextStyle,
+            FontSize,
+            FontFamily,
+            Color,
+            CustomImage.configure({
+                inline: true,
+                allowBase64: true,
+                resize: {
+                    enabled: true,
+                    alwaysPreserveAspectRatio: true,
+                },
+                HTMLAttributes: {
+                    style: 'max-width: 100%; cursor: move;',
+                },
+            }),
+            Table.configure({
+                resizable: true,
+                HTMLAttributes: {
+                    style: 'border-collapse: collapse; margin: 15px auto; width: 100%;',
+                },
+            }),
+            TableRow,
+            TableHeader,
+            TableCell,
+            Link.configure({
+                openOnClick: false,
+                HTMLAttributes: {
+                    rel: 'noopener noreferrer',
+                },
+            }),
+            PlaceholderPreserver,
+        ],
+        content: value !== undefined ? value : (defaultValue || ''),
+        editable: !printMode,
+        onUpdate: ({ editor: ed }) => {
+            if (!isLocalUpdate.current && onChange) {
+                isLocalUpdate.current = true;
+                onChange(ed.getHTML());
+                isLocalUpdate.current = false;
+            }
+        },
+        onSelectionUpdate: ({ editor: ed }) => {
+            if (onSelectionChange) {
+                const { from, to } = ed.state.selection;
+                onSelectionChange({ index: from, length: to - from }, ed);
+            }
+            savedSelection.current = ed.state.selection;
+        },
+        editorProps: {
+            attributes: {
+                class: `ql-editor ${editorContainerClassName} outline-none`,
+                id: id,
+                spellcheck: 'true',
+            },
+            handlePaste: (view, event) => {
+                const items = event.clipboardData?.items;
+                if (!items) return false;
+
+                let handled = false;
+                for (const item of items) {
+                    if (item.type.indexOf('image') === 0) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const base64 = e.target.result;
+                                view.dispatch(
+                                    view.state.tr.replaceSelectionWith(
+                                        view.state.schema.nodes.image.create({ src: base64 })
+                                    )
+                                );
+                            };
+                            reader.readAsDataURL(file);
+                            handled = true;
+                        }
+                    }
+                }
+                return handled;
+            },
+            handleDrop: (view, event, slice, moved) => {
+                if (moved) return false;
+                const files = event.dataTransfer?.files;
+                if (!files || files.length === 0) return false;
+
+                let handled = false;
+                for (const file of files) {
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const base64 = e.target.result;
+                            const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                            if (coordinates) {
+                                view.dispatch(
+                                    view.state.tr.insert(
+                                        coordinates.pos,
+                                        view.state.schema.nodes.image.create({ src: base64 })
+                                    )
+                                );
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                        handled = true;
+                    }
+                }
+                return handled;
+            },
+        },
+    });
+
+    // ── Sync external `value` prop changes (controlled mode) ─────
+    useEffect(() => {
+        if (!editor || value === undefined) return;
+        if (isLocalUpdate.current) return;
+
+        const currentHtml = editor.getHTML();
+        if (currentHtml !== value) {
+            isLocalUpdate.current = true;
+            editor.commands.setContent(value || '', false);
+            isLocalUpdate.current = false;
+        }
+    }, [value, editor]);
+
+    // ── Apply margin / line-spacing / wordwrap styles ─────────────
+    useEffect(() => {
+        if (!editor) return;
+        const el = editor.view?.dom;
+        if (!el) return;
+
+        el.style.paddingTop = `${margins.top ?? 50}px`;
+        el.style.paddingLeft = `${margins.left ?? 50}px`;
+        el.style.paddingRight = `${margins.right ?? 50}px`;
+        el.style.paddingBottom = `${margins.bottom ?? 50}px`;
+        el.style.lineHeight = lineSpacing || '1.5';
+        el.style.whiteSpace = wordWrap ? 'pre-wrap' : 'pre';
+        el.style.overflowX = wordWrap ? 'visible' : 'auto';
+        el.style.boxSizing = 'border-box';
+
+        const pElements = el.querySelectorAll('p, h1, h2, h3, h4, h5, h6');
+        pElements.forEach(p => {
+            p.style.marginTop = `${paragraphSpacingBefore ?? 0}px`;
+            p.style.marginBottom = `${paragraphSpacing ?? 0}px`;
+        });
+    }, [margins, lineSpacing, paragraphSpacing, paragraphSpacingBefore, wordWrap, editor, value]);
+
+    // ── Update editability in printMode ───────────────────────────
+    useEffect(() => {
+        if (!editor) return;
+        editor.setEditable(!printMode);
+    }, [printMode, editor]);
+
+    // ── Internal formatting helpers ───────────────────────────────
+    const applyFontSize = useCallback((size) => {
+        if (!editor) return;
+        editor.chain().focus().setFontSize(`${size}px`).run();
+    }, [editor]);
+
+    const insertTable = useCallback(() => {
+        if (!editor) return;
+        const rowsStr = prompt('Enter number of rows:', '3');
+        if (rowsStr === null) return;
+        const colsStr = prompt('Enter number of columns:', '3');
+        if (colsStr === null) return;
+
+        const rows = parseInt(rowsStr, 10) || 3;
+        const cols = parseInt(colsStr, 10) || 3;
+
+        editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
+    }, [editor]);
+
+    const handleImageUpload = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file || !editor) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64Image = event.target.result;
+            editor.chain().focus().setImage({ src: base64Image }).run();
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    }, [editor]);
+
+    const insertLink = useCallback(() => {
+        if (!editor) return;
+        const url = prompt('Enter URL:');
+        if (!url) return;
+        editor.chain().focus().setLink({ href: url }).run();
+    }, [editor]);
+
+    const formatText = useCallback((command) => {
+        if (!editor) return;
+        editor.chain().focus();
+
+        switch (command) {
+            case 'bold':
+                editor.chain().focus().toggleBold().run();
+                break;
+            case 'italic':
+                editor.chain().focus().toggleItalic().run();
+                break;
+            case 'underline':
+                editor.chain().focus().toggleUnderline().run();
+                break;
+            case 'strike':
+                editor.chain().focus().toggleStrike().run();
+                break;
+            case 'justifyLeft':
+                editor.chain().focus().setTextAlign('left').run();
+                break;
+            case 'justifyCenter':
+                editor.chain().focus().setTextAlign('center').run();
+                break;
+            case 'justifyRight':
+                editor.chain().focus().setTextAlign('right').run();
+                break;
+            case 'justifyFull':
+                editor.chain().focus().setTextAlign('justify').run();
+                break;
+            case 'insertUnorderedList':
+                editor.chain().focus().toggleBulletList().run();
+                break;
+            case 'insertOrderedList':
+                editor.chain().focus().toggleOrderedList().run();
+                break;
+            case 'indent':
+                editor.chain().focus().sinkListItem('listItem').run();
+                break;
+            case 'outdent':
+                editor.chain().focus().liftListItem('listItem').run();
+                break;
+            case 'undo':
+                editor.chain().focus().undo().run();
+                break;
+            case 'redo':
+                editor.chain().focus().redo().run();
+                break;
+            case 'horizontalRule':
+                editor.chain().focus().setHorizontalRule().run();
+                break;
+            default:
+                break;
+        }
+    }, [editor]);
+
+    // ── Quill API Shim ────────────────────────────────────────────
+    const buildQuillShim = useCallback(() => {
+        if (!editor) return null;
+
+        return {
+            root: {
+                get innerHTML() {
+                    return editor.getHTML();
+                },
+                set innerHTML(html) {
+                    isLocalUpdate.current = true;
+                    editor.commands.setContent(html || '', false);
+                    isLocalUpdate.current = false;
+                },
+                get style() {
+                    return editor.view?.dom?.style || {};
+                },
+            },
+            focus: () => {
+                editor.commands.focus();
+            },
+            format: (command, value) => {
+                if (!editor) return;
+                switch (command) {
+                    case 'bold':
+                        editor.chain().focus().toggleBold().run();
+                        break;
+                    case 'italic':
+                        editor.chain().focus().toggleItalic().run();
+                        break;
+                    case 'underline':
+                        editor.chain().focus().toggleUnderline().run();
+                        break;
+                    case 'strike':
+                        editor.chain().focus().toggleStrike().run();
+                        break;
+                    case 'align':
+                        if (!value || value === '' || value === false) {
+                            editor.chain().focus().setTextAlign('left').run();
+                        } else {
+                            editor.chain().focus().setTextAlign(value).run();
+                        }
+                        break;
+                    case 'list':
+                        if (value === 'bullet') {
+                            editor.chain().focus().toggleBulletList().run();
+                        } else if (value === 'ordered') {
+                            editor.chain().focus().toggleOrderedList().run();
+                        } else if (value === false) {
+                            if (editor.isActive('bulletList')) {
+                                editor.chain().focus().toggleBulletList().run();
+                            }
+                            if (editor.isActive('orderedList')) {
+                                editor.chain().focus().toggleOrderedList().run();
+                            }
+                        }
+                        break;
+                    case 'size':
+                        if (value) {
+                            editor.chain().focus().setFontSize(value).run();
+                        }
+                        break;
+                    case 'color':
+                        if (value) {
+                            editor.chain().focus().setColor(value).run();
+                        }
+                        break;
+                    case 'indent':
+                        editor.chain().focus().sinkListItem('listItem').run();
+                        break;
+                    case 'imageWrap':
+                        if (editor.isActive('image') || editor.state.selection?.node?.type?.name === 'image') {
+                            editor.chain().focus().updateAttributes('image', { wrap: value }).run();
+                        }
+                        break;
+                    case 'imageNudge':
+                        if (editor.isActive('image') || editor.state.selection?.node?.type?.name === 'image') {
+                            const node = editor.state.selection.node;
+                            const curX = parseInt(node.attrs.x, 10) || 0;
+                            const curY = parseInt(node.attrs.y, 10) || 0;
+                            editor.chain().focus().updateAttributes('image', {
+                                x: curX + (value?.dx || 0),
+                                y: curY + (value?.dy || 0),
+                            }).run();
+                        }
+                        break;
+                    case 'imageResetPos':
+                        if (editor.isActive('image') || editor.state.selection?.node?.type?.name === 'image') {
+                            editor.chain().focus().updateAttributes('image', { x: 0, y: 0 }).run();
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            },
+            getFormat: () => {
+                if (!editor) return {};
+                return {
+                    bold: editor.isActive('bold'),
+                    italic: editor.isActive('italic'),
+                    underline: editor.isActive('underline'),
+                    strike: editor.isActive('strike'),
+                    align: editor.isActive({ textAlign: 'center' }) ? 'center'
+                        : editor.isActive({ textAlign: 'right' }) ? 'right'
+                        : editor.isActive({ textAlign: 'justify' }) ? 'justify'
+                        : '',
+                    list: editor.isActive('bulletList') ? 'bullet'
+                        : editor.isActive('orderedList') ? 'ordered'
+                        : false,
+                    size: editor.getAttributes('textStyle')?.fontSize || null,
+                };
+            },
+            getSelection: () => {
+                if (!editor) return null;
+                const { from, to } = editor.state.selection;
+                return { index: from, length: to - from };
+            },
+            setSelection: (index, length = 0) => {
+                if (!editor) return;
+                try {
+                    editor.commands.setTextSelection({ from: index, to: index + length });
+                } catch {
+                }
+            },
+            insertText: (index, text) => {
+                if (!editor) return;
+                try {
+                    editor.chain().focus().insertContentAt(index, text).run();
+                } catch {
+                    editor.chain().focus().insertContent(text).run();
+                }
+            },
+            insertEmbed: (index, type, value) => {
+                if (!editor) return;
+                if (type === 'image') {
+                    if (typeof index === 'number' && index > 0) {
+                        try {
+                            editor.chain().focus().insertContentAt(index, { type: 'image', attrs: { src: value } }).run();
+                            return;
+                        } catch (_) {}
+                    }
+                    editor.chain().focus().setImage({ src: value }).run();
+                }
+            },
+            getLength: () => {
+                if (!editor) return 0;
+                return editor.state.doc.content.size;
+            },
+            getModule: (name) => {
+                if (name === 'table-better' || name === 'table') {
+                    return {
+                        insertTable: (rows, cols) => {
+                            editor.chain().focus().insertTable({
+                                rows,
+                                cols,
+                                withHeaderRow: false,
+                            }).run();
+                        },
+                    };
+                }
+                return null;
+            },
+            on: (event, handler) => {},
+            off: (event, handler) => {},
+        };
+    }, [editor]);
+
+    // ── Expose ref handle ─────────────────────────────────────────
+    useImperativeHandle(ref, () => ({
+        getQuill: () => buildQuillShim(),
+        getEditor: () => editor,
+    }), [buildQuillShim, editor]);
+
+    // ── Toolbar button active state helper ────────────────────────
+    const isActive = (type, attrs) => editor?.isActive(type, attrs) ?? false;
+
+    const ToolBtn = ({ onClick, title, active, children }) => (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            className={`p-2.5 rounded-lg transition-all ${
+                active
+                    ? 'text-emerald-400 bg-white/15'
+                    : 'text-slate-400 hover:text-white hover:bg-white/10'
+            }`}
+        >
+            {children}
+        </button>
+    );
+
+    const Sep = () => <div className="h-5 w-px bg-white/10 mx-1" />;
+
+    return (
+        <div className={`relative ${className}`} style={style}>
+            <style>{`
+                #${id} .ProseMirror {
+                    outline: none;
+                    min-height: inherit;
+                }
+                #${id} .ProseMirror p {
+                    margin-bottom: ${paragraphSpacing}px !important;
+                    margin-top: ${paragraphSpacingBefore || 0}px !important;
+                    text-indent: ${specialIndent === 'first-line' ? '24px' : '0px'} !important;
+                    padding-left: ${specialIndent === 'hanging' ? '24px' : '0px'} !important;
+                }
+                #${id} .ProseMirror img {
+                    position: static !important;
+                    margin: 0 !important;
+                    display: block !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                }
+                #${id} .ProseMirror table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                    width: 100%;
+                    table-layout: fixed;
+                }
+                #${id} .ProseMirror td,
+                #${id} .ProseMirror th {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                    position: relative;
+                    vertical-align: top;
+                }
+                #${id} .ProseMirror th {
+                    background: #f8fafc;
+                    font-weight: bold;
+                }
+                #${id} .ProseMirror .selectedCell:after {
+                    z-index: 2;
+                    position: absolute;
+                    content: "";
+                    left: 0;
+                    right: 0;
+                    top: 0;
+                    bottom: 0;
+                    background: rgba(59, 130, 246, 0.15);
+                    pointer-events: none;
+                }
+                #${id} .ProseMirror .column-resize-handle {
+                    position: absolute;
+                    right: -2px;
+                    top: 0;
+                    bottom: 0;
+                    width: 4px;
+                    background-color: #3b82f6;
+                    cursor: col-resize;
+                    pointer-events: all;
+                }
+                #${id} .ProseMirror img {
+                    max-width: 100%;
+                    height: auto;
+                    cursor: pointer;
+                    display: block;
+                }
+                #${id} .ProseMirror [data-resize-container].ProseMirror-selectednode {
+                    outline: 2px solid #3b82f6;
+                }
+                /* Tiptap ResizableNodeView CSS styling */
+                #${id} .ProseMirror [data-resize-container] {
+                    position: relative;
+                    display: inline-block;
+                    max-width: 100%;
+                    vertical-align: middle;
+                }
+                #${id} .ProseMirror [data-resize-wrapper] {
+                    position: relative;
+                    display: inline-block;
+                    max-width: 100%;
+                }
+                #${id} .ProseMirror [data-resize-handle] {
+                    position: absolute;
+                    width: 8px;
+                    height: 8px;
+                    background-color: #3b82f6;
+                    border: 1px solid #ffffff;
+                    border-radius: 50%;
+                    z-index: 100;
+                    display: none;
+                }
+                /* Show resize handles when node is selected or hovered */
+                #${id} .ProseMirror .ProseMirror-selectednode [data-resize-handle],
+                #${id} .ProseMirror [data-resize-wrapper]:hover [data-resize-handle],
+                #${id} .ProseMirror [data-resize-container][data-resize-state="true"] [data-resize-handle] {
+                    display: block;
+                }
+                /* Position handles */
+                #${id} .ProseMirror [data-resize-handle="top-left"] {
+                    top: -4px !important;
+                    left: -4px !important;
+                    cursor: nwse-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="top-right"] {
+                    top: -4px !important;
+                    right: -4px !important;
+                    cursor: nesw-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="bottom-left"] {
+                    bottom: -4px !important;
+                    left: -4px !important;
+                    cursor: nesw-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="bottom-right"] {
+                    bottom: -4px !important;
+                    right: -4px !important;
+                    cursor: nwse-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="top"] {
+                    top: -4px !important;
+                    left: 50% !important;
+                    transform: translateX(-50%);
+                    cursor: ns-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="bottom"] {
+                    bottom: -4px !important;
+                    left: 50% !important;
+                    transform: translateX(-50%);
+                    cursor: ns-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="left"] {
+                    left: -4px !important;
+                    top: 50% !important;
+                    transform: translateY(-50%);
+                    cursor: ew-resize;
+                }
+                #${id} .ProseMirror [data-resize-handle="right"] {
+                    right: -4px !important;
+                    top: 50% !important;
+                    transform: translateY(-50%);
+                    cursor: ew-resize;
+                }
+                #${id} .ProseMirror blockquote {
+                    border-left: 4px solid #cbd5e1;
+                    padding-left: 1rem;
+                    color: #64748b;
+                    font-style: italic;
+                }
+                #${id} .ProseMirror hr {
+                    border: none;
+                    border-top: 2px solid #e2e8f0;
+                    margin: 1rem 0;
+                }
+                #${id} .ProseMirror ul {
+                    list-style-type: disc;
+                    margin-left: 1.5rem;
+                }
+                #${id} .ProseMirror ol {
+                    list-style-type: decimal;
+                    margin-left: 1.5rem;
+                }
+                #${id} .ql-editor table {
+                    border-collapse: collapse;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                    margin-top: 15px !important;
+                    margin-bottom: 15px !important;
+                    width: 100%;
+                }
+                #${id} .ql-editor td,
+                #${id} .ql-editor th {
+                    border: 1px solid #333;
+                    padding: 8px 12px;
+                    min-width: 50px;
+                }
+                #toolbar-tiptap-${id} select option {
+                    background-color: #0f172a !important;
+                    color: #ffffff !important;
+                }
+                .tableWrapper {
+                    overflow-x: auto;
+                }
+                .resize-cursor {
+                    cursor: ew-resize;
+                    cursor: col-resize;
+                }
+            `}</style>
+
+            {!printMode && !hideToolbar && (
+                <div
+                    id={`toolbar-tiptap-${id}`}
+                    className={`bg-white border-b border-slate-200 flex flex-col no-print shadow-sm z-30 shrink-0 select-none ${toolbarSticky ? 'sticky' : ''}`}
+                    style={{ top: toolbarSticky ? toolbarTop : undefined }}
+                >
+                    {/* Ribbon Tabs Header */}
+                    <div className="flex items-center border-b border-slate-100 px-6 pt-2 bg-slate-50/50">
+                        {['File', 'Home', 'Insert', 'Layout', 'Table', 'View', 'Tools'].map(tab => (
+                            <button
+                                type="button"
+                                key={tab}
+                                onClick={() => setActiveRibbonTab(tab)}
+                                className={`px-4 py-2 text-xs font-bold transition-all border-b-2 -mb-[1px] ${activeRibbonTab === tab ? 'text-blue-600 border-blue-600 font-extrabold' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
+                            >
+                                {tab}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Ribbon Tools Body */}
+                    <div className="px-6 py-3 flex items-center gap-6 overflow-y-visible min-h-[92px] relative z-40">
+                        {activeRibbonTab === 'Home' && (
+                            <>
+                                {/* Clipboard */}
+                                <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                    <button type="button" onClick={() => formatText('paste')} className="flex flex-col items-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all shrink-0">
+                                        <FileText size={20} className="text-slate-500" />
+                                        <span className="text-[9px] font-bold mt-1 text-slate-500">Paste</span>
+                                    </button>
+                                    <div className="flex flex-col gap-1">
+                                        <button type="button" onClick={() => formatText('cut')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Scissors size={12} /> Cut</button>
+                                        <button type="button" onClick={() => formatText('copy')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-100 text-slate-600 text-[10px] font-bold"><Copy size={12} /> Copy</button>
+                                    </div>
+                                </div>
+
+                                {/* History */}
+                                <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                    <button type="button" onClick={() => formatText('undo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Undo (Ctrl+Z)"><Undo size={16} /></button>
+                                    <button type="button" onClick={() => formatText('redo')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-all" title="Redo (Ctrl+Y)"><Redo size={16} /></button>
+                                </div>
+
+                                {/* Font Styling */}
+                                <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                    <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                            <select
+                                                onChange={(e) => applyFontFamily(e.target.value)}
+                                                className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px] cursor-pointer"
+                                            >
+                                                <option value="Times New Roman">Times New Roman</option>
+                                                <option value="Arial">Arial</option>
+                                                <option value="Georgia">Georgia</option>
+                                                <option value="Calibri">Calibri</option>
+                                                <option value="Roboto">Roboto</option>
+                                            </select>
+                                            <select
+                                                onChange={(e) => applyFontSize(e.target.value)}
+                                                className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                                defaultValue="16"
+                                            >
+                                                {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 50].map(s => (
+                                                    <option key={s} value={s}>{s}px</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <button type="button" onClick={() => formatText('bold')} className={`p-1 rounded text-xs font-extrabold ${isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`} title="Bold">B</button>
+                                            <button type="button" onClick={() => formatText('italic')} className={`p-1 rounded text-xs italic px-2 ${isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`} title="Italic">I</button>
+                                            <button type="button" onClick={() => formatText('underline')} className={`p-1 rounded text-xs underline ${isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`} title="Underline">U</button>
+                                            <button type="button" onClick={() => formatText('strike')} className={`p-1 rounded text-xs line-through ${isActive('strike') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`} title="Strikethrough">S</button>
+                                            <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                            <input
+                                                type="color"
+                                                onChange={(e) => applyFontColor(e.target.value)}
+                                                className="w-5 h-5 rounded cursor-pointer border border-slate-200 p-0"
+                                                title="Font Color"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Paragraph Alignment & Spacing */}
+                                <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                    <div className="flex flex-col gap-1.5 justify-center">
+                                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded">
+                                            <button type="button" onClick={() => formatText('justifyLeft')} className={`p-1 rounded ${isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200 text-slate-600'}`} title="Align Left"><AlignLeft size={14} /></button>
+                                            <button type="button" onClick={() => formatText('justifyCenter')} className={`p-1 rounded ${isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200 text-slate-600'}`} title="Align Center"><AlignCenter size={14} /></button>
+                                            <button type="button" onClick={() => formatText('justifyRight')} className={`p-1 rounded ${isActive({ textAlign: 'right' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200 text-slate-600'}`} title="Align Right"><AlignRight size={14} /></button>
+                                            <button type="button" onClick={() => formatText('justifyFull')} className={`p-1 rounded ${isActive({ textAlign: 'justify' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-200 text-slate-600'}`} title="Justify"><AlignJustify size={14} /></button>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <button type="button" onClick={() => formatText('insertUnorderedList')} className={`p-1 rounded ${isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-600'}`} title="Bullet List"><List size={14} /></button>
+                                            <button type="button" onClick={() => formatText('insertOrderedList')} className={`p-1 rounded ${isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-600'}`} title="Numbered List"><ListOrdered size={14} /></button>
+                                            <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                            <button type="button" onClick={() => formatText('outdent')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Decrease Indent"><Outdent size={14} /></button>
+                                            <button type="button" onClick={() => formatText('indent')} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="Increase Indent"><Indent size={14} /></button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTempParaConfig({
+                                                        alignment: 'left',
+                                                        leftIndent: '0',
+                                                        rightIndent: '0',
+                                                        special: specialIndent,
+                                                        specialValue: '0.5 in',
+                                                        beforeSpacing: paragraphSpacingBefore,
+                                                        afterSpacing: paragraphSpacing,
+                                                        lineSpacing: lineSpacing,
+                                                        lineSpacingAt: lineSpacing,
+                                                        dontAddSpace: false,
+                                                    });
+                                                    setShowParagraphModal(true);
+                                                }}
+                                                className="p-1 hover:bg-blue-50 text-blue-600 rounded"
+                                                title="Paragraph Options (MS Word)"
+                                            >
+                                                <SlidersHorizontal size={14} />
+                                            </button>
+                                            <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                                            <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 p-0.5 rounded" title="Adjust Gap Step-by-Step">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (onLineSpacingChange) onLineSpacingChange(Math.max(0.7, (parseFloat(lineSpacing || 1.5) - 0.1)).toFixed(1));
+                                                        if (onParagraphSpacingChange) onParagraphSpacingChange(Math.max(0, (parseInt(paragraphSpacing || 0, 10) - 2)).toString());
+                                                        if (onParagraphSpacingBeforeChange) onParagraphSpacingBeforeChange(Math.max(0, (parseInt(paragraphSpacingBefore || 0, 10) - 2)).toString());
+                                                    }}
+                                                    className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95"
+                                                    title="Reduce Line & Paragraph Gap (Move Lines Closer ↑)"
+                                                >
+                                                    <ArrowUp size={13} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (onLineSpacingChange) onLineSpacingChange(Math.min(3.0, (parseFloat(lineSpacing || 1.5) + 0.1)).toFixed(1));
+                                                        if (onParagraphSpacingChange) onParagraphSpacingChange((parseInt(paragraphSpacing || 0, 10) + 2).toString());
+                                                    }}
+                                                    className="p-1 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded transition-all active:scale-95"
+                                                    title="Increase Line & Paragraph Gap (Move Lines Further ↓)"
+                                                >
+                                                    <ArrowDown size={13} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {activeRibbonTab === 'Insert' && (
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+                                    <label className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 cursor-pointer transition-all" title="Insert Picture">
+                                        <ImageIcon size={22} className="text-blue-500" />
+                                        <span className="text-[9px] font-bold mt-1">Picture</span>
+                                        <input
+                                            ref={imageInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={insertTable}
+                                        className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all"
+                                        title="Insert Table"
+                                    >
+                                        <TableIcon size={22} className="text-emerald-500" />
+                                        <span className="text-[9px] font-bold mt-1">Table</span>
+                                    </button>
+                                </div>
+
+                                <div ref={wrapDropdownRef} className="flex items-center gap-2 border-r border-slate-200 pr-4 relative">
+                                    <div className="flex flex-col items-center">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowWrapDropdown(p => !p);
+                                            }}
+                                            className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-700 transition-all group"
+                                            title="Wrap Text Options (MS Word)"
+                                        >
+                                            <WrapText size={22} className="text-indigo-600 group-hover:scale-105 transition-transform" />
+                                            <span className="text-[9px] font-bold mt-1 flex items-center gap-1 text-slate-700">
+                                                Wrap Text <ChevronDown size={10} className={`transition-transform duration-200 ${showWrapDropdown ? 'rotate-180' : ''}`} />
+                                            </span>
+                                        </button>
+                                        {showWrapDropdown && (
+                                            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 shadow-xl rounded-xl py-1.5 z-[500] text-slate-700 text-xs font-sans">
+                                                <button type="button" onClick={() => setShowWrapDropdown(false)} className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium">📄 In Line with Text</button>
+                                                <button type="button" onClick={() => setShowWrapDropdown(false)} className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium">🔳 Square</button>
+                                                <button type="button" onClick={() => setShowWrapDropdown(false)} className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium">📐 Tight</button>
+                                                <button type="button" onClick={() => setShowWrapDropdown(false)} className="w-full text-left px-3 py-1.5 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 font-medium">🖼️ In Front of Text</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <button type="button" onClick={insertLink} className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all" title="Hyperlink">
+                                        <LinkIcon size={22} className="text-purple-500" />
+                                        <span className="text-[9px] font-bold mt-1">Hyperlink</span>
+                                    </button>
+                                    <button type="button" onClick={() => formatText('horizontalRule')} className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-all" title="Horizontal Line">
+                                        <Minus size={22} className="text-slate-400" />
+                                        <span className="text-[9px] font-bold mt-1">Line</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeRibbonTab === 'Layout' && (
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 border-r border-slate-200 pr-4 shrink-0">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paper Size</span>
+                                        <select
+                                            value={paperSize}
+                                            onChange={(e) => onPaperSizeChange && onPaperSizeChange(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold min-w-[120px] cursor-pointer"
+                                        >
+                                            <option value="A4">A4 (210 x 297 mm)</option>
+                                            <option value="Letter">Letter (8.5 x 11 in)</option>
+                                            <option value="Legal">Legal (8.5 x 14 in)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 border-r border-slate-200 pr-4 shrink-0">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Top Margin</span>
+                                        <input
+                                            type="number"
+                                            value={margins.top}
+                                            onChange={(e) => onMarginsChange && onMarginsChange({ ...margins, top: parseInt(e.target.value) || 0 })}
+                                            className="w-16 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bottom Margin</span>
+                                        <input
+                                            type="number"
+                                            value={margins.bottom ?? 50}
+                                            onChange={(e) => onMarginsChange && onMarginsChange({ ...margins, bottom: parseInt(e.target.value) || 0 })}
+                                            className="w-16 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Left Margin</span>
+                                        <input
+                                            type="number"
+                                            value={margins.left}
+                                            onChange={(e) => onMarginsChange && onMarginsChange({ ...margins, left: parseInt(e.target.value) || 0 })}
+                                            className="w-16 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Right Margin</span>
+                                        <input
+                                            type="number"
+                                            value={margins.right}
+                                            onChange={(e) => onMarginsChange && onMarginsChange({ ...margins, right: parseInt(e.target.value) || 0 })}
+                                            className="w-16 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Line Spacing</span>
+                                        <select
+                                            value={lineSpacing}
+                                            onChange={(e) => onLineSpacingChange && onLineSpacingChange(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-[11px] px-2 py-1 rounded outline-none font-bold cursor-pointer"
+                                        >
+                                            {['1.0', '1.15', '1.25', '1.5', '1.75', '2.0', '2.5'].map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeRibbonTab === 'Table' && (
+                            <div className="flex items-center gap-4">
+                                <button type="button" onClick={() => editor?.chain().focus().addRowBefore().run()} className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded text-xs font-bold">Add Row Above</button>
+                                <button type="button" onClick={() => editor?.chain().focus().addRowAfter().run()} className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded text-xs font-bold">Add Row Below</button>
+                                <button type="button" onClick={() => editor?.chain().focus().deleteRow().run()} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-xs font-bold">Delete Row</button>
+                                <div className="w-px h-5 bg-slate-200"></div>
+                                <button type="button" onClick={() => editor?.chain().focus().addColumnBefore().run()} className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded text-xs font-bold">Add Column Left</button>
+                                <button type="button" onClick={() => editor?.chain().focus().addColumnAfter().run()} className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded text-xs font-bold">Add Column Right</button>
+                                <button type="button" onClick={() => editor?.chain().focus().deleteColumn().run()} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-xs font-bold">Delete Column</button>
+                                <div className="w-px h-5 bg-slate-200"></div>
+                                <button type="button" onClick={() => editor?.chain().focus().mergeCells().run()} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-bold">Merge Cells</button>
+                                <button type="button" onClick={() => editor?.chain().focus().splitCell().run()} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-bold">Split Cell</button>
+                                <button type="button" onClick={() => editor?.chain().focus().deleteTable().run()} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold">Delete Table</button>
+                            </div>
+                        )}
+
+                        {activeRibbonTab === 'File' && (
+                            <div className="flex items-center gap-4">
+                                {onSave && (
+                                    <button type="button" onClick={onSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm">
+                                        <Save size={15} /> Save Template
+                                    </button>
+                                )}
+                                {onExportPDF && (
+                                    <button type="button" onClick={onExportPDF} className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm">
+                                        <FileText size={15} className="text-rose-600" /> Export PDF
+                                    </button>
+                                )}
+                                {onExportWord && (
+                                    <button type="button" onClick={onExportWord} className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm">
+                                        <FileText size={15} className="text-blue-600" /> Export DOCX
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {activeRibbonTab !== 'Home' && activeRibbonTab !== 'Insert' && activeRibbonTab !== 'Layout' && activeRibbonTab !== 'Table' && activeRibbonTab !== 'File' && (
+                            <div className="flex items-center justify-center w-full py-2">
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider italic">Ribbon tools for {activeRibbonTab} tab active</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            <div
+                id={id}
+                className={`bg-white text-slate-800 transition-all ${!printMode ? 'rounded-b-2xl' : ''}`}
+            >
+                <EditorContent editor={editor} />
+            </div>
+        </div>
+    );
+});
+
+RichTextEditor.displayName = 'RichTextEditor';
+
+export default RichTextEditor;

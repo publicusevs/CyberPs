@@ -808,23 +808,6 @@ const CaseDetails = () => {
                             </div>
                         </div>
 
-                        {/* LETTERS & NOTICES ENGINE BUTTON */}
-                        <button
-                            onClick={() => { setNoticesTab('wizard'); setShowNoticesEngine(true); }}
-                            className="w-full mb-6 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl transition-all shadow-lg shadow-blue-200 group"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white/20 rounded-xl">
-                                    <FileText size={18} />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-[11px] font-black uppercase tracking-widest">Letters & Notices Engine</p>
-                                    <p className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">KYC · Freeze · Hold · Statement · Txn Details</p>
-                                </div>
-                            </div>
-                            <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                        </button>
-
                         {forensicExcel ? (
                             <Button
                                 variant="primary"

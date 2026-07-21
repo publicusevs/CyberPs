@@ -114,6 +114,7 @@ def run_installer(installer_path: Path, install_dir: Path) -> bool:
     """Run the Inno Setup installer silently."""
     try:
         log.info(f"Running installer: {installer_path}")
+        log_file_path = install_dir / "logs" / "installer.log"
         result = subprocess.run(
             [
                 str(installer_path),
@@ -122,6 +123,7 @@ def run_installer(installer_path: Path, install_dir: Path) -> bool:
                 "/SUPPRESSMSGBOXES",
                 "/NORESTART",
                 f"/DIR={install_dir}",
+                f"/LOG={log_file_path}",
             ],
             timeout=300,  # 5 min max
         )

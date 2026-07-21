@@ -1,0 +1,400 @@
+import Handlebars from 'handlebars';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+// ─────────────────────────────────────────────────────────────────
+// Handlebars HTML Template (for on-screen preview)
+// ─────────────────────────────────────────────────────────────────
+const templateSource = `
+<div id="letter-content" style="padding: 60px; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; line-height: 1.6; border: 1px solid #eee; margin: auto;">
+    <div style="text-align: center; border-bottom: 2px solid #C75A57; padding-bottom: 15px; margin-bottom: 30px;">
+        <h2 style="margin: 0; font-size: 24px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">OFFICE OF THE SUPERINTENDENT OF POLICE</h2>
+        <h3 style="margin: 5px 0; font-size: 20px; color: #C75A57; text-transform: uppercase; font-weight: bold;">CYBER CRIME POLICE STATION</h3>
+        <p style="margin: 5px 0; font-size: 14px; font-weight: 600;">Police Commissionerate, Jaipur, Rajasthan - 302001</p>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-bottom: 40px; font-weight: bold; font-size: 14px;">
+        <span>REF NO: CCPS/JP/NOTICE/{{year}}/{{refId}}</span>
+        <span>DATE: {{date}}</span>
+    </div>
+
+    <div style="margin-bottom: 40px; font-size: 15px;">
+        <p style="margin-bottom: 5px;">TO,</p>
+        <p style="font-weight: bold; text-transform: uppercase; margin: 0;">THE NODAL OFFICER / BRANCH MANAGER,</p>
+        <p style="font-weight: bold; text-transform: uppercase; margin: 0;">{{bankName}},</p>
+        <p style="font-weight: bold; text-transform: uppercase; margin: 0;">INDIA.</p>
+    </div>
+
+    <div style="margin-bottom: 30px; font-size: 15px; font-weight: bold; text-align: justify; border-bottom: 1px solid #000; display: inline-block;">
+        SUBJECT: NOTICE UNDER SECTION 94/106 BNSS 2023 - REQUEST FOR INFORMATION AND DEBIT FREEZE OF FRAUDULENT ACCOUNT(S).
+    </div>
+
+    <div style="margin-bottom: 25px; font-size: 15px; text-align: justify;">
+        <p>Respected Sir/Madam,</p>
+        <p style="margin-top: 15px;">
+            This is to inform you that a cyber crime investigation is currently underway regarding multiple fraudulent transactions. 
+            During technical analysis, the following account(s) held in your bank have been identified as involved in the receipt/transfer of misappropriated funds:
+        </p>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px; border: 1.5px solid #333;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="border: 1px solid #333; padding: 12px; text-align: left; width: 60px;">S.No.</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Account Number</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Transaction ID / UTR</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: right; width: 120px;">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#each records}}
+            <tr>
+                <td style="border: 1px solid #333; padding: 10px; text-align: center;">{{add @index 1}}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-weight: bold;">{{accountNumber}}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-family: monospace; font-size: 13px;">{{transactionId}}</td>
+                <td style="border: 1px solid #333; padding: 10px; text-align: right; font-weight: bold;">{{amount}}</td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+
+    {{#if hasSuspiciousRouting}}
+    <div style="margin-bottom: 20px; padding: 12px 18px; background: #fff0f0; border-left: 4px solid #C75A57; font-size: 13px; font-weight: bold; color: #C75A57;">
+        ⚠ Fund flow analysis indicates suspicious layering/routing pattern across the above accounts.
+    </div>
+    {{/if}}
+
+    <div style="margin-bottom: 30px; font-size: 15px; text-align: justify;">
+        <p>In view of the above, you are hereby requested to provide the following details immediately:</p>
+        <ul style="margin: 15px 0 15px 30px; list-style-type: disc;">
+            <li style="margin-bottom: 5px;">Certified copy of account statement (from {{startDate}} to {{endDate}})</li>
+            <li style="margin-bottom: 5px;">Certified copy of account opening form and KYC documents</li>
+            <li style="margin-bottom: 5px;">Linked mobile number and email ID</li>
+            <li>IP login logs and ATM card details</li>
+        </ul>
+        <p style="font-weight: bold; color: #C75A57; border: 1px dashed #C75A57; padding: 15px; background: #fff8f8; text-transform: uppercase; font-size: 13px;">
+            FURTHER, YOU ARE REQUESTED TO IMMEDIATELY DEBIT FREEZE THE AFOREMENTIONED ACCOUNT(S) TO PREVENT FURTHER LOSS OF FUNDS.
+        </p>
+    </div>
+
+    <div style="margin-top: 60px; text-align: right; font-size: 15px; padding-right: 20px;">
+        <p style="font-weight: bold; margin: 0; text-transform: uppercase;">INVESTIGATION OFFICER</p>
+        <p style="margin: 0;">Cyber Crime Police Station</p>
+        <p style="margin: 0;">Jaipur, Rajasthan</p>
+    </div>
+</div>
+`;
+
+Handlebars.registerHelper('add', (index, val) => index + val);
+
+export const SOCIAL_ADDRESSES = {
+    'facebook_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+    'insta_address': 'Meta Platforms (India) Pvt Ltd, 216A, Som Datt Chamber II, 9 Bhikaji Cama Place, New Delhi - 110066',
+    'whatsapp_address': 'WhatsApp LLC, 1601 Willow Road, Menlo Park, California 94025, USA (India Nodal: Mumbai)',
+    'gmail_address': 'Google India Pvt Ltd, Unitech Signature Tower-II, Tower-B, Sector-15, Part-II, Village Silokhera, Gurgaon, Haryana-122001',
+    'telegram_address': 'Telegram FZ-LLC, Business Central Towers, Tower A, Office 1003, P.O. Box 501919, Dubai, UAE',
+    'twitter_address': 'Twitter Communications India Pvt. Ltd., Level 9, Tower C, Epitome, Building No. 5, DLF Cyber City, Phase III, Gurgaon, Haryana-122002',
+    'linkedin_address': 'LinkedIn Ireland Unlimited Company, Wilton Plaza, Wilton Place, Dublin 2, Ireland',
+    'snapchat_address': 'Snap Inc., 3000 31st Street, Santa Monica, CA 90405, USA'
+};
+
+export const generateLetterHtml = (data, selectedTemplate = null, excludeContainer = false) => {
+    if (!selectedTemplate) {
+        const template = Handlebars.compile(templateSource);
+        return template(data);
+    }
+
+    // Process custom template
+    let html = selectedTemplate.body_text || '';
+    
+    // Replace standard placeholders
+    const replacements = {
+        '{bankName}': data.bankName,
+        '{date}': data.date,
+        '{refId}': data.refId,
+        '{year}': data.year,
+        '{startDate}': data.startDate,
+        '{endDate}': data.endDate,
+        // Bank fields
+        '{BANK_ACCUSEDBANK_NAME}': data.bankName,
+        '{BANK_NAME}': data.bankName,
+        '{BANK_ACCUSEDBANK_ADDRESS}': data.bankAddress || '',
+        '{BANK_ADDRESS}': data.bankAddress || '',
+        '{BANK_ACCUSEDBANK_ACCOUNT}': data.records && data.records.length > 0 ? data.records.map(r => `${r.accountNumber} (IFSC: ${r.ifsc})`).join(', ') : '',
+        '{BANK_ACCUSEDBANK_IFSCCODE}': data.records && data.records.length > 0 ? [...new Set(data.records.map(r => r.ifsc))].join(', ') : '',
+        // FIR / Case fields
+        '{FIR_NO}': data.firNo || '',
+        '{NCRP_NO}': data.ncrpNo || '',
+        '{NCRP_ACK_NO}': data.ncrpNo || data.ncrpAckNo || '',  // alias
+        '{FIR_SECTIONS}': data.sections || data.firSections || '',
+        '{FIR_ACT}': data.sections || data.firSections || '',
+        '{CASE_ID}': data.caseId || '',
+        '{REF_ID}': data.refId || '',
+        // Complainant / Victim fields
+        '{COMPLAINANT_NAME}': data.complainantName || data.victimName || '',
+        '{COMPLAINANT_MOBILE}': data.complainantMobile || data.victimMobile || '',
+        '{COMPLAINANT_EMAIL}': data.complainantEmail || data.victimEmail || '',
+        '{COMPLAINANT_ADDRESS}': data.complainantAddress || data.victimAddress || '',
+        '{VICTIM_NAME}': data.victimName || data.complainantName || '',
+        '{VICTIM_MOBILE}': data.victimMobile || data.complainantMobile || '',
+        '{VICTIM_EMAIL}': data.victimEmail || data.complainantEmail || '',
+        '{VICTIM_ADDRESS}': data.victimAddress || data.complainantAddress || '',
+        '{FRAUD_AMOUNT}': data.fraudAmount || '',
+        // Accused / Suspect social fields
+        '{ACCUSED_NAME}': data.accusedName || '',
+        '{ACCUSED_MOBILE}': data.accusedMobile || '',
+        '{ACCUSED_WHATSAPP}': data.accused_whatsapp_no || data.whatsapp_no || '',
+        '{ACCUSED_FACEBOOK}': data.accused_facebook_id || data.facebook_id || '',
+        '{ACCUSED_TWITTER}': data.accused_twitter_id || data.twitter_id || '',
+        '{ACCUSED_INSTAGRAM}': data.accused_insta_id || data.insta_id || '',
+        '{ACCUSED_TELEGRAM}': data.accused_telegram_id || data.telegram_id || '',
+        '{ACCUSED_GMAIL}': data.accused_gmail_id || data.gmail_id || '',
+        '{ACCUSED_LINKEDIN}': data.accused_linkedin_id || data.linkedin_id || '',
+        '{ACCUSED_WEBSITE}': data.accused_website_url || data.website_url || '',
+        '{ACCUSED_OTHER_SOCIAL}': data.accused_other_social || data.other_social || '',
+        '{ACCUSED_SOCIAL_MEDIA_TYPE}': data.accusedSocialMediaType || data.bankName || '',
+        '{ACCUSED_SOCIAL_MEDIA_ID}': data.accusedSocialMediaId || data.whatsapp_no || data.facebook_id || data.gmail_id || '',
+        '{ACCUSED_SOCIAL_MEDIA_ADDRESS}': data.bankAddress || '',
+        '{ACCUSED_INSTA}': data.accused_insta_id || data.insta_id || '',
+        '{ACCUSED_X}': data.accused_twitter_id || data.twitter_id || '',
+        '{ACCUSED_YOUTUBE}': data.accused_gmail_id || data.gmail_id || '',
+        '{ACCUSED_SIGNAL}': data.accused_other_social || data.other_social || '',
+        '{ACCUSED_SNAPCHAT}': data.accused_other_social || data.other_social || '',
+        // Legacy social (per-accused) fields
+        '{whatsapp_no}': data.whatsapp_no || '',
+        '{gmail_id}': data.gmail_id || '',
+        '{facebook_id}': data.facebook_id || '',
+        '{twitter_id}': data.twitter_id || '',
+        '{linkedin_id}': data.linkedin_id || '',
+        '{insta_id}': data.insta_id || '',
+        '{telegram_id}': data.telegram_id || '',
+        '{website_url}': data.website_url || '',
+        '{other_social}': data.other_social || '',
+        // Nodal addresses
+        '{facebook_address}': SOCIAL_ADDRESSES.facebook_address,
+        '{insta_address}': SOCIAL_ADDRESSES.insta_address,
+        '{whatsapp_address}': SOCIAL_ADDRESSES.whatsapp_address,
+        '{gmail_address}': SOCIAL_ADDRESSES.gmail_address,
+        '{telegram_address}': SOCIAL_ADDRESSES.telegram_address,
+        '{twitter_address}': SOCIAL_ADDRESSES.twitter_address,
+        '{linkedin_address}': SOCIAL_ADDRESSES.linkedin_address,
+        '{snapchat_address}': SOCIAL_ADDRESSES.snapchat_address,
+    };
+
+    Object.entries(replacements).forEach(([key, value]) => {
+        const regex = new RegExp(key, 'g');
+        html = html.replace(regex, value);
+    });
+
+    // Generate transaction table
+    let tableHtml = `
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; font-size: 14px; border: 1.5px solid #333;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="border: 1px solid #333; padding: 12px; text-align: left; width: 60px;">S.No.</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Account Number</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: left;">Transaction ID / UTR</th>
+                <th style="border: 1px solid #333; padding: 12px; text-align: right; width: 120px;">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    data.records.forEach((rec, index) => {
+        tableHtml += `
+            <tr>
+                <td style="border: 1px solid #333; padding: 10px; text-align: center;">${index + 1}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-weight: bold;">${rec.accountNumber}</td>
+                <td style="border: 1px solid #333; padding: 10px; font-family: monospace; font-size: 13px;">${rec.transactionId}</td>
+                <td style="border: 1px solid #333; padding: 10px; text-align: right; font-weight: bold;">${rec.amount}</td>
+            </tr>
+        `;
+    });
+    tableHtml += `</tbody></table>`;
+
+    // Inject table into {TRANSACTION_TABLE} or {TEST_TRANSACTION_TABLE} if placeholder is used
+    if (html.includes('{TRANSACTION_TABLE}')) {
+        html = html.replace(/\{TRANSACTION_TABLE\}/g, tableHtml);
+    }
+    // Alias: {TEST_TRANSACTION_TABLE} -> same transaction table
+    if (html.includes('{TEST_TRANSACTION_TABLE}')) {
+        html = html.replace(/\{TEST_TRANSACTION_TABLE\}/g, tableHtml);
+    }
+
+    // Extract margins, lineSpacing, and wordWrap from data or selectedTemplate
+    let margins = data.margins;
+    if (!margins && selectedTemplate) {
+        let jsonData = selectedTemplate.json_data;
+        if (typeof jsonData === 'string') {
+            try { jsonData = JSON.parse(jsonData); } catch(e) {}
+        }
+        margins = jsonData?.margins;
+    }
+    if (!margins) {
+        margins = { top: 50, left: 50, right: 50, bottom: 50 };
+    }
+
+    let lineSpacing = '1.6';
+    let wordWrap = true;
+    if (selectedTemplate) {
+        let jsonData = selectedTemplate.json_data;
+        if (typeof jsonData === 'string') {
+            try { jsonData = JSON.parse(jsonData); } catch(e) {}
+        }
+        lineSpacing = jsonData?.lineSpacing || '1.6';
+        wordWrap = jsonData?.wordWrap !== false;
+    }
+
+    if (excludeContainer) {
+        return html;
+    }
+
+    const paddingTop = `${margins.top ?? 50}px`;
+    const paddingLeft = `${margins.left ?? 50}px`;
+    const paddingRight = `${margins.right ?? 50}px`;
+    const paddingBottom = `${margins.bottom ?? 50}px`;
+    const spaceStyle = wordWrap ? 'pre-wrap' : 'pre';
+
+    // Extract paragraphSpacing and paragraphSpacingBefore from template json_data
+    let paraSpacing = '12';
+    let paraSpacingBefore = '0';
+    if (selectedTemplate) {
+        let jd = selectedTemplate.json_data;
+        if (typeof jd === 'string') { try { jd = JSON.parse(jd); } catch(e) {} }
+        paraSpacing = jd?.paragraphSpacing || '12';
+        paraSpacingBefore = jd?.paragraphSpacingBefore || '0';
+    }
+
+    return `<div class="letter-print-container" style="padding-top: ${paddingTop}; padding-left: ${paddingLeft}; padding-right: ${paddingRight}; padding-bottom: ${paddingBottom}; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; min-height: 1123px; line-height: ${lineSpacing}; margin: auto; white-space: ${spaceStyle}; word-break: break-word; box-sizing: border-box;"><style>.letter-print-container p { margin-bottom: ${paraSpacing}px !important; margin-top: ${paraSpacingBefore}px !important; } .letter-print-container img { display: block !important; visibility: visible !important; } .letter-print-container table { width: 100%; border-collapse: collapse; } .letter-print-container td, .letter-print-container th { border: 1px solid #333; padding: 8px 12px; }</style>${html}</div>`;
+};
+
+export const wrapHtmlInContainer = (html, margins, lineSpacing = '1.6', wordWrap = true, paragraphSpacing = '12', paragraphSpacingBefore = '0') => {
+    const paddingTop = `${margins.top ?? 50}px`;
+    const paddingLeft = `${margins.left ?? 50}px`;
+    const paddingRight = `${margins.right ?? 50}px`;
+    const paddingBottom = `${margins.bottom ?? 50}px`;
+    const spaceStyle = wordWrap ? 'pre-wrap' : 'pre';
+
+    return `<div class="letter-print-container ql-editor" style="padding-top: ${paddingTop}; padding-left: ${paddingLeft}; padding-right: ${paddingRight}; padding-bottom: ${paddingBottom}; font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; width: 794px; min-height: 1123px; line-height: ${lineSpacing}; margin: auto; white-space: ${spaceStyle}; word-break: break-word; box-sizing: border-box;"><style>.letter-print-container p { margin-bottom: ${paragraphSpacing}px !important; margin-top: ${paragraphSpacingBefore || 0}px !important; } .letter-print-container img { display: block !important; visibility: visible !important; } .letter-print-container table { width: 100%; border-collapse: collapse; } .letter-print-container td, .letter-print-container th { border: 1px solid #333; padding: 8px 12px; }</style>${html}</div>`;
+};
+
+export const getSharedStyles = () => `
+    .ql-editor table, .letter-print-container table { border-collapse: collapse; margin-left: auto !important; margin-right: auto !important; margin-top: 15px !important; margin-bottom: 15px !important; width: 100%; }
+    .ql-editor td, .ql-editor th, .letter-print-container td, .letter-print-container th { border: 1px solid #333; padding: 8px 12px; min-width: 50px; font-family: 'Times New Roman', Times, serif; }
+    .ql-editor img, .letter-print-container img { max-width: 100%; height: auto; margin: 0; position: absolute !important; top: auto !important; bottom: auto !important; }
+    .page-break { page-break-after: always; }
+    table, tr, td, th, tbody, thead, tfoot { page-break-inside: avoid !important; }
+    .letter-print-container { width: 794px; max-width: 794px; background: #fff; margin: auto; font-family: 'Times New Roman', Times, serif; color: #000; box-sizing: border-box; position: relative; }
+`;
+
+export const downloadPdf = async (elementId, filename) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    // Use consistent convertHtmlToPdfBlob for printing to ensure 100% visual fidelity
+    const blob = await convertHtmlToPdfBlob(element.innerHTML, filename);
+    const url = URL.createObjectURL(blob);
+    
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+        alert('Please allow popups to view/print the letter.');
+    }
+};
+
+export const convertHtmlToPdfBlob = async (htmlString, filename = 'document.pdf') => {
+    const html2pdf = (await import('html2pdf.js')).default;
+    const container = document.createElement('div');
+    
+    const style = document.createElement('style');
+    style.innerHTML = getSharedStyles();
+    container.appendChild(style);
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.innerHTML = htmlString;
+    container.appendChild(contentDiv);
+
+    const opt = {
+        margin:       [15, 15, 15, 15],
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 0.85 }, // Balance between small size and good quality
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
+    };
+
+    return await html2pdf().set(opt).from(container).output('blob');
+};
+
+export const generateCombinedPdfBlob = async (htmlStrings, filename = 'bulk.pdf') => {
+    const html2pdf = (await import('html2pdf.js')).default;
+    const container = document.createElement('div');
+    
+    const style = document.createElement('style');
+    style.innerHTML = getSharedStyles();
+    container.appendChild(style);
+    
+    const contentDiv = document.createElement('div');
+    htmlStrings.forEach((html, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        contentDiv.appendChild(wrapper);
+        if (index < htmlStrings.length - 1) {
+            const pb = document.createElement('div');
+            pb.className = 'page-break';
+            contentDiv.appendChild(pb);
+        }
+    });
+    container.appendChild(contentDiv);
+
+    const opt = {
+        margin:       [15, 15, 15, 15],
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 0.85 },
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
+    };
+
+    return await html2pdf().set(opt).from(container).output('blob');
+};
+
+// Deprecated: Kept empty to avoid import errors in other untouched files
+export const generateBulkPdf = async (pdf, data, isFirstPage, selectedTemplate = null) => {
+    console.warn("generateBulkPdf is deprecated. Use generateCombinedPdfBlob instead.");
+};
+
+export const generateAllBankLettersPdf = async (transactions, caseId) => {
+    console.warn("generateAllBankLettersPdf is deprecated.");
+    return null;
+};
+
+export const groupTransactionsByBank = (transactions) => {
+    const groups = {};
+
+    transactions.forEach(t => {
+        const bank = (t.platform || t.bankName || 'Unknown Bank').trim();
+        if (!groups[bank]) {
+            groups[bank] = {
+                name: bank,
+                records: []
+            };
+        }
+        groups[bank].records.push({
+            account: t.receiver_acc || t.accountNumber,
+            utr: t.utr_no || t.transactionId,
+            amount: t.amount,
+            date: t.trans_date,
+            layer: t.layer || 'L1'
+        });
+    });
+
+    Object.values(groups).forEach(group => {
+        group.records.sort((a, b) => {
+            const accA = (a.account || '').toString();
+            const accB = (b.account || '').toString();
+            if (accA !== accB) return accA.localeCompare(accB);
+            return 0;
+        });
+    });
+
+    return Object.values(groups);
+};

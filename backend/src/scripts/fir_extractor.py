@@ -312,9 +312,13 @@ def parse_fir(file_path):
                 val = find_nearest_right(all_blocks, mob_lbl, match_regex=r'\d')
                 if val: data['complainant']['mobile'] = val['text']
                 
-            _, uid_lbl = find_block_by_text(all_blocks[idx:], r"UID")
+            uid_lbl = None
+            for b in all_blocks[idx:]:
+                if re.search(r"UID", b['text'], re.IGNORECASE) and len(b['text']) < 20:
+                    uid_lbl = b
+                    break
             if uid_lbl:
-                val = find_nearest_right(all_blocks, uid_lbl)
+                val = find_nearest_right(all_blocks, uid_lbl, match_regex=r'\d')
                 if val: data['complainant']['uid'] = val['text']
                 
             # Address extraction

@@ -132,6 +132,33 @@ export async function installUpdate(downloadId) {
     }
 }
 
+/**
+ * Request backend to open the local Temp/Updates folder.
+ */
+export async function openDownloadFolder() {
+    try {
+        const res = await fetch(`${API_BASE}/open-folder`, { method: 'POST' });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Fetch logs text content from backend.
+ * @param {'installer'|'updater'} logType
+ */
+export async function fetchUpdateLog(logType) {
+    try {
+        const res = await fetch(`${API_BASE}/log/${logType}`);
+        if (!res.ok) return 'Failed to load logs.';
+        const data = await res.json();
+        return data.content || 'Log file is empty.';
+    } catch (err) {
+        return `Failed to fetch logs: ${err.message}`;
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function formatBytes(bytes, decimals = 1) {

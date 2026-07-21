@@ -215,6 +215,8 @@ const LetterPreview = () => {
     const [margins, setMargins] = useState({ top: 50, left: 50, right: 50, bottom: 50 });
     const [lineSpacing, setLineSpacing] = useState('1.6');
     const [paragraphSpacing, setParagraphSpacing] = useState('12');
+    const [paragraphSpacingBefore, setParagraphSpacingBefore] = useState('0');
+    const [paperSize, setPaperSize] = useState('A4');
     const [wordWrap, setWordWrap] = useState(true);
 
     const activeEditorRef = useRef(null);
@@ -637,7 +639,7 @@ const LetterPreview = () => {
                     if (isHtmlContent) {
                         const quill = quillInstancesRef.current[elemId];
                         if (quill) {
-                            htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                            htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap, paragraphSpacing);
                         } else {
                             htmlContent = generateLetterHtml(letterData, selectedTemplate);
                         }
@@ -689,7 +691,7 @@ const LetterPreview = () => {
                 if (isHtmlContent) {
                     const quill = quillInstancesRef.current[elemId];
                     if (quill) {
-                        htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                        htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap, paragraphSpacing);
                     } else {
                         const adaptedTemplate = adaptTemplateForPlatform(selectedTemplate, opt);
                         htmlContent = generateLetterHtml(letterData, adaptedTemplate);
@@ -724,7 +726,7 @@ const LetterPreview = () => {
             if (isHtmlContent) {
                 const quill = quillInstancesRef.current[elemId];
                 if (quill) {
-                    htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap);
+                    htmlContent = wrapHtmlInContainer(quill.root.innerHTML, margins, lineSpacing, wordWrap, paragraphSpacing);
                 } else {
                     htmlContent = generateLetterHtml(letterData, selectedTemplate);
                 }
@@ -868,17 +870,32 @@ const LetterPreview = () => {
     };
 
     const handleBulkDownload = async () => {
-        const { default: jsPDF } = await import('jspdf');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        let isFirst = true;
-
-        const lettersToDownload = getGeneratedLetters(false);
-        for (const letterData of lettersToDownload) {
-            const { generateBulkPdf } = await import('../services/letterGenerator');
-            await generateBulkPdf(pdf, letterData, isFirst, selectedTemplate);
-            isFirst = false;
+        setGenerating(true);
+        try {
+            const lettersToDownload = getGeneratedLetters(false);
+            const { generateCombinedPdfBlob, wrapHtmlInContainer, generateLetterHtml } = await import('../services/letterGenerator');
+            
+            const htmlStrings = lettersToDownload.map(letterData => {
+                let html = letterData.htmlContent || generateLetterHtml(letterData, selectedTemplate);
+                // Ensure it's wrapped in container so it gets width and styles
+                if (!html.includes('letter-print-container')) {
+                    html = wrapHtmlInContainer(html, margins, lineSpacing, wordWrap, paragraphSpacing);
+                }
+                return html;
+            });
+            
+            const blob = await generateCombinedPdfBlob(htmlStrings, `BULK_NOTICES_CASE_${id}.pdf`);
+            
+            // Download blob
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `BULK_NOTICES_CASE_${id}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } finally {
+            setGenerating(false);
         }
-        pdf.save(`BULK_NOTICES_CASE_${id}.pdf`);
     };
 
     const handleStepChange = (newStep) => {
@@ -961,16 +978,16 @@ const LetterPreview = () => {
 
         setGenerating(true);
         try {
-            const { default: jsPDF } = await import('jspdf');
-            const { generateBulkPdf } = await import('../services/letterGenerator');
+            const { convertHtmlToPdfBlob, wrapHtmlInContainer, generateLetterHtml } = await import('../services/letterGenerator');
 
             let savedCount = 0;
             for (const letter of lettersToSave) {
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                await generateBulkPdf(pdf, letter, true, letter.htmlContent);
+                let html = letter.htmlContent || generateLetterHtml(letter, selectedTemplate);
+                if (!html.includes('letter-print-container')) {
+                    html = wrapHtmlInContainer(html, margins, lineSpacing, wordWrap, paragraphSpacing);
+                }
                 
-                // Use a Promise to get reliable base64 from Blob
-                const pdfBlob = pdf.output('blob');
+                const pdfBlob = await convertHtmlToPdfBlob(html, `NOTICE_${letter.bankName}.pdf`);
                 const pdfBase64 = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
@@ -980,7 +997,8 @@ const LetterPreview = () => {
                 const res = await api.post('/cases/save-notice', { 
                     case_id: id, 
                     bank_name: letter.bankName, 
-                    pdf_base64: pdfBase64 
+                    pdf_base64: pdfBase64,
+                    version_mode: 'overwrite'
                 });
                 if (res.data.success) savedCount++;
             }
@@ -1026,17 +1044,19 @@ const LetterPreview = () => {
             }
 
             // 2. Generation & Conflict Detection — ALL PARALLEL for max speed
-            const { default: jsPDF } = await import('jspdf');
-            const { generateBulkPdf } = await import('../services/letterGenerator');
+            const { convertHtmlToPdfBlob, wrapHtmlInContainer, generateLetterHtml } = await import('../services/letterGenerator');
             
             setStatusOverlay({ show: true, type: 'warning', title: 'Dossier Integrity Scan', message: 'Scanning for intelligence collisions...' });
 
             const queue = [];
 
             const processLetter = async (letter) => {
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                await generateBulkPdf(pdf, letter.data, true, letter.htmlContent);
-                const pdfBlob = pdf.output('blob');
+                let html = letter.htmlContent || generateLetterHtml(letter.data, selectedTemplate);
+                if (!html.includes('letter-print-container')) {
+                    html = wrapHtmlInContainer(html, margins, lineSpacing, wordWrap, paragraphSpacing);
+                }
+                
+                const pdfBlob = await convertHtmlToPdfBlob(html, `NOTICE_${letter.bankName}.pdf`);
                 const pdfBase64 = await new Promise(resolve => {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
@@ -1274,8 +1294,7 @@ const LetterPreview = () => {
             if (lettersToSave.length > 0) {
                 const totalLetters = lettersToSave.length;
                 setStatusOverlay({ show: true, type: 'warning', title: 'Finalizing Mission', message: `Generating and saving dossiers... (0/${totalLetters} completed)` });
-                const { default: jsPDF } = await import('jspdf');
-                const { generateBulkPdf } = await import('../services/letterGenerator');
+                const { convertHtmlToPdfBlob, wrapHtmlInContainer, generateLetterHtml } = await import('../services/letterGenerator');
 
                 let currentLetter = 0;
                 for (const letter of lettersToSave) {
@@ -1287,18 +1306,24 @@ const LetterPreview = () => {
                         title: 'Finalizing Mission', 
                         message: `Processing: ${letter.bankName}\n\nTotal Notices: ${totalLetters} | Generated: ${currentLetter} | Remaining: ${remaining}`
                     });
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    await generateBulkPdf(pdf, letter, true, letter.htmlContent);
-                    const pdfBlob = pdf.output('blob');
+                    
+                    let html = letter.htmlContent || generateLetterHtml(letter, selectedTemplate);
+                    if (!html.includes('letter-print-container')) {
+                        html = wrapHtmlInContainer(html, margins, lineSpacing, wordWrap, paragraphSpacing);
+                    }
+                    
+                    const pdfBlob = await convertHtmlToPdfBlob(html, `NOTICE_${letter.bankName}.pdf`);
                     const pdfBase64 = await new Promise((resolve) => {
                         const reader = new FileReader();
                         reader.onloadend = () => resolve(reader.result);
                         reader.readAsDataURL(pdfBlob);
                     });
+                    
                     await api.post('/cases/save-notice', { 
                         case_id: id, 
                         bank_name: letter.bankName, 
-                        pdf_base64: pdfBase64 
+                        pdf_base64: pdfBase64,
+                        version_mode: 'overwrite'
                     });
                 }
             }
@@ -1896,6 +1921,8 @@ const LetterPreview = () => {
                                                                     setMargins({ top: 50, left: 50, right: 50, bottom: 50, ...(jsonData?.margins || {}) });
                                                                     setLineSpacing(jsonData?.lineSpacing || '1.6');
                                                                     setParagraphSpacing(jsonData?.paragraphSpacing || '12');
+                                                                    setParagraphSpacingBefore(jsonData?.paragraphSpacingBefore || '0');
+                                                                    setPaperSize(jsonData?.paperSize || 'A4');
                                                                     setWordWrap(jsonData?.wordWrap !== false);
                                                                 }}
                                                                 className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${selectedTemplate?.template_id === t.template_id ? 'border-blue-600 bg-blue-50/50 shadow-md shadow-blue-100' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}
@@ -1951,59 +1978,80 @@ const LetterPreview = () => {
                                             margin-bottom: 1em;
                                         }
                                         .ql-editor img {
-                                            display: block;
-                                            max-width: 100%;
-                                            height: auto;
-                                            border-radius: 8px;
-                                            margin: 15px 0;
-                                            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-                                        }
                                     `}</style>
-                                    {/* Top Action Bar */}
-                                    <div className="flex justify-between items-center bg-white px-8 py-6 rounded-[28px] border border-blue-100 shadow-sm">
-                                        <div className="flex items-center gap-4">
-                                            <Printer className="text-blue-600" size={20} />
-                                            <h3 className="text-sm font-black text-slate-900 tracking-tighter uppercase italic">Legal Correspondence <span className="text-blue-600">Ready Matrix</span></h3>
-                                            <span className="ml-4 px-4 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase">{allLetters.length} Notice{allLetters.length !== 1 ? 's' : ''}</span>
-                                        </div>
-                                        <div className="flex gap-3">
-                                            <Button variant="outline" className="px-6 rounded-xl" icon={Download} onClick={handleBulkDownload}>Bulk Download</Button>
-                                            <Button variant="outline" className="px-6 rounded-xl" icon={Printer} onClick={() => downloadPdf('letter-preview', `NOTICE_${selectedBank?.bankName}.pdf`)}>Print</Button>
-                                            <Button variant="primary" className="px-6 rounded-xl shadow-blue-200 bg-blue-600 border-none" icon={Save} onClick={handleSaveToDossier}>Save to Dossier</Button>
-                                        </div>
-                                    </div>
-
-                                    {/* Zoom Controls */}
-                                    <div className="flex items-center justify-center gap-3">
-                                        <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition-all shadow-sm"><ZoomOut size={16} className="text-slate-600" /></button>
-                                        <div className="px-5 py-2 bg-white rounded-xl border border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-widest min-w-[80px] text-center">{Math.round(zoom * 100)}%</div>
-                                        <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition-all shadow-sm"><ZoomIn size={16} className="text-slate-600" /></button>
-                                        <button onClick={() => setZoom(1.0)} className="px-4 py-2 bg-white rounded-xl border border-slate-200 hover:bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all shadow-sm">Reset</button>
-                                    </div>
-
-
-
-                                    {/* PDF Viewer Frame */}
-                                    <div className="bg-slate-600 rounded-[32px] shadow-inner relative overflow-hidden">
-                                        <div className="max-h-[85vh] overflow-y-auto p-8 md:p-12" style={{ scrollBehavior: 'smooth' }}>
-                                            {generating ? (
-                                                <div className="flex flex-col items-center justify-center gap-6 min-h-[600px]">
-                                                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                                    <div className="text-center">
-                                                        <p className="text-white font-black uppercase tracking-[0.4em] text-sm animate-pulse">Analyzing Transaction Sinks...</p>
-                                                        <p className="text-white/40 text-[9px] font-bold uppercase mt-2 tracking-widest">Normalizing forensic weights & drafting notices</p>
-                                                    </div>
+                                    {/* Single Unified MS Word Studio Container */}
+                                    <div className="bg-white rounded-[28px] border border-blue-100 shadow-xl overflow-hidden flex flex-col no-print">
+                                        {/* Action Bar Header */}
+                                        <div className="flex justify-between items-center px-8 py-4 border-b border-slate-100">
+                                            <div className="flex items-center gap-4">
+                                                <Printer className="text-blue-600" size={20} />
+                                                <h3 className="text-sm font-black text-slate-900 tracking-tighter uppercase italic">Legal Correspondence <span className="text-blue-600">Ready Matrix</span></h3>
+                                                <span className="ml-4 px-4 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase">{allLetters.length} Notice{allLetters.length !== 1 ? 's' : ''}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl mr-2">
+                                                    <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><ZoomOut size={13} /></button>
+                                                    <span className="text-[10px] font-black text-slate-600 min-w-[45px] text-center">{Math.round(zoom * 100)}%</span>
+                                                    <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><ZoomIn size={13} /></button>
+                                                    <button onClick={() => setZoom(1.0)} className="text-[9px] font-black text-slate-400 uppercase ml-1 hover:text-slate-600">Reset</button>
                                                 </div>
-                                            ) : allLetters.length > 0 ? (
+                                                <Button variant="outline" className="px-6 rounded-xl" icon={Download} onClick={handleBulkDownload}>Bulk Download</Button>
+                                                <Button variant="outline" className="px-6 rounded-xl" icon={Printer} onClick={() => downloadPdf('letter-preview', `NOTICE_${selectedBank?.bankName}.pdf`)}>Print</Button>
+                                                <Button variant="primary" className="px-6 rounded-xl shadow-blue-200 bg-blue-600 border-none" icon={Save} onClick={handleSaveToDossier}>Save to Dossier</Button>
+                                            </div>
+                                        </div>
+
+                                        {/* Top Fixed MS Word Ribbon Toolbar (Pure Toolbar - No blank editor below) */}
+                                        <RichTextEditor
+                                            id="master-workspace-toolbar"
+                                            ref={(ref) => {
+                                                if (ref && ref.getQuill()) {
+                                                    quillInstancesRef.current['letter-preview'] = ref.getQuill();
+                                                }
+                                            }}
+                                            margins={margins}
+                                            onMarginsChange={setMargins}
+                                            lineSpacing={lineSpacing}
+                                            onLineSpacingChange={setLineSpacing}
+                                            paragraphSpacing={paragraphSpacing}
+                                            onParagraphSpacingChange={setParagraphSpacing}
+                                            paragraphSpacingBefore={paragraphSpacingBefore}
+                                            onParagraphSpacingBeforeChange={setParagraphSpacingBefore}
+                                            paperSize={paperSize}
+                                            onPaperSizeChange={setPaperSize}
+                                            wordWrap={wordWrap}
+                                            onWordWrapChange={setWordWrap}
+                                            onExportPDF={() => downloadPdf('letter-preview', `NOTICE_${selectedBank?.bankName}.pdf`)}
+                                            onSave={handleSaveToDossier}
+                                            toolbarSticky={false}
+                                            hideToolbar={false}
+                                            hideEditor={true}
+                                        />
+
+                                        {/* Integrated MS Word Workspace Canvas with Documents */}
+                                        <div className="bg-slate-100 border-t border-slate-200 flex flex-col">
+                                            <div className="max-h-[80vh] overflow-y-auto p-8 md:p-12 custom-scrollbar" style={{ scrollBehavior: 'smooth' }}>
+                                                {generating ? (
+                                                    <div className="flex flex-col items-center justify-center gap-6 min-h-[600px]">
+                                                        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                                        <div className="text-center">
+                                                            <p className="text-slate-800 font-black uppercase tracking-[0.4em] text-sm animate-pulse">Analyzing Transaction Sinks...</p>
+                                                            <p className="text-slate-500 text-[9px] font-bold uppercase mt-2 tracking-widest">Normalizing forensic weights & drafting notices</p>
+                                                        </div>
+                                                    </div>
+                                                ) : allLetters.length > 0 ? (
                                                 <div className="flex flex-col items-center gap-10">
                                                     {allLetters.map((letter, idx) => (
                                                         <motion.div key={letter.bankName} initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: idx * 0.1 }} className="relative w-full flex flex-col items-center" >
                                                             {/* Page Label */}
                                                             <div className="mb-3 flex items-center gap-3">
-                                                                <span className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-[9px] font-black text-white/70 uppercase tracking-[0.3em]"> Notice {idx + 1} of {allLetters.length} — {letter.bankName} </span>
+                                                                <span className="px-4 py-1 bg-slate-800 rounded-full text-[9px] font-black text-white uppercase tracking-[0.3em] shadow-md border border-slate-700"> Notice {idx + 1} of {allLetters.length} — {letter.bankName} </span>
                                                             </div>
-                                                            {/* Letter Paper with Margins */}
-                                                            <div className="relative" style={{ zoom: zoom }}>
+                                                            {/* Letter Paper with Header/Footer Guides & MS Word Shadow */}
+                                                            <div className="relative bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.45)] border border-slate-200" style={{ zoom: zoom, width: paperSize === 'Legal' ? '216mm' : paperSize === 'Letter' ? '216mm' : '210mm' }}>
+                                                                {/* Header Guide */}
+                                                                <div className="absolute top-2 left-6 right-6 border-b border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Header</div>
+
                                                                 <RichTextEditor
                                                                     id={idx === 0 ? 'letter-preview' : `letter-preview-${idx}`}
                                                                     ref={(ref) => {
@@ -2013,67 +2061,29 @@ const LetterPreview = () => {
                                                                     }}
                                                                     defaultValue={generateLetterHtml(letter, selectedTemplate, true)}
                                                                     margins={margins}
+                                                                    onMarginsChange={setMargins}
                                                                     lineSpacing={lineSpacing}
+                                                                    onLineSpacingChange={setLineSpacing}
                                                                     paragraphSpacing={paragraphSpacing}
+                                                                    onParagraphSpacingChange={setParagraphSpacing}
+                                                                    paragraphSpacingBefore={paragraphSpacingBefore}
+                                                                    onParagraphSpacingBeforeChange={setParagraphSpacingBefore}
+                                                                    paperSize={paperSize}
+                                                                    onPaperSizeChange={setPaperSize}
                                                                     wordWrap={wordWrap}
                                                                     onWordWrapChange={setWordWrap}
-                                                                    onLineSpacingChange={setLineSpacing}
-                                                                    onParagraphSpacingChange={setParagraphSpacing}
+                                                                    onExportPDF={() => downloadPdf('letter-preview', `NOTICE_${selectedBank?.bankName}.pdf`)}
                                                                     onSelectionChange={(range) => {
                                                                         if (range) setActiveQuillId(idx === 0 ? 'letter-preview' : `letter-preview-${idx}`);
                                                                     }}
-                                                                    className="bg-white rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)] ring-1 ring-black/10 origin-top transition-transform duration-300 ease-out outline-none focus:ring-4 focus:ring-blue-500/30 min-h-[297mm] mx-auto prose prose-slate max-w-none text-slate-800 ql-editor-wrapper"
+                                                                    className="bg-white rounded-sm origin-top transition-transform duration-300 ease-out outline-none focus:ring-0 min-h-[297mm] mx-auto prose prose-slate max-w-none text-slate-800 ql-editor-wrapper"
                                                                     editorContainerClassName="min-h-[297mm]"
-                                                                    style={{ width: '210mm' }}
-                                                                    toolbarTop="0px"
+                                                                    style={{ width: paperSize === 'Legal' ? '216mm' : paperSize === 'Letter' ? '216mm' : '210mm' }}
+                                                                    hideToolbar={true}
                                                                 />
-                                                                
-                                                                {/* Margin Controls */}
-                                                                <>
-                                                                    {/* Top Margin Handle */}
-                                                                    <motion.div 
-                                                                        drag="y"
-                                                                        dragConstraints={{ top: 0, bottom: 200 }}
-                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, top: Math.max(0, prev.top + info.delta.y) }))}
-                                                                        className="absolute left-0 right-0 h-2 bg-blue-500/30 hover:bg-blue-500 cursor-ns-resize z-20 group flex items-center justify-center"
-                                                                        style={{ top: `${margins.top}px` }}
-                                                                    >
-                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Top: {Math.round(margins.top)}px</div>
-                                                                    </motion.div>
 
-                                                                    {/* Left Margin Handle */}
-                                                                    <motion.div 
-                                                                        drag="x"
-                                                                        dragConstraints={{ left: 0, right: 200 }}
-                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, left: Math.max(0, prev.left + info.delta.x) }))}
-                                                                        className="absolute top-0 bottom-0 w-2 bg-blue-500/30 hover:bg-blue-500 cursor-ew-resize z-20 group flex items-center justify-center"
-                                                                        style={{ left: `${margins.left}px` }}
-                                                                    >
-                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase -rotate-90">Margin Left: {Math.round(margins.left)}px</div>
-                                                                    </motion.div>
-
-                                                                    {/* Right Margin Handle */}
-                                                                    <motion.div 
-                                                                        drag="x"
-                                                                        dragConstraints={{ left: -200, right: 0 }}
-                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, right: Math.max(0, prev.right - info.delta.x) }))}
-                                                                        className="absolute top-0 bottom-0 w-2 bg-blue-500/30 hover:bg-blue-500 cursor-ew-resize z-20 group flex items-center justify-center"
-                                                                        style={{ right: `${margins.right}px` }}
-                                                                    >
-                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase rotate-90">Margin Right: {Math.round(margins.right)}px</div>
-                                                                    </motion.div>
-
-                                                                    {/* Bottom Margin Handle */}
-                                                                    <motion.div 
-                                                                        drag="y"
-                                                                        dragConstraints={{ top: -200, bottom: 0 }}
-                                                                        onDrag={(e, info) => setMargins(prev => ({ ...prev, bottom: Math.max(0, prev.bottom - info.delta.y) }))}
-                                                                        className="absolute left-0 right-0 h-2 bg-blue-500/30 hover:bg-blue-500 cursor-ns-resize z-20 group flex items-center justify-center"
-                                                                        style={{ bottom: `${Number(margins.bottom)}px` }}
-                                                                    >
-                                                                        <div className="bg-slate-900 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase">Margin Bottom: {Math.round(margins.bottom)}px</div>
-                                                                    </motion.div>
-                                                                </>
+                                                                {/* Footer Guide */}
+                                                                <div className="absolute bottom-2 left-6 right-6 border-t border-dashed border-slate-300 text-[8px] font-black text-slate-400 tracking-[0.2em] py-1 text-center uppercase pointer-events-none select-none z-10">Footer</div>
                                                             </div>
                                                         </motion.div>
                                                     ))}
@@ -2087,7 +2097,8 @@ const LetterPreview = () => {
                                             )}
                                         </div>
                                     </div>
-                                </motion.div>
+                                </div>
+                            </motion.div>
                             );
                         })()}
                         </div>
